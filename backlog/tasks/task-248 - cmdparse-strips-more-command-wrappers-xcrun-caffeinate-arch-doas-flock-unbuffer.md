@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-14 16:32'
-updated_date: '2026-10-16 16:06'
+updated_date: '2026-10-16 19:02'
 labels:
   - tooling
 dependencies: []
@@ -29,5 +29,5 @@ TASK-244's security review found that git run behind a wrapper cmdparse doesn't 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-cmdparse.WRAPPER_VALUE_OPTS lists xcrun (-sdk/--sdk/-toolchain/--toolchain), caffeinate (-t/-w), arch (-arch/-d; -e NAME=value is an assignment, stripped as one), doas (-u/-C), flock (-w/-E/--wait/--timeout/--conflict-exit-code) and unbuffer. flock's lock file is skipped and its -c/--command '<cmd>' is rewritten to sh -c '<cmd>', so the walk reads it like any child shell. Rows: test-enforce-pr-workflow.sh, and block-ai-attribution / require-review / protect-data-dir rows in test-openproceedings-gates.sh (TASK-248 section). 14 mutants in gates.json, all killed (--jobs 4). xcrun -f/--find and doas -C only find or check the tool without running it; reading what follows as the command is the conservative side.
+cmdparse.WRAPPER_VALUE_OPTS lists xcrun (-sdk/--sdk/-toolchain/--toolchain), caffeinate (-t/-w), arch (-arch/-d/-e; -e NAME=value is recorded as an assignment for what arch runs, as env's is), doas (-a/-u/-C) and flock (-w/-E/--wait/--timeout/--conflict-exit-code), and unbuffer. flock's -c/--command '<cmd>' after the lock file is rewritten to sh -c '<cmd>', so the walk reads it like any child shell. flock creates its lock file, so the file goes into Argv.creates with the directory flock ran in, and the walk yields it as a >> redirect of an empty command of its own, before whatever flock runs (eval and cd included); every gate's write rules then apply (flock .git/op-reviews/<sha>, flock data/snapshots/..., flock backlog/... are refused). 'flock 9' alone locks a descriptor and creates nothing. Review rounds 1 and 2 found doas -a, arch -e, and the lock file (first hidden from require-review's record check, then dropped after eval/cd). Rows: test-enforce-pr-workflow.sh (regression rows; the flock -c/--command rows and the arch -e GIT_DIR row kill mutants), and block-ai-attribution / require-review / protect-data-dir rows in test-openproceedings-gates.sh (TASK-248 section). 21 TASK-248 mutants in gates.json. xcrun -f/--find and doas -C only find or check the tool without running it; reading what follows as the command is the conservative side. Not done here (pre-existing, reported as a follow-up): a short-option cluster ending in a value option (flock -nw 5, doas -nu root, sudo -nu root) is not split.
 <!-- SECTION:NOTES:END -->

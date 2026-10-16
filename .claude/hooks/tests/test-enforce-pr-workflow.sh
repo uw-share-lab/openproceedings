@@ -457,6 +457,7 @@ check_cwd main "$WT" block "GIT_DIR=\"$REPO/.git\"; export GIT_DIR; git commit -
 check_cwd main "$WT" block "declare -x GIT_DIR=\"$REPO/.git\" && git commit -m x"
 check_cwd main "$WT" allow "GIT_DIR=\"$REPO/.git\"; git commit -m x"         # a shell variable git never sees
 check_cwd main "$WT" allow "export GIT_DIR=\"$REPO/.git\"; unset GIT_DIR; git commit -m x"
+check_cwd main "$WT" block "arch -e GIT_DIR=\"$REPO/.git\" git commit -m x"   # arch -e sets it for what it runs (TASK-248)
 check_cwd main "$WT" block "GIT_DIR=\"$REPO/.git\" git branch -f main HEAD"  # moves the main worktree's branch
 
 echo "multiple -C flags chain like real git (defect 1 -- HIGH bypass fix):"

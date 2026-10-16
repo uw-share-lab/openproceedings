@@ -2216,6 +2216,10 @@ check $R allow "flock <lock> -c 'git status'"                   "$(payload_bash 
 check $R block "flock .git/op-reviews/<sha> true (creates a record)" "$(payload_bash 'flock .git/op-reviews/0123abc true')"
 check $R block "flock -w 5 .git/op-reviews/<sha> -c true"       "$(payload_bash "flock -w 5 .git/op-reviews/0123abc -c 'true'")"
 check $R allow "flock <lock> true"                              "$(payload_bash 'flock /tmp/op.lock true')"
+# ... whatever flock runs: eval and cd are read by the walk, not yielded (review round 2)
+check $R block "flock .git/op-reviews/<sha> eval true"          "$(payload_bash 'flock .git/op-reviews/0123abc eval true')"
+check $R block "flock .git/op-reviews/<sha> cd ."               "$(payload_bash 'flock .git/op-reviews/0123abc cd .')"
+check $R block "arch -e A=1 -e B=2 git push (-e takes a value)" "$(payload_bash 'arch -e A=1 -e B=2 git push origin other2')"
 # protect-data-dir, in the data-only repo and the backlog repo
 check $P block "data-only: xcrun -sdk macosx rm -rf data/snapshots" "$(payload_do 'xcrun -sdk macosx rm -rf data/snapshots')"
 check $P block "data-only: caffeinate -t 5 rm -rf data/snapshots" "$(payload_do 'caffeinate -t 5 rm -rf data/snapshots')"
@@ -2228,6 +2232,9 @@ check $P block "data-only: doas -a passwd rm -rf data/snapshots" "$(payload_do '
 check $P block "data-only: flock data/snapshots/s1/x.lock true (creates it)" "$(payload_do 'flock data/snapshots/s1/x.lock true')"
 check $P block "flock backlog/tasks/x.lock true (creates it)"   "$(payload_bl 'flock backlog/tasks/x.lock true')"
 check $P allow "data-only: flock /tmp/op.lock true"             "$(payload_do 'flock /tmp/op.lock true')"
+check $P block "flock backlog/tasks/x.lock eval true"           "$(payload_bl 'flock backlog/tasks/x.lock eval true')"
+check $P block "data-only: flock data/snapshots/x.lock env -C /tmp true (created where flock runs)" "$(payload_do 'flock data/snapshots/x.lock env -C /tmp true')"
+check $P allow "cd backlog/tasks && flock -n 9 (a file descriptor, not a file)" "$(payload_bl 'cd backlog/tasks && flock -n 9')"
 check $P allow "data-only: flock <lock> -c 'ls data/snapshots'" "$(payload_do "flock /tmp/op.lock -c 'ls data/snapshots'")"
 check $P allow "data-only: caffeinate -t 5 ls data/snapshots"   "$(payload_do 'caffeinate -t 5 ls data/snapshots')"
 check $P block "xcrun git restore -s dev <task>"                "$(payload_bl "xcrun git restore -s dev $T1")"

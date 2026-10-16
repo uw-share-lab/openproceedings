@@ -123,7 +123,7 @@ WRAPPER_VALUE_OPTS: dict[str, set[str]] = {
     # TASK-248: macOS's xcrun, caffeinate and arch, OpenBSD's doas, util-linux flock, expect's unbuffer
     "xcrun": {"-sdk", "--sdk", "-toolchain", "--toolchain"},
     "caffeinate": {"-t", "-w"},
-    "arch": {"-arch", "-d"},
+    "arch": {"-arch", "-d", "-e"},
     "doas": {"-a", "-u", "-C"},
     "flock": {"-w", "-E", "--wait", "--timeout", "--conflict-exit-code"},
     "unbuffer": set(),
@@ -492,8 +492,9 @@ class Argv(list):
     in_subst: bool = False
     # `cd_stayed`: the directory is where it is because a `cd ~/…` failed in the HOME '' reading (`_change_dir`)
     cd_stayed: bool = False
-    # `creates`: files a stripped wrapper itself creates (flock's lock file); the walk yields each as a `>>` redirect
-    creates: list[str]
+    # `creates`: (directory, file) for each file a stripped wrapper itself creates (flock's lock file), in the
+    # directory the wrapper ran in; the walk yields each as a `>>` redirect
+    creates: list[tuple[str, str]]
 
     def __init__(self, words: list[str], via_xargs: bool = False, assigns: dict[str, str] | None = None):
         super().__init__(words)
@@ -1385,6 +1386,10 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                     return _strip_prefixes([*tokenize(value), *argv[i + (1 if eq else 2) :]], state, out)
                 if name == "env" and opt in ("-u", "--unset") and value is not None:
                     out.assigns[value] = ""  # unset for what it runs: known empty (review gate round 3)
+                # `arch -e NAME=value`: set for what it runs
+                if name == "arch" and opt == "-e" and value is not None:
+                    key, _, val = value.partition("=")
+                    out.assigns[key] = val
                 if (
                     state is not None
                     and value is not None
@@ -1398,7 +1403,8 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
             if name == "timeout" and i < len(argv):  # the duration
                 i += 1
             if name == "flock" and i < len(argv):  # the lock file, which flock creates
-                out.creates.append(argv[i])
+                if not (argv[i].isdigit() and i + 1 == len(argv)):  # `flock 9` alone locks a file descriptor
+                    out.creates.append((state["dir"] if state is not None else "", argv[i]))
                 i += 1
                 # `flock <file> -c '<cmd>'`: a shell runs the string
                 if i + 1 < len(argv) and argv[i] in ("-c", "--command"):
@@ -2015,8 +2021,9 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
             raw = [_restore(t, subs) for t in raw]
         args, redirects = split_redirects(raw)
         argv = strip_prefixes(args, state)
-        created = [(">>", f) for f in argv.creates]  # a file a wrapper creates is written, as `>>` writes one
-        redirects += created
+        # a file a wrapper creates is written, as `>>` writes one, whatever runs next (`eval`, `cd`)
+        for d, f in argv.creates:
+            yield _context(Argv([]), state), d or state["dir"], [(">>", f)]
         if writes_git_config(argv, redirects, state):
             state["config_written"] = True
         if note_exports(argv, state) or not argv:
@@ -2056,8 +2063,6 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
             _change_dir(head, argv[1:], state, getattr(argv, "assigns", {}))
             continue
         if head in SHELLS:
-            if created:  # `flock <file> -c '…'`: the lock file is written before the shell runs
-                yield _context(Argv([]), state), state["dir"], created
             for k, a in enumerate(argv[1:], start=1):
                 if a.startswith("-") and not a.startswith("--") and "c" in a and k + 1 < len(argv):
                     # a child shell: it starts with the caller's exports plus the assignments before it

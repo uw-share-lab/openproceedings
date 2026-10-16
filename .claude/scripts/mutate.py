@@ -23,9 +23,10 @@ names), then the rest only if those all pass, and a phase stops as soon as one t
 same as running every table (a survivor runs them all); only the time differs: about a third of it on the
 nightly logs, where every mutant ran all 13 tables and four 12-way shards ran past 140 min (TASK-171 rerun).
 A table whose header comment (its leading `#` lines) has `# mutate-scope: <file> ...` lines (repo-relative paths,
-exactly as a mutant's `file`) exercises only those files: it runs only for a mutant that changes one of them, so a table that fails for another reason (one slowed
-by load) can never be credited with killing another file's mutant (TASK-238: test-mutate-run.sh, which runs only
-mutate.py, was credited with 15 of 17 docker_digest.py mutants on a loaded machine).
+exactly as a mutant's `file`) exercises only those files: it runs only for a mutant that changes one of them, so a
+table that fails for another reason (one slowed by load) can never be credited with killing another file's mutant
+(TASK-238: test-mutate-run.sh, which runs only mutate.py, was credited with 15 of 17 docker_digest.py mutants on a
+loaded machine).
 A table that runs past its timeout under a mutant has hung (an infinite loop): it is stopped, so one hang never
 stalls a shard, and run again alone; if it hangs again the mutant is TIMEOUT, which counts as killed, as in other
 mutation tools, and if not, that run's verdict stands (a table slowed by the other jobs is not a hang). The

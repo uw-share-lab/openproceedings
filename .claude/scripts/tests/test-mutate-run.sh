@@ -117,6 +117,11 @@ R3="$TMP/r3"
 cp -R "$R" "$R3"
 sed -E 's/^(TIMEOUT_FACTOR, TIMEOUT_FLOOR = [0-9]+, )[0-9.]+/\15.0/' "$SRC/.claude/scripts/mutate.py" \
   > "$R3/.claude/scripts/mutate.py"
+# R4: R with a 120 s floor, so an explicit --table-timeout under the floor shows it is honoured, not raised to it
+R4="$TMP/r4"
+cp -R "$R" "$R4"
+sed -E 's/^(TIMEOUT_FACTOR, TIMEOUT_FLOOR = [0-9]+, )[0-9.]+/\1120.0/' "$SRC/.claude/scripts/mutate.py" \
+  > "$R4/.claude/scripts/mutate.py"
 
 # A second fixture, whose mutate.py has a 1 s floor so a timeout derived from a baseline shows: t-b takes 0.5 s
 # (10x: 5 s), and 2.5 s with `SLOW2`, past the floor but well under 10x its baseline: slow, not hung
@@ -154,6 +159,8 @@ got=$(grep -c '^TIMEOUT_FACTOR, TIMEOUT_FLOOR = 10, 1.0' "$R2/.claude/scripts/mu
 check "R2's mutate.py has the 1 s floor" "$got" "1"
 got=$(grep -c '^TIMEOUT_FACTOR, TIMEOUT_FLOOR = 10, 5.0' "$R3/.claude/scripts/mutate.py")
 check "R3's mutate.py has the 5 s floor" "$got" "1"
+got=$(grep -c '^TIMEOUT_FACTOR, TIMEOUT_FLOOR = 10, 120.0' "$R4/.claude/scripts/mutate.py")
+check "R4's mutate.py has the 120 s floor" "$got" "1"
 run() {  # run <label match> [args...]: the result line and exit status in $line $rc, seconds in $secs, log in $TMP/log
   local m="$1"; shift
   : > "$TMP/log"
@@ -228,15 +235,15 @@ got=$(grep -c '^t-a-slow-end ' "$TMP/log")
 check "stopped: the slow table never finished" "$got" "0"
 
 echo "== a hang is stopped at its timeout, and killed"
-# in R3 (5 s floor) with --table-timeout 30: refused only past a 3 s baseline, and a lower bound tells the 30 s
-# timeout from the floor, which load can only push further from failing
-ROOTDIR="$R3" run m-hangs --table-timeout 30
+# in R4 (120 s floor) with --table-timeout 30: refused only past a 3 s baseline; about 60 s (two 30 s timeouts), and
+# 240 s or more if the explicit timeout were ignored or raised to the floor, a margin load can't close
+ROOTDIR="$R4" run m-hangs --table-timeout 30
 check "hang: exit 0" "$rc" "0"
 check "hang: the line" "$line" "ok TIMEOUT m-hangs (t-a.sh hung)"
 got=$([ "$secs" -ge 55 ] && echo yes || echo "no ($secs s)")
-check "hang: stopped at the 30 s --table-timeout (twice), not the 5 s floor" "$got" "yes"
-got=$([ "$secs" -lt 600 ] && echo yes || echo "no ($secs s)")
-check "hang: answered at the timeout, not the sleep" "$got" "yes"
+check "hang: stopped at the 30 s --table-timeout (twice), no sooner" "$got" "yes"
+got=$([ "$secs" -lt 200 ] && echo yes || echo "no ($secs s)")
+check "hang: the explicit 30 s honoured, not the 120 s floor or the sleep" "$got" "yes"
 got=$(pgrep -f "sleep $NAP" > /dev/null && echo "still running" || echo gone)
 check "hang: the table's own children are stopped too" "$got" "gone"
 

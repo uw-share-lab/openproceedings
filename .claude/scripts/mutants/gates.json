@@ -32,7 +32,7 @@
  {
   "label": "arch not a wrapper (TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    \"arch\": {\"-arch\", \"-d\"},\n",
+  "old": "    \"arch\": {\"-arch\", \"-d\", \"-e\"},\n",
   "new": ""
  },
  {
@@ -68,7 +68,7 @@
  {
   "label": "arch's value-taking options not skipped (TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    \"arch\": {\"-arch\", \"-d\"},\n",
+  "old": "    \"arch\": {\"-arch\", \"-d\", \"-e\"},\n",
   "new": "    \"arch\": set(),\n"
  },
  {
@@ -86,8 +86,8 @@
  {
   "label": "flock's lock file read as the command (TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "                out.creates.append(argv[i])\n                i += 1\n",
-  "new": "                out.creates.append(argv[i])\n                i += 0\n"
+  "old": "                    out.creates.append((state[\"dir\"] if state is not None else \"\", argv[i]))\n                i += 1\n",
+  "new": "                    out.creates.append((state[\"dir\"] if state is not None else \"\", argv[i]))\n                i += 0\n"
  },
  {
   "label": "flock -c's string not run as sh -c (TASK-248)",
@@ -104,14 +104,44 @@
  {
   "label": "flock's lock file not a write (it hid an op-reviews/ path; TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "                out.creates.append(argv[i])\n",
+  "old": "                    out.creates.append((state[\"dir\"] if state is not None else \"\", argv[i]))\n",
   "new": ""
  },
  {
-  "label": "flock -c's lock file not yielded before its shell (TASK-248)",
+  "label": "a wrapper's created file only a redirect of the command it runs (eval and cd drop it; TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "                yield _context(Argv([]), state), state[\"dir\"], created\n",
-  "new": "                pass\n"
+  "old": "        for d, f in argv.creates:\n            yield _context(Argv([]), state), d or state[\"dir\"], [(\">>\", f)]\n",
+  "new": "        redirects += [(\">>\", f) for d, f in argv.creates]\n"
+ },
+ {
+  "label": "a wrapper's created file read in the directory after its prefix, not where it ran (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "yield _context(Argv([]), state), d or state[\"dir\"], [(\">>\", f)]",
+  "new": "yield _context(Argv([]), state), state[\"dir\"], [(\">>\", f)]"
+ },
+ {
+  "label": "flock 9 alone read as a file (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "if not (argv[i].isdigit() and i + 1 == len(argv)):",
+  "new": "if True:"
+ },
+ {
+  "label": "arch -e's NAME=value not set for what it runs (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    key, _, val = value.partition(\"=\")\n                    out.assigns[key] = val\n",
+  "new": "                    pass\n"
+ },
+ {
+  "label": "doas -a takes no value (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"doas\": {\"-a\", \"-u\", \"-C\"},\n",
+  "new": "    \"doas\": {\"-u\", \"-C\"},\n"
+ },
+ {
+  "label": "arch -e takes no value (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"arch\": {\"-arch\", \"-d\", \"-e\"},\n",
+  "new": "    \"arch\": {\"-arch\", \"-d\"},\n"
  },
  {
   "label": "wrapper option values not skipped",

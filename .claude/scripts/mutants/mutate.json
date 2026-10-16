@@ -267,5 +267,11 @@
   "file": ".claude/scripts/mutate.py",
   "old": "    first = [t for t in first_tables(files[0]) if t in tables]\n",
   "new": "    first = first_tables(files[0])\n"
+ },
+ {
+  "label": "mutate run: an explicit --table-timeout raised to the floor (review round 2; TASK-238)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        return dict.fromkeys(TABLES, explicit)",
+  "new": "        return dict.fromkeys(TABLES, max(TIMEOUT_FLOOR, explicit))"
  }
 ]
