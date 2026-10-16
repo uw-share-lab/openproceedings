@@ -556,7 +556,7 @@ buffer doubles to 32 MiB to hold 16, plus the buffers it outgrew until Go collec
 comparison slot, and `read_body` cuts it; with no limit on how many arrive at once, the memory limit bounds
 the proxy, which past it is killed and restarted, dropping every connection it held, searches included, for a
 few seconds (24 uploads held at once reached the edge of 1 GiB, peaks 890 to 998 MiB, and 32 did not fit;
-Caddy as built limits neither connections nor uploads per client: open, an owner decision with the host, TASK-256).
+Caddy as built limits neither connections nor uploads per client: open, an owner decision once the host is chosen, TASK-256 after TASK-064).
 `deploy/smoke-test.sh --compare` checks all of this, and decision-035 makes passing it on the host a
 condition of any public instance enabling comparisons; it passed on Docker Desktop on 2026-10-16
 (`deploy/README.md` §Comparisons; the measurements are in `docs/results/2026-10-16-compare-proxy.md`).

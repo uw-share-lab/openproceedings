@@ -333,7 +333,12 @@ dc up -d --build   # caddy's image holds the Caddyfile: rebuild it if yours pred
   memory limit `OP_CADDY_MEM_LIMIT` (default `1g`, with no swap on top) and `GOMEMLIMIT`
   `OP_CADDY_GOMEMLIMIT` (default `800MiB`: Go collects harder as the heap nears it, well before the kernel's
   limit). **`read_body` is a timeout of the whole server**, every path, not of the comparison path: Caddy has
-  no per-path setting for it, so a slow client of any route is now cut after 60 s rather than 10.
+  no per-path setting for it, so a slow client of any route is now cut after 60 s rather than 10. The other
+  API routes don't require a `Content-Length` yet (with the overlay or without it): an unsized body there that
+  reaches the 64 KiB `request_buffers` and stalls is streamed on to the API, and may hold one of its 256
+  `limit_concurrency` connections until `read_body` runs out, so about 256 such requests (some 16 MiB in all)
+  could hold every API connection, searches included (inferred from the comparison path, not measured on
+  those routes; alert on the rate of uvicorn's `Exceeded concurrency limit.` lines; open: TASK-255).
 
 What was measured on this stack with `compare.yml`'s defaults (TASK-183, 2026-10-16: Docker Desktop, engine
 24.0.7, on an 8-CPU Mac shared with other builds; caddy 2.11.7, with 2.11.4's figures close to these; the raw
@@ -360,8 +365,8 @@ connection it held is dropped, searches included, for the few seconds it takes. 
 uploads held at once reached its edge (peaks of 890 to 998 MiB) and 32 did not fit: somewhere between the two
 (400 to 540 MB of traffic, each upload faster than 2.24 Mbit/s to beat `read_body 60s`) is enough, from one
 address or many, and Caddy as built here limits
-neither connections nor uploads per client. That bound is the host's or a front proxy's to add, not this
-stack's (TASK-256).
+neither connections nor uploads per client. That bound is not built here: where it goes (a front proxy, the
+host's firewall, or a custom Caddy build) is an owner decision, TASK-256.
 
 A stalled upload was cut by the proxy when `read_body` ran out (60 s after its request started, sending
 included) and never reached the API: with uploads stalled in the proxy, a whole 16 MiB comparison ran at once

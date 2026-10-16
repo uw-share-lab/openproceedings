@@ -4,7 +4,7 @@ title: 'Decide: a per-client connection or upload cap in front of the proxy'
 status: To Do
 assignee: []
 created_date: '2026-10-16 23:07'
-updated_date: '2026-10-16 23:07'
+updated_date: '2026-10-16 23:17'
 labels:
   - ops
   - security
@@ -18,7 +18,7 @@ ordinal: 169000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Found by TASK-183 (PR #156): as built, Caddy limits neither connections nor uploads per client. With comparisons on (deploy/compare.yml, caddy mem_limit 1g), about 30 concurrent maximum-size uploads (about 50 MiB each in Caddy) OOM-kill the proxy, which restarts and drops every connection for a few seconds (measured: 24 uploads peak 890 MiB, 32 OOM-killed). A per-client cap belongs in front of or in the proxy, and where depends on the host (TASK-064): a front proxy, a rate-limit module in a custom Caddy build, or the host's firewall. Spec 08 §Deploy and the README mark it open.
+Found by TASK-183 (PR #156): as built, Caddy limits neither connections nor uploads per client. With comparisons on (deploy/compare.yml, caddy mem_limit 1g), about 30 concurrent maximum-size uploads (about 50 MiB each in Caddy) OOM-kill the proxy, which restarts and drops every connection for a few seconds (measured: 24 uploads peaked at 890 to 998 MiB, 32 OOM-killed). A per-client cap belongs in front of or in the proxy, and where depends on the host (TASK-064): a front proxy, a rate-limit module in a custom Caddy build, or the host's firewall. Spec 08 §Deploy and the README mark it open.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

@@ -15,8 +15,9 @@ decisions and review results to those agents as they came in.
   may already have queued its PR, and the merge queue merges it without waiting (evidence: the lead
   session's report of the 2026-10-16 batch).
 - **Four results reached their PRs after the merge:** the owner's override wording for PR #142, the
-  served-note clause for PR #155, and late security findings on PRs #156 and #158. Each one became a
-  follow-up task instead of a fix in its own PR.
+  served-note clause for PR #155, and late security findings on PRs #156 and #158. None of them could be
+  fixed in its own PR: #155's clause needed a second PR (#157, `cbdb9622`), #156's findings became TASK-255,
+  TASK-256 and TASK-257, #158's became TASK-253, and #142's wording came after the Dependabot PR had merged.
 
 ## Dead ends — don't repeat these
 - Sending a decision the PR depends on as a mid-flight message and assuming the agent will act on it before
@@ -29,8 +30,8 @@ decisions and review results to those agents as they came in.
   interrupted a running turn.
 
 ## Follow-ups
-- The late findings from PRs #142, #155, #156 and #158 were filed as follow-up tasks by the lead session on
-  `chore/friday-followups-2026-10-16`.
+- TASK-255, TASK-256 and TASK-257 (#156's late findings) and TASK-253 (#158's), filed on
+  `chore/friday-followups-2026-10-16`; #155's clause was fixed in PR #157.
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/pr-workflow/SKILL.md` §Several sessions on one

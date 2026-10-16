@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-16 23:07'
+updated_date: '2026-10-16 23:17'
 labels:
   - ops
 dependencies: []
@@ -16,10 +17,10 @@ ordinal: 170000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-TASK-183 (PR #156) turns HTTP/3 off in the compare-on block because a stalled upload over QUIC couldn't be tested: the Mac's curl has no HTTP/3. Since Caddy 2.11.6 the per-request read deadline (read_body_idle, and read_body) probably reaches QUIC streams. Test it with an HTTP/3-capable client against smoke-test.sh --compare.
+TASK-183 (PR #156) turns HTTP/3 off in the compare-on block because a stalled upload over QUIC couldn't be tested: the Mac's curl has no HTTP/3. Since Caddy 2.11.6 the per-request read deadline (read_body_idle, and read_body) probably reaches QUIC streams. Test it with an HTTP/3-capable client against smoke-test.sh --compare. What is at risk is the proxy's memory, not the API's comparison slot: with comparisons on, the proxy buffers the whole file before it asks the API, so a QUIC stall never reaches the slot, but if read_body doesn't cut it the upload holds its buffer for as long as the client keeps the connection alive. Then TASK-256's OOM no longer needs fast uploads: a trickle reaches it.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 An HTTP/3 upload that stalls is shown to be cut by the proxy before it holds the comparison slot, or shown not to be; HTTP/3 is re-enabled in compare-on only if it is cut, and spec 08 and deploy/README.md say which
+- [ ] #1 An HTTP/3 upload that stalls under the 16 MiB cap is shown to be cut within OP_READ_BODY, freeing its proxy buffer (the caddy cgroup's memory.current drops), or shown not to be; HTTP/3 is re-enabled in compare-on only if it is cut, and spec 08 and deploy/README.md say which
 <!-- AC:END -->
