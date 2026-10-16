@@ -1,11 +1,11 @@
 ---
 id: TASK-183
 title: Smoke-test the Caddy block that enables comparisons on a public instance
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-05 08:39'
-updated_date: '2026-10-16 21:08'
+updated_date: '2026-10-16 21:18'
 labels:
   - ops
   - security
@@ -42,3 +42,9 @@ Gate round 3 (2026-10-16): no Must; Shoulds fixed (README '24 fitted' made consi
 
 Gate round 4 (2026-10-16): no Must. Fixed: over HTTP/2 a malformed Content-Length made the 413 matcher fail into a 500, so compare-on answers 400 first to a length that isn't plain digits; the smoke test now asserts the 413 is the proxy's (its text) and that an HTTP/2 'Content-Length: abc' gets 400; the 502 is described as one smoke run in five. smoke-test.sh PASS 87 s, --compare PASS 149 s (8 stalls held 418 MiB, peak 422 MiB).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Comparisons on a public instance are now turned on by the overlay deploy/compare.yml (op serve --compare; caddy OP_COMPARE=on, read_body 60s, mem_limit 1g with GOMEMLIMIT 800MiB), and the Caddyfile's compare-on snippet replaces the README block that could not work: the 64KiB cap scoped to @rest (not /api/v1/compare), request_body and request_buffers of 16MiB there, 411 for an unsized POST, 400 for a malformed length, 413 for a declared length over 16 MiB, and no HTTP/3 (Caddy's HTTP/3 server has no read timeout). 64KB/16MB became 64KiB/16MiB. deploy/smoke-test.sh --compare runs it on the stack and passed (last run 149 s; plain 87 s): 8 uploads stalled a byte short of 16 MiB were held by the proxy (418 MiB, peak 422 MiB of 1 GiB, no OOM kill), never reached the API, and were cut at read_body 60.03 s from their start while a whole 16 MiB comparison ran (200). Measured separately: about 50 MiB of proxy memory per upload; 24 at once reach the edge of 1 GiB and 32 get the proxy OOM-killed and restarted (docs/results/2026-10-16-compare-proxy.md). Follow-ups for the lead to file: the 64 KiB stream-through of unsized bodies on the other API routes, and a per-client connection or upload cap in front of the proxy.
+<!-- SECTION:FINAL_SUMMARY:END -->
