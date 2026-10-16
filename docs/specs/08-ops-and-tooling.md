@@ -955,9 +955,10 @@ them:
   `do`/`done`, `{`/`}`, `!`, `esac`, `function`, `coproc`) are skipped;
 - `VAR=val` assignments and the wrappers `env`, `command`, `builtin`, `exec`, `time`, `nohup`, `nice`,
   `sudo`, `timeout`, `stdbuf`, `xargs`, `watch`, `xcrun`, `caffeinate`, `arch`, `doas`, `flock` and
-  `unbuffer` are skipped, each with its own table of options that take a value (TASK-248: `flock`'s lock
-  file is read as a `>>` redirect, since flock creates it, and its `-c`/`--command '<cmd>'` as
-  `sh -c '<cmd>'`); the assignments are kept, and a command run by `xargs` is marked, because the words xargs appends
+  `unbuffer` are skipped, each with its own table of options that take a value (TASK-248: `arch -e
+  NAME=value` and `-d NAME` set and unset as `env` does; `flock`'s lock file is read as a `>>` redirect of
+  its own, in the directory flock runs in, since flock creates it (`flock N` alone is a descriptor), and its
+  `-c`/`--command '<cmd>'` as `sh -c '<cmd>'`); the assignments are kept, and a command run by `xargs` is marked, because the words xargs appends
   are invisible (`xargs_hides_args` flags `rm`, `mv` and `git push`/`add`/`commit`/`rm`/`mv` run that way;
   `require-review.sh` and `enforce-pr-workflow.sh` refuse them);
 - command names are compared by basename (`/usr/bin/git`), and a `git-<sub>` program

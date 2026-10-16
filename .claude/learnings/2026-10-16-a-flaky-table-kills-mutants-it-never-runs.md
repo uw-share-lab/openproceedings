@@ -49,12 +49,16 @@ more command wrappers in cmdparse (TASK-248); kill the surviving "xargs flag not
   rows were red there); require-review, protect-data-dir and block-ai-attribution's `-F` file read all missed them.
 
 ## Dead ends — don't repeat these
+- A mutant that deletes a block's only line (`out.creates.append(…)` under an `if`) doesn't compile; every hook
+  then crashes and every table "kills" it for the wrong reason (round 3). Give such a mutant a `pass` body, and
+  compile-check new mutants before running them.
 - Measuring a "stopped early" bound from the start of a nested mutate.py run: under load the baseline alone can take
   longer than the bound. Measure from the event, or check the log for what didn't happen.
 
 ## Decisions (and what would change them)
 - `arch -e NAME=value` takes a value, recorded as an assignment for what arch runs (as `env NAME=value` is), so
-  `arch -e GIT_DIR=… git commit` is judged against that repository.
+  `arch -e GIT_DIR=… git commit` is judged against that repository; `arch -d NAME` unsets it, as `env -u` does
+  (round 3).
 - `flock 9` (one numeric word, nothing after it) locks a file descriptor and creates nothing; with a command after
   it, util-linux reads the word as a file name, so it is a created file.
 - `xcrun -f` and `doas -C` only find or check a tool; cmdparse still reads what follows as the command it runs. That is
@@ -69,4 +73,4 @@ more command wrappers in cmdparse (TASK-248); kill the surviving "xargs flag not
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/testing-standards/SKILL.md` §Mutation testing, spec 08 §Mutation testing and the cmdparse wrapper list
-- Test or hook added? — `.claude/scripts/tests/test-mutate-run.sh` (scope rows), 5 mutants in `mutants/mutate.json`, 21 in `mutants/gates.json`
+- Test or hook added? — `.claude/scripts/tests/test-mutate-run.sh` (scope rows), 5 mutants in `mutants/mutate.json`, 22 in `mutants/gates.json`

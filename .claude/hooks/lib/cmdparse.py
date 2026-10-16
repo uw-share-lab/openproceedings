@@ -18,8 +18,9 @@ matter to a gate:
   * leading reserved words (`if`/`then`/`do`/`{`/`!` …), `VAR=val`, and wrappers (`env`, `sudo`, `nice`,
     `timeout`, `xargs`, `stdbuf`, `watch`, `exec`, `time`, `nohup`, `command`, `builtin`, `xcrun`, `caffeinate`,
     `arch`, `doas`, `flock`, `unbuffer`) are stripped, each wrapper with its own table of value-taking options;
-    `env -S '…'` is split, `env -C`/`sudo -D` move dir; flock's lock file is a `>>` redirect (flock creates it)
-    and its `-c`/`--command '…'` is a `sh -c`;
+    `env -S '…'` is split, `env -C`/`sudo -D` move dir, `arch -e NAME=value`/`-d NAME` set and unset as env does;
+    flock's lock file is a `>>` redirect of its own, in the directory flock runs in (flock creates it; `flock N`
+    alone is a descriptor), and its `-c`/`--command '…'` is a `sh -c`;
     the argv comes back as an `Argv` that records the `VAR=val` words and whether xargs runs it;
   * command names compare by basename (`/usr/bin/git` is `git`);
   * redirections leave argv as (operator, target) pairs (`walk` yields them);
@@ -28,7 +29,7 @@ matter to a gate:
     unknown) and `bash -c "…"` (with the assignments before it exported to it) / `eval "…"` are recursed into;
     `bash script.sh` is yielded as itself;
   * `expand_word` resolves `~`, `~+`, `~-`, `$PWD`, `$HOME` and other variables a command's path names: set
-    (or `unset`, or `env -u`: empty) earlier in the command, else only HOME/TMPDIR/USER from this hook's
+    (or `unset`, `env -u` or `arch -d`: empty) earlier in the command, else only HOME/TMPDIR/USER from this hook's
     environment, which a gate also reads as '' (`walk(env_empty=True)`);
   * a git alias (`-c alias.<name>=…` or the repo's config; `!shell` ones too) becomes what git runs for it;
   * a `git-<sub>` program (`$(git --exec-path)/git-push`) is `git <sub>`;
@@ -1386,10 +1387,12 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                     return _strip_prefixes([*tokenize(value), *argv[i + (1 if eq else 2) :]], state, out)
                 if name == "env" and opt in ("-u", "--unset") and value is not None:
                     out.assigns[value] = ""  # unset for what it runs: known empty (review gate round 3)
-                # `arch -e NAME=value`: set for what it runs
+                # `arch -e NAME=value` sets NAME and `arch -d NAME` unsets it, for what it runs (as env's do)
                 if name == "arch" and opt == "-e" and value is not None:
                     key, _, val = value.partition("=")
                     out.assigns[key] = val
+                if name == "arch" and opt == "-d" and value is not None:
+                    out.assigns[value] = ""
                 if (
                     state is not None
                     and value is not None

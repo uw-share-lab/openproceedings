@@ -105,7 +105,7 @@
   "label": "flock's lock file not a write (it hid an op-reviews/ path; TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "                    out.creates.append((state[\"dir\"] if state is not None else \"\", argv[i]))\n",
-  "new": ""
+  "new": "                    pass\n"
  },
  {
   "label": "a wrapper's created file only a redirect of the command it runs (eval and cd drop it; TASK-248)",
@@ -129,6 +129,12 @@
   "label": "arch -e's NAME=value not set for what it runs (TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "                    key, _, val = value.partition(\"=\")\n                    out.assigns[key] = val\n",
+  "new": "                    pass\n"
+ },
+ {
+  "label": "arch -d's NAME not unset for what it runs (TASK-248)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    out.assigns[value] = \"\"\n",
   "new": "                    pass\n"
  },
  {
