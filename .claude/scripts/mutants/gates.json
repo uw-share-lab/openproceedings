@@ -2526,7 +2526,7 @@
  {
   "label": "cmdparse: env -u not read as empty",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "                    out.assigns[value] = \"\"",
+  "old": "                    out.assigns[value] = \"\"  # unset for what it runs: known empty (review gate round 3)",
   "new": "                    pass"
  },
  {
