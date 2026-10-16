@@ -548,7 +548,7 @@ and links to it, and a PMLR abstract appears with its citation and a link to the
 attribution terms; TASK-134 for the result list); (2) every page names a takedown contact (TASK-133). Private,
 local and development deployments may omit the contact. A takedown withholds a record's abstract from every
 index version the instance loads (the procedure below, decision-022). The unlicensed years rest on fair dealing alone; consulting the University of Waterloo copyright
-office (TASK-135) is a launch gate since 2026-10-16 (decision-018 addendum): TASK-069 waits on its outcome.
+office (TASK-135) gates the project's own public launch since 2026-10-16 (decision-018 addendum): TASK-069 waits on its outcome.
 
 **Takedown contact (decision-018, TASK-133).** A publicly reachable instance **must** name a takedown contact;
 private, local and development deployments may leave it unset. The frontend renders the footer on every page

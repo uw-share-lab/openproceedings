@@ -143,9 +143,9 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
    takedown contact (private, local and development deployments may omit it). For the 2024+ conferences
    OpenReview's terms dedicate the abstracts under CC0; PMLR grants CC BY 4.0, known from ICML 2017 (v70);
    the years with no licence found (NeurIPS before 2021, ICML 2013–2016, earlier OpenReview years) rest on
-   Canadian fair dealing alone. Consulting the University of Waterloo copyright office before launch is
-   a launch gate since 2026-10-16 (TASK-135, decision-018 addendum), and TASK-069 waits on its outcome; the owner's
-   decision is still to show the abstracts whatever the answer, unless that answer leads to a new decision.
+   Canadian fair dealing alone. Consulting the University of Waterloo copyright office (TASK-135) is
+   a launch gate since 2026-10-16 (decision-018 addendum), and TASK-069 waits on its outcome; the owner's
+   decision is still to show decision-018's abstracts whatever the answer, unless that answer leads to a new decision.
    Not legal advice. The code is MIT either way. The corpus is never committed to git.
 2. ~~**Rejected and withdrawn ICLR submissions (M4).**~~ **Closed 2026-09-27 (decision-012):** every
    public rejected, withdrawn and desk-rejected submission is indexed with `status:rejected`,
