@@ -86,6 +86,10 @@ attest, queue, push) is a local run's.
   `dev`'s six required checks have `app_id: null` (`gh api repos/<repo>/branches/dev/protection/required_status_checks`),
   so a check run any app writes under a required name would count. Only the installation's scope bounds a steered
   session; pinning the checks to GitHub Actions is the owner's call.
+- TASK-243's final summary says "AC1-AC6 met"; AC2 was met on its outcome, not its letter (its cloud paths were
+  never run and are moot under notify-only). The completed task can't be edited (Backlog 1.53), so this line and the
+  PR body are the correction. An AC that names a probe the owner later makes moot is cheaper to reword before the
+  task is completed than after: the CLI can only re-add an AC, which renumbers the rest.
 - Propagated to: `.claude/commands/dependabot-review.md` (§Where it runs, steps 0-11, the cloud summary), spec 08
   §CI "Dependabot" and §Code quality, decision-048's 2026-10-16 addendum, `.claude/agents/ci-engineer.md`,
   `.claude/skills/pr-workflow/SKILL.md`, CLAUDE.md; rows in `dependabot_cases.py`, `test-no-dep-code.sh` and
