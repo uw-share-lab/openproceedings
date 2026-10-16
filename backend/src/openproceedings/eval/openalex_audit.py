@@ -291,12 +291,13 @@ def _from_library(r: PaperRecord) -> bool:
 def library_check(
     records: Iterable[PaperRecord], fetcher: Fetcher, *, table: Table | None = None
 ) -> LibraryCheck | None:
-    """OpenAlex's text against AAAI's own for the DOI-less AAAI records of a listed year (1980-2008) whose abstract
-    is `aaai_library`'s (a DOI would take the DOI route, which the listings don't answer). The fill is replayed over
+    """OpenAlex's text against AAAI's own for the DOI-less AAAI records of a listed year (1980-2008) whose abstract is
+    `aaai_library`'s (a DOI would take the DOI route, which the listings don't answer). The fill is replayed over
     the table's listings (read whole from the fetcher's cache, as `title_check` reads them) twice: as the records
-    stand, and with those abstracts and their claims set aside, so that each is a candidate. Each text the second run attaches to one of them is compared with AAAI's
-    (`compare`); the refusals the second run adds are theirs (one record's outcome never depends on another's
-    abstract), `no_abstract` (one work, with no abstract) counted apart. None when the table has no listing rows."""
+    stand, and with those abstracts and their claims set aside, so that each is a candidate. Each text the second
+    run attaches to one of them is compared with AAAI's (`compare`); the refusals the second run adds are theirs
+    (one record's outcome never depends on another's abstract), `no_abstract` (one work, with no abstract) counted
+    apart. None when the table has no listing rows."""
     table = table or openalex_table.TABLE
     if not table.listings:
         return None

@@ -23,10 +23,10 @@ program with its four special tracks, one of them AI and Robotics, which is why 
 sections map to `main`. AAAI 2015's report says 539 papers were "selected … and presented" from the main technical
 and topical tracks' submissions; the row reads that as the accepted count (the weakest of the six).
 
-Four more AAAI `main` rows, read on 2026-10-10, are **counts of AAAI's own published accepted-paper list**, not a
+Four more AAAI `main` rows, read on 2026-10-10 (2021's re-read and re-counted on 2026-10-16), are **counts of AAAI's own published accepted-paper list**, not a
 stated figure: for these years no AAAI document states an accepted count (prefaces, conference pages and press
 releases give submissions only). They are AAAI 2012 (292), 2017 (637), 2020 (1,614) and 2021 (1,697), 82 rows in
-all. Each row's "what it counts" says "counted", names the list and names its ground for independence. A list counts as independent of the proceedings when it either states that it is pre-camera-ready, or visibly differs from the proceedings in content (a different count or membership); either shows it was not derived from them. Its
+all. Each row's "what it counts" says "counted", names the list and names its ground for independence. A list counts as independent of the proceedings when it states that it is pre-camera-ready, visibly differs from the proceedings in content (a different count or membership), or survives in a dated copy archived before the proceedings (the owner, 2026-10-16, TASK-234); each shows it was not derived from them. Its
 definition must also be our `main` cell (the controller's rulings for the owner, 2026-10-10, and gate C rounds 1
 and 2, 2026-10-11). Under this rule AAAI 2020's lists are independent because they say they were made before
 camera-ready, 2021's because the copy counted was archived before the conference (the owner's choice, 2026-10-16, TASK-234), and 2012's and 2017's because each differs from the proceedings in count. AAAI 2010's, 2014's

@@ -223,9 +223,9 @@ front-matter description, the AI Magazine conference report, the AIES program), 
 crawl reads. AAAI 2013's count includes its AI and Robotics special track, which is why the 2011 and 2013
 "Robotics Program" sections are `main`; AAAI 2013's gate row therefore pins that mapping ruling (the one gated row that
 depends on a section decision), so a failing 2013 cell is a reason to check the mapping before the crawl. Four more,
-read 2026-10-10, are counts of AAAI's own published accepted-paper list (no AAAI document states an accepted count
+read 2026-10-10 (2021's re-read 2026-10-16), are counts of AAAI's own published accepted-paper list (no AAAI document states an accepted count
 for these years): AAAI 2012 (292), 2017 (637), 2020 (1,614) and 2021 (1,697) main. A list count backs a row only
-when the list is independent of the OJS proceedings and its definition is our `main` cell. A list counts as independent of the proceedings when it either states that it is pre-camera-ready, or visibly differs from the proceedings in content (a different count or membership); either shows it was not derived from them. Each row's
+when the list is independent of the OJS proceedings and its definition is our `main` cell. A list counts as independent of the proceedings when it states that it is pre-camera-ready, visibly differs from the proceedings in content (a different count or membership), or survives in a dated copy archived before the proceedings (the owner, 2026-10-16, TASK-234); each shows it was not derived from them. Each row's
 description says "counted", names the list and names its ground (gate C round 2): 2020's lists say they were made
 before camera-ready; 2021's is counted from a copy archived before the conference (owner, 2026-10-16); 2012 and 2017
 differ from the proceedings in count. AAAI 2010 (262), 2014 (398) and 2016

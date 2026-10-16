@@ -886,7 +886,7 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
   pages archived by the Wayback Machine). Each row's description says "counted" and names the list, and its
   definition must equal our `main` cell within 1%. The review found the independence test applied unevenly: 2016 was
   refused because its list matched the proceedings exactly, while 2010 and 2014 matched exactly too, and 2014's only
-  copy was captured a year after publication. The controller's rulings (gate C rounds 1 and 2) are one rule: A list counts as independent of the proceedings when it either states that it is pre-camera-ready, or visibly differs from the proceedings in content (a different count or membership); either shows it was not derived from them. Per row:
+  copy was captured a year after publication. The controller's rulings (gate C rounds 1 and 2) are one rule: A list counts as independent of the proceedings when it states that it is pre-camera-ready, visibly differs from the proceedings in content (a different count or membership), or survives in a dated copy archived before the proceedings (the owner, 2026-10-16, TASK-234); each shows it was not derived from them. Per row:
   - 2010 (262 = 262), 2014 (398 = 398) and 2016: each matches the proceedings exactly, and nothing on it says it was
     made before them (2010's and 2014's only archived copies were captured on 2010-08-30 and 2015-09-06, after
     publication). Each is an ungated cell with a note.
@@ -911,7 +911,9 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
     `aaai.org/Conferences/AAAI-21/wp-content/uploads/2020/12/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf`.
     An earlier copy at that path, captured on 2020-12-30 and 2021-01-26 (`DZJNTKYZTPBVFWBS5AXMQIUBXI457YSX`,
     embedded creation date 2020-12-23), was made before the conference (2021-02-02 to 02-09) and so before the
-    proceedings. It lists the same 40 AI for Social Impact papers and 1,657 main technical: paper 7140 ("Fused
+    proceedings. Its entries were counted 2026-10-16 by the AI assistant session working for the owner, from
+    `https://web.archive.org/web/20201230042125id_/https://aaai.org/Conferences/AAAI-21/wp-content/uploads/2020/12/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf`
+    (the downloaded file's SHA-1 matches the CDX digest `DZJN…`). It lists the same 40 AI for Social Impact papers and 1,657 main technical: paper 7140 ("Fused
     Sequential and Hierarchical Representation Model for Aspect Term Extraction") is on it and not on the later copy,
     and is not in the index (snapshot `2026-10-11-93c2937e2f29`), so the later copy was edited toward the
     proceedings. **The owner chose the earlier copy (2026-10-16)**, since official counts come from a list made
