@@ -16,10 +16,10 @@ or `services:` image, `docker run`), and `uv self update`; and in a workflow job
 `name:` and a trailing comment before the job's first setup-uv step (a runner image's own uv), and a workflow with
 no `jobs:` key it can read. Installs are read with backslash continuations joined and comments (a `#` after
 whitespace, outside quotes) dropped. Not seen: a `uv` that a called script, `make` or a local composite action the
-job calls before its setup-uv step runs, an install it has no pattern for, and a setup-uv step whose `if:` skips it
-while a later step still runs uv. Steps are read by indentation, as YAML
-block sequences are; flow mappings (`with: { … }`) are read on their own line only. Exits 1 listing every
-problem."""
+job calls before its setup-uv step runs, an install it has no pattern for, a setup-uv step whose `if:` skips it
+while a later step still runs uv, and the rest of a line after a ` #` that sits inside a shell string opened on an
+earlier line (quotes are tracked one line at a time). Steps are read by indentation, as YAML block sequences are;
+flow mappings (`with: { … }`) are read on their own line only. Exits 1 listing every problem."""
 
 from __future__ import annotations
 
@@ -39,8 +39,8 @@ SCALAR = re.compile(r"""^(?:"([^"\\$]*)"|'([^'$]*)'|([^\s"'#&*!|>{}\[\],$][^\s,{
 # each install's match stops at a shell separator, so `pip install x && uv sync` is not an install of uv;
 # `astral-sh/uv` can't match `astral-sh/setup-uv`
 OTHER_UV = re.compile(
-    r"\bpip[0-9.]*x?\s+(?:install|run)\b[^;&|#]*\buvx?(?![\w.-])"  # not uv-dynamic-versioning
-    r"|\b(?:brew|conda|mamba|micromamba|cargo|apt|apt-get|snap|npm)\s+install\b[^;&|#]*\buv(?![\w.-])"
+    r"\bpip[0-9.]*x?\s+(?:install|run)\b[^;&|#]*\buvx?(?![\w.]|-(?!\d))"  # uv-0.14.0-….whl, not uv-dynamic-…
+    r"|\b(?:brew|conda|mamba|micromamba|cargo|apt|apt-get|snap|npm)\s+install\b[^;&|#]*\buv(?![\w.]|-(?!\d))"
     r"|astral\.sh/uv|astral-sh/uv(?![\w-])|\buv\s+self\s+update",
     re.IGNORECASE,
 )
@@ -176,9 +176,13 @@ def uv_before_setup(lines: list[str]) -> list[tuple[str, int]] | None:
 
 def uncommented(line: str) -> str:
     """The line up to a YAML comment: a `#` after whitespace, outside quotes (shell and YAML quotes alike)."""
-    quote = ""
+    quote, escaped = "", False
     for i, ch in enumerate(line):
-        if quote:
+        if escaped:
+            escaped = False
+        elif quote == '"' and ch == "\\":  # `\"` doesn't close a double-quoted shell string
+            escaped = True
+        elif quote:
             quote = "" if ch == quote else quote
         elif ch in "'\"":
             quote = ch

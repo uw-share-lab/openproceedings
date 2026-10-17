@@ -6945,8 +6945,8 @@
  {
   "label": "uvpin: pipx run not caught",
   "file": ".claude/scripts/check_uv_pin.py",
-  "old": "(?:install|run)\\b[^;&|#]*\\buvx?(?![\\w.-])\"",
-  "new": "(?:install)\\b[^;&|#]*\\buvx?(?![\\w.-])\""
+  "old": "(?:install|run)\\b[^;&|#]*\\buvx?(?![\\w.]|-(?!\\d))\"",
+  "new": "(?:install)\\b[^;&|#]*\\buvx?(?![\\w.]|-(?!\\d))\""
  },
  {
   "label": "uvpin: an install match runs past a separator",
@@ -6957,7 +6957,7 @@
  {
   "label": "uvpin: package managers not caught",
   "file": ".claude/scripts/check_uv_pin.py",
-  "old": "    r\"|\\b(?:brew|conda|mamba|micromamba|cargo|apt|apt-get|snap|npm)\\s+install\\b[^;&|#]*\\buv(?![\\w.-])\"\n",
+  "old": "    r\"|\\b(?:brew|conda|mamba|micromamba|cargo|apt|apt-get|snap|npm)\\s+install\\b[^;&|#]*\\buv(?![\\w.]|-(?!\\d))\"\n",
   "new": ""
  },
  {
@@ -7017,7 +7017,25 @@
  {
   "label": "uvpin: uv-something read as uv",
   "file": ".claude/scripts/check_uv_pin.py",
-  "old": "\\buvx?(?![\\w.-])\"",
+  "old": "\\buvx?(?![\\w.]|-(?!\\d))\"",
   "new": "\\buvx?\\b\""
+ },
+ {
+  "label": "uvpin: a uv wheel file read as another package",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "\\buvx?(?![\\w.]|-(?!\\d))\"",
+  "new": "\\buvx?(?![\\w.-])\""
+ },
+ {
+  "label": "uvpin: a package manager's uv-<version> read as another package",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "install\\b[^;&|#]*\\buv(?![\\w.]|-(?!\\d))\"",
+  "new": "install\\b[^;&|#]*\\buv(?![\\w.-])\""
+ },
+ {
+  "label": "uvpin: an escaped quote closes a double-quoted string",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "        elif quote == '\"' and ch == \"\\\\\":",
+  "new": "        elif False:"
  }
 ]

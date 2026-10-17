@@ -747,6 +747,18 @@ uvwf "      - run: echo \" #\"; uv sync
       - uses: $UVA
         with: { version: \"$UVV\" }"
 expect_uv "\\.github/workflows/x\\.yml:4: job 'j' runs uv before any setup-uv step" "a # inside quotes does not start a comment"
+uvwf "      - uses: $UVA
+        with: { version: \"$UVV\" }
+      - run: pip install ./uv-0.14.0-py3-none-any.whl"
+expect_uv '\.github/workflows/x\.yml:6: installs uv another way' "a uv wheel file by path"
+uvwf "      - uses: $UVA
+        with: { version: \"$UVV\" }
+      - run: brew install uv-0.14.0"
+expect_uv '\.github/workflows/x\.yml:6: installs uv another way' "a package manager's uv-<version>"
+uvwf "      - run: echo \"a\\\" #\"; uv sync
+      - uses: $UVA
+        with: { version: \"$UVV\" }"
+expect_uv "\\.github/workflows/x\\.yml:4: job 'j' runs uv before any setup-uv step" "an escaped quote does not close a double-quoted string"
 uvpin; printf 'jobs:\n  j:\n    steps:\n      - uses: %s\n' "$UVA" > "$TMP/r/.github/workflows/x.yaml"
 expect_uv '\.github/workflows/x\.yaml:4: the setup-uv step has no with: version' "a .yaml workflow"
 uvpin; mkdir -p "$TMP/r/.github/actions/u"; printf 'runs:\n  steps:\n    - uses: %s\n' "$UVA" > "$TMP/r/.github/actions/u/action.yaml"
