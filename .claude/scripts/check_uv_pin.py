@@ -175,12 +175,13 @@ def uv_before_setup(lines: list[str]) -> list[tuple[str, int]] | None:
 
 
 def uncommented(line: str) -> str:
-    """The line up to a YAML comment: a `#` after whitespace, outside quotes (shell and YAML quotes alike)."""
+    """The line up to a YAML comment: a `#` after whitespace, outside quotes (shell and YAML quotes alike), with
+    a backslash escaping the next character outside single quotes, as the shell reads it."""
     quote, escaped = "", False
     for i, ch in enumerate(line):
         if escaped:
             escaped = False
-        elif quote == '"' and ch == "\\":  # `\"` doesn't close a double-quoted shell string
+        elif quote != "'" and ch == "\\":  # as in the shell: `\` escapes the next character but in '…'
             escaped = True
         elif quote:
             quote = "" if ch == quote else quote

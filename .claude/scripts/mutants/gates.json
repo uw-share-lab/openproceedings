@@ -7035,7 +7035,13 @@
  {
   "label": "uvpin: an escaped quote closes a double-quoted string",
   "file": ".claude/scripts/check_uv_pin.py",
-  "old": "        elif quote == '\"' and ch == \"\\\\\":",
-  "new": "        elif False:"
+  "old": "        elif quote != \"'\" and ch == \"\\\\\":",
+  "new": "        elif quote == \"'\" and ch == \"\\\\\":"
+ },
+ {
+  "label": "uvpin: a backslash outside quotes escapes nothing",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "        elif quote != \"'\" and ch == \"\\\\\":",
+  "new": "        elif quote == '\"' and ch == \"\\\\\":"
  }
 ]

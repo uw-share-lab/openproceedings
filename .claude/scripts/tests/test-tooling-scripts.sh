@@ -759,6 +759,17 @@ uvwf "      - run: echo \"a\\\" #\"; uv sync
       - uses: $UVA
         with: { version: \"$UVV\" }"
 expect_uv "\\.github/workflows/x\\.yml:4: job 'j' runs uv before any setup-uv step" "an escaped quote does not close a double-quoted string"
+uvwf "      - run: |
+          echo \\\"a\" # \"; pip install uv"
+expect_uv '\.github/workflows/x\.yml:5: installs uv another way' "an unquoted \\\" does not open a quote"
+uvwf "      - run: |
+          echo a\\'b' # '; pip install uv"
+expect_uv '\.github/workflows/x\.yml:5: installs uv another way' "an unquoted \\' does not open a quote"
+uvwf "      - run: |
+          echo \\\"a\" # \"; uv sync
+      - uses: $UVA
+        with: { version: \"$UVV\" }"
+expect_uv "\\.github/workflows/x\\.yml:5: job 'j' runs uv before any setup-uv step" "an unquoted \\\" does not hide uv before setup-uv"
 uvpin; printf 'jobs:\n  j:\n    steps:\n      - uses: %s\n' "$UVA" > "$TMP/r/.github/workflows/x.yaml"
 expect_uv '\.github/workflows/x\.yaml:4: the setup-uv step has no with: version' "a .yaml workflow"
 uvpin; mkdir -p "$TMP/r/.github/actions/u"; printf 'runs:\n  steps:\n    - uses: %s\n' "$UVA" > "$TMP/r/.github/actions/u/action.yaml"
