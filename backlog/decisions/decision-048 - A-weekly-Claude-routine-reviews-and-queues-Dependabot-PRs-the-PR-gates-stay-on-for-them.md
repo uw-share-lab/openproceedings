@@ -422,5 +422,5 @@ What follows from it:
 The owner pinned `dev`'s six required checks to GitHub Actions (app_id 15368) on 2026-10-17; decision-027's
 addendum of that date has the evidence, the commands and the rollback. A check run the Claude GitHub App writes
 under a required name no longer counts on `dev`. What stays open: the attestation marker in a PR body, `main`'s
-checks (still `app_id: null`), and a workflow pushed to a branch, whose check runs come from GitHub Actions; the
+checks (still `app_id: null`, TASK-258), and a workflow pushed to a branch, whose check runs come from GitHub Actions; the
 last two are bounded by review, as before.
