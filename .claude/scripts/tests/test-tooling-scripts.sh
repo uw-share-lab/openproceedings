@@ -729,6 +729,24 @@ uvpin; printf '"jobs":\n  j:\n    steps:\n      - run: uv sync\n      - uses: %s
 expect_uv "\\.github/workflows/x\\.yml:4: job 'j' runs uv before any setup-uv step" "a quoted jobs: key is read"
 uvpin; printf 'on: push\nsteps:\n  - uses: %s\n    with: { version: "%s" }\n' "$UVA" "$UVV" > "$TMP/r/.github/workflows/x.yml"
 expect_uv '\.github/workflows/x\.yml: no jobs: key this check can read' "a workflow with no jobs: key"
+uvwf "      - uses: $UVA
+        with: { version: \"$UVV\" }
+      - run: |
+          pip install \\
+            uv==0.14.0"
+expect_uv '\.github/workflows/x\.yml:7: installs uv another way' "a pip install of uv continued onto the next line"
+uvwf "      - uses: $UVA
+        with: { version: \"$UVV\" }
+      - run: pip install uv-dynamic-versioning"
+expect_uv ok "a package named uv-something is not uv"
+uvwf "      - uses: $UVA
+        with: { version: \"$UVV\" }
+      - run: true # see astral-sh/uv#1"
+expect_uv ok "a trailing comment naming astral-sh/uv is not an install"
+uvwf "      - run: echo \" #\"; uv sync
+      - uses: $UVA
+        with: { version: \"$UVV\" }"
+expect_uv "\\.github/workflows/x\\.yml:4: job 'j' runs uv before any setup-uv step" "a # inside quotes does not start a comment"
 uvpin; printf 'jobs:\n  j:\n    steps:\n      - uses: %s\n' "$UVA" > "$TMP/r/.github/workflows/x.yaml"
 expect_uv '\.github/workflows/x\.yaml:4: the setup-uv step has no with: version' "a .yaml workflow"
 uvpin; mkdir -p "$TMP/r/.github/actions/u"; printf 'runs:\n  steps:\n    - uses: %s\n' "$UVA" > "$TMP/r/.github/actions/u/action.yaml"

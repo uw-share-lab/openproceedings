@@ -6867,7 +6867,7 @@
  {
   "label": "uvpin: other uv installers allowed",
   "file": ".claude/scripts/check_uv_pin.py",
-  "old": "        if not ignorable(line) and OTHER_UV.search(line):",
+  "old": "        if OTHER_UV.search(text):",
   "new": "        if False:"
  },
  {
@@ -6885,7 +6885,7 @@
  {
   "label": "uvpin: a name: line counts as running uv",
   "file": ".claude/scripts/check_uv_pin.py",
-  "old": "                and not NAME.match(lines[i])\n",
+  "old": " and not NAME.match(lines[i])",
   "new": ""
  },
  {
@@ -6945,19 +6945,19 @@
  {
   "label": "uvpin: pipx run not caught",
   "file": ".claude/scripts/check_uv_pin.py",
-  "old": "(?:install|run)\\b[^;&|#]*\\buvx?\\b\"",
-  "new": "(?:install)\\b[^;&|#]*\\buvx?\\b\""
+  "old": "(?:install|run)\\b[^;&|#]*\\buvx?(?![\\w.-])\"",
+  "new": "(?:install)\\b[^;&|#]*\\buvx?(?![\\w.-])\""
  },
  {
   "label": "uvpin: an install match runs past a separator",
   "file": ".claude/scripts/check_uv_pin.py",
-  "old": "    r\"\\bpip[0-9.]*x?\\s+(?:install|run)\\b[^;&|#]*\\buvx?\\b\"",
-  "new": "    r\"\\bpip[0-9.]*x?\\s+(?:install|run)\\b.*\\buvx?\\b\""
+  "old": "x?\\s+(?:install|run)\\b[^;&|#]*\\buvx?",
+  "new": "x?\\s+(?:install|run)\\b.*\\buvx?"
  },
  {
   "label": "uvpin: package managers not caught",
   "file": ".claude/scripts/check_uv_pin.py",
-  "old": "    r\"|\\b(?:brew|conda|mamba|micromamba|cargo|apt|apt-get|snap|npm)\\s+install\\b[^;&|#]*\\buv\\b\"\n",
+  "old": "    r\"|\\b(?:brew|conda|mamba|micromamba|cargo|apt|apt-get|snap|npm)\\s+install\\b[^;&|#]*\\buv(?![\\w.-])\"\n",
   "new": ""
  },
  {
@@ -6969,7 +6969,7 @@
  {
   "label": "uvpin: a trailing comment read as a run",
   "file": ".claude/scripts/check_uv_pin.py",
-  "old": "UV_WORD.search(COMMENT.sub(\"\", lines[i]))",
+  "old": "UV_WORD.search(uncommented(lines[i]))",
   "new": "UV_WORD.search(lines[i])"
  },
  {
@@ -6995,5 +6995,29 @@
   "file": ".claude/scripts/check_uv_pin.py",
   "old": "            bad.append(f\"{name}: no jobs: key this check can read\")\n",
   "new": "            pass\n"
+ },
+ {
+  "label": "uvpin: a # inside quotes starts a comment",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "        elif ch in \"'\\\"\":\n            quote = ch\n",
+  "new": ""
+ },
+ {
+  "label": "uvpin: comments read for installs",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "        start, text = i, uncommented(lines[i]).rstrip()",
+  "new": "        start, text = i, lines[i].rstrip()"
+ },
+ {
+  "label": "uvpin: continuations not joined",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "        while text.endswith(\"\\\\\") and",
+  "new": "        while False and"
+ },
+ {
+  "label": "uvpin: uv-something read as uv",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "\\buvx?(?![\\w.-])\"",
+  "new": "\\buvx?\\b\""
  }
 ]

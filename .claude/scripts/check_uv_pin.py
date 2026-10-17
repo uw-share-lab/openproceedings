@@ -14,8 +14,10 @@ step). It also refuses the other ways to get uv it knows, anywhere in a workflow
 the like), the astral.sh installer, any `astral-sh/uv` path (a release download, a `docker://` step, a `container:`
 or `services:` image, `docker run`), and `uv self update`; and in a workflow job, a `uv` or `uvx` word outside a
 `name:` and a trailing comment before the job's first setup-uv step (a runner image's own uv), and a workflow with
-no `jobs:` key it can read. Not seen: a `uv` that a called script or `make` runs, an install it has no pattern for,
-and a setup-uv step whose `if:` skips it while a later step still runs uv. Steps are read by indentation, as YAML
+no `jobs:` key it can read. Installs are read with backslash continuations joined and comments (a `#` after
+whitespace, outside quotes) dropped. Not seen: a `uv` that a called script, `make` or a local composite action the
+job calls before its setup-uv step runs, an install it has no pattern for, and a setup-uv step whose `if:` skips it
+while a later step still runs uv. Steps are read by indentation, as YAML
 block sequences are; flow mappings (`with: { … }`) are read on their own line only. Exits 1 listing every
 problem."""
 
@@ -37,15 +39,14 @@ SCALAR = re.compile(r"""^(?:"([^"\\$]*)"|'([^'$]*)'|([^\s"'#&*!|>{}\[\],$][^\s,{
 # each install's match stops at a shell separator, so `pip install x && uv sync` is not an install of uv;
 # `astral-sh/uv` can't match `astral-sh/setup-uv`
 OTHER_UV = re.compile(
-    r"\bpip[0-9.]*x?\s+(?:install|run)\b[^;&|#]*\buvx?\b"
-    r"|\b(?:brew|conda|mamba|micromamba|cargo|apt|apt-get|snap|npm)\s+install\b[^;&|#]*\buv\b"
+    r"\bpip[0-9.]*x?\s+(?:install|run)\b[^;&|#]*\buvx?(?![\w.-])"  # not uv-dynamic-versioning
+    r"|\b(?:brew|conda|mamba|micromamba|cargo|apt|apt-get|snap|npm)\s+install\b[^;&|#]*\buv(?![\w.-])"
     r"|astral\.sh/uv|astral-sh/uv(?![\w-])|\buv\s+self\s+update",
     re.IGNORECASE,
 )
 NAME = re.compile(r"^\s*(-\s+)?name\s*:")  # a step or job label, not a command
 UV_WORD = re.compile(r"(?:^|[\s;&|(`'\"/])uvx?(?=[\s;&|)`'\"]|$)")
 JOBS = re.compile(r"""^["']?jobs["']?\s*:\s*(#.*)?$""")
-COMMENT = re.compile(r"\s#.*$")
 
 
 def pinned() -> tuple[str | None, list[str]]:
@@ -167,13 +168,36 @@ def uv_before_setup(lines: list[str]) -> list[tuple[str, int]] | None:
         for i in range(start + 1, stop):
             if USES.match(lines[i]):
                 break
-            if (
-                not ignorable(lines[i])
-                and not NAME.match(lines[i])
-                and UV_WORD.search(COMMENT.sub("", lines[i]))
-            ):
+            if not ignorable(lines[i]) and not NAME.match(lines[i]) and UV_WORD.search(uncommented(lines[i])):
                 out.append((lines[start].strip().rstrip(":"), i + 1))
                 break
+    return out
+
+
+def uncommented(line: str) -> str:
+    """The line up to a YAML comment: a `#` after whitespace, outside quotes (shell and YAML quotes alike)."""
+    quote = ""
+    for i, ch in enumerate(line):
+        if quote:
+            quote = "" if ch == quote else quote
+        elif ch in "'\"":
+            quote = ch
+        elif ch == "#" and (i == 0 or line[i - 1].isspace()):
+            return line[:i]
+    return line
+
+
+def joined(lines: list[str]) -> list[tuple[int, str]]:
+    """Each line with the lines a trailing backslash continues onto glued on, keyed by its first line's index."""
+    out: list[tuple[int, str]] = []
+    i = 0
+    while i < len(lines):
+        start, text = i, uncommented(lines[i]).rstrip()
+        while text.endswith("\\") and i + 1 < len(lines):
+            i += 1
+            text = text[:-1] + " " + uncommented(lines[i]).strip()
+        out.append((start, text))
+        i += 1
     return out
 
 
@@ -189,9 +213,10 @@ steps = 0
 for path in files():
     name = path.relative_to(ROOT).as_posix()
     lines = path.read_text(encoding="utf-8-sig").splitlines()
-    for i, line in enumerate(lines):
-        if not ignorable(line) and OTHER_UV.search(line):
+    for i, text in joined(lines):
+        if OTHER_UV.search(text):
             bad.append(f"{name}:{i + 1}: installs uv another way than a pinned setup-uv step")
+    for i, line in enumerate(lines):
         if not MENTION.search(line):
             continue
         if not USES.match(line):  # a flow-style step, a comment: nothing this check can read as a pinned step

@@ -4,7 +4,7 @@ title: 'Decide: pin dev''s required status checks to the GitHub Actions app'
 status: In Progress
 assignee: []
 created_date: '2026-10-16 22:50'
-updated_date: '2026-10-17 08:45'
+updated_date: '2026-10-17 09:12'
 labels:
   - ci
   - security
@@ -30,5 +30,5 @@ Found by the #153 review (2026-10-16, decision-048 addendum): dev's six required
 <!-- SECTION:NOTES:BEGIN -->
 Owner decision 2026-10-17 (about 03:21 EDT): yes. Before the change, every required check on dev's queue commit a49a7cba (#159's gh-readonly-queue build) and on #159's head de03b796 was a check run from github-actions (app 15368); commits/<sha>/status held no commit status for any of them (a claude check suite exists on both commits but holds no runs). Ruleset 24351281 has only its merge_queue rule (no required_status_checks), and rules/branches/dev lists only that rule, so the checks are required in the classic branch protection alone. Applied about 03:25 EDT: PATCH branches/dev/protection/required_status_checks with checks [{context, app_id: 15368}] x6, strict false; verified: all six read app_id 15368, and the rest of the protection JSON is unchanged field for field. Pre-change JSON kept in the session scratchpad (t251-protection-before.json, t251-rsc-before.json, t251-ruleset-24351281-before.json). decision-027 addendum (2026-10-17) records the commands, the evidence and the rollback (app_id -1, any app); spec 08 §Branch protection, its cloud-routine paragraph and the pr-workflow skill say it. AC #2: this task's PR is the first queued after the change; it reaches dev only through a queue build whose six check runs met the pinned requirement, so the AC holds wherever this commit is on dev.
 
-Review round 1 (security-reviewer): the rollback sends app_id -1, not null. GitHub's REST docs: omitting app_id makes GitHub pick the app that recently provided the check, and -1 allows any app (docs read 2026-10-17); decision-027's addendum has the rollback with a verify step and the legacy contexts fallback. main's six checks stay app_id null (outside this decision); spec 08 says so, and the lead was told, to file a follow-up if the owner wants it.
+Review round 1 (security-reviewer): the rollback sends app_id -1, not null. GitHub's REST docs: omitting app_id makes GitHub pick the app that recently provided the check, and -1 allows any app (docs read 2026-10-17); decision-027's addendum has the rollback with a verify step and the legacy contexts fallback. main's six checks stay app_id null (outside this decision); spec 08 says so, and the lead was told and filed it as TASK-258.
 <!-- SECTION:NOTES:END -->
