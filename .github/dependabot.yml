@@ -67,6 +67,7 @@ updates:
         update-types: ["version-update:semver-minor"]
       # ghcr.io/astral-sh/uv (the api image's uv stage): while uv is 0.x a minor is a breaking release (0.13.0
       # shipped "Breaking changes"), so it is upgraded by hand like a major; its patches and digests still come
-      # here. Drop this rule once uv reaches 1.0 (the "*" major rule then covers it).
+      # here. Drop this rule once uv reaches 1.0 (the "*" major rule then covers it). Every CI setup-uv step pins
+      # this image's uv (TASK-252): a PR moving the tag fails make tooling until the workflows move with it.
       - dependency-name: astral-sh/uv
         update-types: ["version-update:semver-minor"]

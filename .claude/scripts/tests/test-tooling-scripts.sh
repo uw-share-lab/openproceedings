@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016  # commands under test are single-quoted on purpose: $(…), $(( )) and backticks must reach the hooks unexpanded
-# Case table for the CI tooling scripts: learnings_index.py, check_backlog.py, check_digest_pins.py, check_file_modes.py, npm_specs.py,
+# Case table for the CI tooling scripts: learnings_index.py, check_backlog.py, check_digest_pins.py, check_file_modes.py, check_uv_pin.py, npm_specs.py,
 # lint_tooling.py and roster_index.py. Each case copies the real .claude/ (and CLAUDE.md / CONTRIBUTING.md) into a throwaway
 # tree, confirms the script passes on it, then breaks exactly one thing and confirms the script fails —
 # so a regression in a check can't hide behind the repo's own content being clean (review round 2).
@@ -524,6 +524,128 @@ expect_mode_err "pushd is refused"                                    'scripts/s
 modes 'popd
 chmod +x a/x.sh' a/x.sh:+x
 expect_mode_err "popd is refused"                                     'scripts/setup-dev\.sh:1: popd other than'
+
+echo "== check_uv_pin.py (every CI setup-uv installs the api image's uv, TASK-252)"
+# uvpin — a copy with the repo's own .github/ and deploy/api.Dockerfile; uvwf <text> writes one more workflow,
+# .github/workflows/x.yml, so a row's problem can only come from it (the real workflows stay pinned)
+uvpin() { fresh; cp -R "$SRC/.github" "$TMP/r/.github"; mkdir -p "$TMP/r/deploy"; cp "$SRC/deploy/api.Dockerfile" "$TMP/r/deploy/"; }
+UVV=$(sed -n 's|^FROM ghcr\.io/astral-sh/uv:\([0-9.]*\)@.*|\1|p' "$SRC/deploy/api.Dockerfile")
+UVA="astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7"
+uvwf() { uvpin; printf 'jobs:\n  j:\n    steps:\n%s\n' "$1" > "$TMP/r/.github/workflows/x.yml"; }
+# expect_uv <ok|ERE> <label> — ok: exits 0; otherwise exits 1 AND prints a `uv pin: ` line matching <ERE>, so a
+# crash or an unrelated problem can't pass the row
+expect_uv() {
+  local want="$1" label="$2" out rc
+  out=$(python3 "$TMP/r/.claude/scripts/check_uv_pin.py" 2>&1 >/dev/null); rc=$?
+  if { [ "$want" = ok ] && [ "$rc" = 0 ]; } || { [ "$want" != ok ] && [ "$rc" = 1 ] && printf '%s\n' "$out" | grep -Eq "^uv pin: $want"; }
+  then pass=$((pass+1)); printf '  ok   %-22s %-58s -> %s\n' check_uv_pin.py "$label" "$([ "$want" = ok ] && echo ok || echo err)"
+  else fail=$((fail+1)); printf '  FAIL %-22s %-58s -> rc %s: %s (want: %s)\n' check_uv_pin.py "$label" "$rc" "$out" "$want"; fi
+}
+uvpin; expect_uv ok "the repo's own workflows and api image pass"
+uvwf "      - uses: $UVA
+        with: { version: \"$UVV\" }"
+expect_uv ok "a flow-mapping with: naming the image's uv"
+uvwf "      - name: uv
+        # a comment line
+        uses: '$UVA' # trailing
+        with:
+          enable-cache: true
+
+          version: '$UVV' # same release
+      - run: true"
+expect_uv ok "uses: under - name:, block with:, quotes, comments"
+uvwf "      - uses: $UVA
+        with:
+          version: $UVV"
+expect_uv ok "an unquoted version"
+uvwf "      - uses: $UVA"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step has no with: version' "a step with no with: (setup-uv's newest)"
+uvwf "      - uses: $UVA
+        with: { enable-cache: true }"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step has no with: version' "a with: with no version"
+uvwf "      - uses: $UVA
+        with: { version: \"0.0.1\" }"
+expect_uv "\\.github/workflows/x\\.yml:4: setup-uv installs uv 0\\.0\\.1, deploy/api\\.Dockerfile pins $UVV" "a different release"
+uvwf "      - uses: $UVA
+      - uses: actions/setup-node@x
+        with: { version: \"$UVV\" }"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step has no with: version' "the next step's with: is not this step's"
+uvwf "      - name: uv
+        uses: $UVA
+      - with: { version: \"$UVV\" }
+        run: true"
+expect_uv '\.github/workflows/x\.yml:5: the setup-uv step has no with: version' "a with: opening the next step is not this step's"
+uvwf "      - uses: $UVA
+        with:
+          version: \"$UVV\"
+          version: \"0.0.1\""
+expect_uv "\\.github/workflows/x\\.yml:4: the setup-uv step has two 'version' inputs" "two version inputs"
+uvwf "      - uses: $UVA
+        with: { version: \"$UVV\", version: \"0.0.1\" }"
+expect_uv "\\.github/workflows/x\\.yml:4: the setup-uv step has two 'version' inputs" "two version inputs in a flow mapping"
+uvwf "      - uses: $UVA
+        with: { version: \"$UVV\" }
+        with: { version: \"0.0.1\" }"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step has two with: keys' "two with: keys"
+uvwf "      - uses: $UVA
+        with: { version: \"$UVV\", version-file: pyproject.toml }"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step uses version-file' "a version-file beside the version"
+uvwf "      - uses: $UVA
+        with: { version: \"\${{ env.UV }}\" }"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step (line 5: )?can.t read' "an expression"
+uvwf "      - uses: $UVA
+        with:
+          version: *uv"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step can.t read version' "an alias"
+uvwf "      - uses: $UVA
+        with:
+          version: >
+            $UVV"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step (can.t read version|line 7: can.t read)' "a block scalar"
+uvwf "      - uses: $UVA
+        with:
+          {
+            version: \"$UVV\",
+          }"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step line 6: can.t read this with: entry' "a flow mapping over several lines (prettier's long form)"
+uvwf "      - uses: $UVA
+        with:
+          other:
+            version: \"$UVV\""
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step line 7: can.t read this with: entry' "a version nested under another input"
+uvwf "      - uses: $UVA
+        with: &w { version: \"$UVV\" }"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step line 5: can.t read this with:' "an anchored with:"
+uvwf "      - uses: $UVA
+        env:
+          with: { version: \"$UVV\" }"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step has no with: version' "a with: nested under another key is not the step's"
+uvwf "      - uses: $UVA
+        with: { version: \"$UVV\", other: *a }"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step line 5: can.t read this with:' "an alias inside a flow-mapping with:"
+uvwf "      - uses: $UVA
+        with:"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step line 5: with: is empty' "an empty with:"
+uvwf "      - uses: Astral-SH/Setup-UV@x"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step has no with: version' "the action named in another case"
+uvwf "      - { uses: $UVA, with: { version: \"$UVV\" } }"
+expect_uv '\.github/workflows/x\.yml:4: names setup-uv outside a block-style uses: line' "a flow-style step"
+uvwf "    uses: $UVA"
+expect_uv "\\.github/workflows/x\\.yml:4: can.t find the step" "a uses: in no sequence item"
+uvpin; mkdir -p "$TMP/r/.github/actions/u"; printf 'runs:\n  steps:\n    - uses: %s\n' "$UVA" > "$TMP/r/.github/actions/u/action.yml"
+expect_uv '\.github/actions/u/action\.yml:3: the setup-uv step has no with: version' "a composite action's step"
+uvpin; rm -rf "$TMP/r/.github"
+expect_uv 'no astral-sh/setup-uv step under \.github/' "no workflows at all is not a pass"
+uvpin; rm "$TMP/r/deploy/api.Dockerfile"
+expect_uv 'deploy/api\.Dockerfile is missing' "no api image"
+uvpin; sed -i.bak '/^FROM ghcr\.io\/astral-sh\/uv:/d' "$TMP/r/deploy/api.Dockerfile"
+expect_uv 'deploy/api\.Dockerfile: 0 ghcr\.io/astral-sh/uv stages' "an api image with no uv stage"
+uvpin; grep '^FROM ghcr\.io/astral-sh/uv:' "$SRC/deploy/api.Dockerfile" | sed 's/ AS uv/ AS uv2/' >> "$TMP/r/deploy/api.Dockerfile"
+expect_uv 'deploy/api\.Dockerfile: 2 ghcr\.io/astral-sh/uv stages' "two uv stages"
+uvpin; sed -i.bak "s|^FROM ghcr\\.io/astral-sh/uv:$UVV@|FROM ghcr.io/astral-sh/uv:0.13@|" "$TMP/r/deploy/api.Dockerfile"
+expect_uv "deploy/api\\.Dockerfile: the uv tag '0\\.13' is not an exact" "a uv tag that isn't X.Y.Z"
+uvpin; sed -i.bak "s|^FROM ghcr\\.io/astral-sh/uv:$UVV@|from --platform=linux/amd64 ghcr.io/astral-sh/uv:0.0.1@|" "$TMP/r/deploy/api.Dockerfile"
+expect_uv "\\.github/workflows/[a-z-]+\\.yml:[0-9]+: setup-uv installs uv $UVV, deploy/api\\.Dockerfile pins 0\\.0\\.1" "the image moves alone (lowercase, --platform)"
 
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]

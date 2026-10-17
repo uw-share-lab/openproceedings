@@ -17,7 +17,8 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
   spec 08 §Release), which requires green checks but **no mandatory approving review** under the
   solo-maintainer policy applied on 2026-10-03; `main` doesn't require `dev` up to date, so there is no
   back-merge (decision-046).
-- Branch protection: both `dev` and `main` accept only PRs whose required checks are green. `dev` merges
+- Branch protection: both `dev` and `main` accept only PRs whose required checks are green; on `dev` each must be
+  GitHub Actions' check run (app_id 15368, TASK-251; rollback in decision-027). `dev` merges
   through a **merge queue** (TASK-161, decision-027; §Merge method).
 
 ## Closing order (CLAUDE.md §Closing workflow — approvals are per-commit)
@@ -104,7 +105,7 @@ sha. Any commit after an approval — a typo fix, a rebase, an amend — produce
 |---|---|
 | `lint` (`lint.yml`) | `make lint`: ruff format/check, mypy --strict (`backend/src` and the `/dependabot-review` scripts), shellcheck; prettier, eslint, tsc; then actionlint |
 | `test` (`test.yml`) | pytest unit/golden/differential/contract under pytest-xdist, properties at the `pr` profile (200 examples, 2 s deadline); vitest; OpenAPI→TS freshness |
-| `claude-tooling` (`claude-tooling.yml`) | `make tooling`: roster lint, `.claude/README.md` + learnings index freshness, backlog hygiene (no Done task in `tasks/`, no id used twice), digest pins in `deploy/`, the files `setup-dev.sh` chmods committed 100755 (`check_file_modes.py`, TASK-241), the npm manifests against the lock (`npm_specs.py`, TASK-212), `lint_probes.py`, every case table |
+| `claude-tooling` (`claude-tooling.yml`) | `make tooling`: roster lint, `.claude/README.md` + learnings index freshness, backlog hygiene (no Done task in `tasks/`, no id used twice), digest pins in `deploy/`, the files `setup-dev.sh` chmods committed 100755 (`check_file_modes.py`, TASK-241), every CI `setup-uv` step on the api image's uv (`check_uv_pin.py`, TASK-252), the npm manifests against the lock (`npm_specs.py`, TASK-212), `lint_probes.py`, every case table |
 | `attribution` (`pr-gates.yml`) | no AI attribution in any commit message or the PR title/body |
 | `learnings` (`pr-gates.yml`) | the branch adds or extends a learnings entry, or is labelled `no-learning` |
 | `review-attested` (`pr-gates.yml`) | the PR body attests APPROVE for the head sha |

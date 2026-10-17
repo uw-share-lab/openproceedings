@@ -365,8 +365,10 @@ connection it held is dropped, searches included, for the few seconds it takes. 
 uploads held at once reached its edge (peaks of 890 to 998 MiB) and 32 did not fit: somewhere between the two
 (400 to 540 MB of traffic, each upload faster than 2.24 Mbit/s to beat `read_body 60s`) is enough, from one
 address or many, and Caddy as built here limits
-neither connections nor uploads per client. That bound is not built here: where it goes (a front proxy, the
-host's firewall, or a custom Caddy build) is an owner decision, TASK-256.
+neither connections nor uploads per client. That bound is not built here yet. The owner decided on 2026-10-17
+(TASK-256) where it goes: a per-source connection limit in front of Caddy at the host, for example nftables
+`connlimit` on 443, set once TASK-064 chooses the host. There will be no custom Caddy build. Until it is set, size
+`OP_CADDY_MEM_LIMIT` as above and expect a restart past it.
 
 A stalled upload was cut by the proxy when `read_body` ran out (60 s after its request started, sending
 included) and never reached the API: with uploads stalled in the proxy, a whole 16 MiB comparison ran at once

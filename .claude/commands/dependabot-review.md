@@ -62,6 +62,10 @@ counts as one.
   fixes nothing);
 - any semver-major update, and a 0.x minor of a docker image (`0.12.x` → `0.13.0`: a breaking release while a
   project is 0.x; `docker_digest.py` stops it, and `.github/dependabot.yml` ignores uv's);
+- a `ghcr.io/astral-sh/uv` tag move (a patch; the cooldown notice above stops it anyway): every CI `setup-uv` step
+  pins the image's uv and moves with it (spec 08 §CI "Dependabot", TASK-252), so the PR fails `claude-tooling`
+  (`check_uv_pin.py`) until the workflows' `version` moves too, which a Dependabot-only branch can't hold; say so in
+  the comment: the owner makes the bump by hand and closes the PR (a digest-only bump keeps the tag and passes);
 - anything touching `tantivy` (spec 08 §Release) or the Python release, patch or minor (a new Python changes how
   the crawlers parse pages, and the crawl-cache replay that shows records unchanged needs the owner's `data/`;
   spec 08 §Monorepo layout "Python pin"). A new digest for the same `python` tag is fine.
@@ -281,7 +285,9 @@ needs a GitHub App user token), so the selection is what is checked; the owner s
 2026-10-13.
 
 **uv's minors come by hand** (`.github/dependabot.yml` ignores them while uv is 0.x, and docker images get no
-Dependabot alert or security update), so every run, with or without open PRs, runs
+Dependabot alert or security update). The api image's uv and CI's move together (TASK-252): a newer uv is adopted in
+one PR that changes `deploy/api.Dockerfile`'s uv stage and every workflow's `setup-uv` `version`, which `make
+tooling` checks are equal. Every run, with or without open PRs, runs
 
 ```bash
 python3 $RUN/.claude/scripts/dependabot/prs.py uv-release

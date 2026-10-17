@@ -47,8 +47,8 @@ into one `.venv` from one `uv.lock`. New Python packages join by adding their di
 `[tool.uv.workspace] members`. npm for the frontend. `scripts/setup-dev.sh` once per clone.
 
 **Python pin (TASK-208).** `.python-version` names one exact CPython patch release, 3.12.15, which uv installs
-for development and for every CI job (`setup-uv` brings the latest uv; a local uv must be 0.12.22 or later to
-know 3.12.15). `requires-python` (both `pyproject.toml`s, recorded in `uv.lock`) is `>=3.12.12`, the first 3.12
+for development and for every CI job (every `setup-uv` step installs the uv `deploy/api.Dockerfile` pins, 0.13.0,
+below; a local uv must be 0.12.22 or later to know 3.12.15). `requires-python` (both `pyproject.toml`s, recorded in `uv.lock`) is `>=3.12.12`, the first 3.12
 with the fix for CVE-2025-6069 (quadratic time in `html.parser.HTMLParser` on malformed input, which every
 crawler parses pages with; CPython issue #135462, fixed in 3.12.12, 3.13.6 and 3.14.0). That floor still admits
 3.13.0-3.13.5, which lack the fix: the guarantee is the exact pin, checked by `test_python_pin.py`. The api
@@ -118,7 +118,8 @@ The CLI and the API call the same functions, so the CLI alone is enough to run a
   scripts); `make tooling` and CI `claude-tooling` run them all.
 - `make tooling` also runs the roster lint, the `.claude/README.md`, learnings-index and backlog checks, the
   digest-pin check on `deploy/` (§Deploy), the file-mode check on what `scripts/setup-dev.sh` makes executable
-  (`check_file_modes.py`, TASK-241), and the npm manifest/lock check (`npm_specs.py`, §CI "Dependabot").
+  (`check_file_modes.py`, TASK-241), the CI uv pin check (`check_uv_pin.py`, §CI "Dependabot", TASK-252), and the
+npm manifest/lock check (`npm_specs.py`, §CI "Dependabot").
 - CLI commands are covered by the suites of the spec they call (07); the CLI adds only argument-parsing
   and exit-code tests.
 
@@ -150,7 +151,8 @@ DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 
 |---|---|
 | `lint` → `lint` | `make lint` (ruff format/check, mypy --strict on `backend/src` and on the `/dependabot-review` scripts and their case table, shellcheck, frontend prettier/eslint/tsc), then actionlint |
 | `test` → `test` | pytest under pytest-xdist at the `pr` Hypothesis profile (200 examples, 2 s deadline) (unit, golden, differential@200, contract; the 2,000-example `ci` profile runs nightly, TASK-127); vitest; `next build` (the standalone server must exist); OpenAPI snapshot and TS types freshness (`make openapi`, then `git diff --exit-code` on `backend/tests/contract/openapi.json` and `frontend/src/api/schema.ts`; unconditional, TASK-040) |
-| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`, no task or decision id used twice: §Merge queue), digest-pinned `FROM`s in `deploy/` (`check_digest_pins.py`, §Deploy), every tracked file `scripts/setup-dev.sh` makes executable committed 100755, so a fresh clone's setup leaves the tree clean (`check_file_modes.py`, TASK-241), the npm manifests' dependency specs equal to the lock's workspace entries (`npm_specs.py`, §CI "Dependabot"), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`, the `/dependabot-review` scripts, the no-dependency-code marker's guards in `test-no-dep-code.sh`) |
+| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`, no task or decision id used twice: §Merge queue), digest-pinned `FROM`s in `deploy/` (`check_digest_pins.py`, §Deploy), every tracked file `scripts/setup-dev.sh` makes executable committed 100755, so a fresh clone's setup leaves the tree clean (`check_file_modes.py`, TASK-241), every CI `setup-uv` step's
+`version` equal to the api image's uv (`check_uv_pin.py`, §CI "Dependabot", TASK-252), the npm manifests' dependency specs equal to the lock's workspace entries (`npm_specs.py`, §CI "Dependabot"), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`, the `/dependabot-review` scripts, the no-dependency-code marker's guards in `test-no-dep-code.sh`) |
 | `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha. In a merge-queue build, `merge_group_gate.py` runs the same three checks on every PR in the group (§Merge queue) |
 | `nightly` (scheduled daily, and `workflow_dispatch`; not a PR check) | Parallel jobs, each with its own time limit (TASK-057): the whole backend suite but the differential at the `ci` profile (2,000 examples) under pytest-xdist, synthetic-corpus parity (`test_parity.py`) included; every property at 50,000 examples as a 5-part `properties` matrix under pytest-xdist, split by measured time per test (the near-cap replay property alone, the other oracle-backed properties, `unit/engine`, `unit/ingest`, and the rest with the exhaustive tokenizer check, `OP_EXHAUSTIVE=1`); the year-edit property (`test_clauses.py`), which ran past 90 min unsplit, as 4 seeded `year-edits` jobs of 12,500 (`OP_YEAR_EDIT_SHARDS`); differential@50k as 12 independent jobs of 4,166 or 4,167 examples, exactly 50,000 between them (`OP_DIFFERENTIAL_SHARD` is each job's index; the remainder goes to the first shards) (8 until 2026-10-11, when the group-count property made a shard run past its 110 minutes), each with its own `--hypothesis-seed`, which its log prints with a rerun command; `benchmarks`: the spec 03 benchmarks with their budgets, then the ~80k report into the run summary and a `bench-80k` artifact (a budget miss there is a warning annotation); and the mutation run (`mutate.py`, every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent) as a 12-job `mutate` matrix (TASK-171; 8 until 2026-10-06): job i of n runs `mutate.py --shard i/n`, every n-th mutant from the i-th, so every mutant is checked every night (n is the matrix size, so adding a shard is one edit). Estimated from run 37017691575 (188 mutants in 140 min on a 4-CPU runner), the 694 mutants at TASK-171 need ~8.5 h of one runner, past GitHub's 6 h job cap, or ~65 min a shard of its 140 at 8 shards (2026-10-06: 778 mutants took 77–123 min a shard at 8, so 12); shard 1's first step prints the night's count, and shards are added before one nears 140 min. With 997 mutants (2026-10-09/10) four shards ran past 140 min, every mutant running all 13 case tables; since then a mutant runs the tables that name its file first and stops at the first failure, about a third of the time (§Mutation testing), so 12 shards have the room again. Shard 1's first step checks every mutant's pattern still exists (seconds), so a stale mutant anywhere fails the run each night; it also fails its own shard. A surviving or stale mutant fails its shard, and so does a shard cut off at 140 min, with an `::error::` giving about how many of its mutants it checked (the step runs with `shell: bash`, i.e. pipefail, so the pipe through `tee` keeps the status). Long pytest steps run verbose with `OP_EARLY_FAILURES=1` (a failure's report, Hypothesis blob included, is printed when the test fails) and are interrupted before their job's limit, so an overrun fails with an `::error::` and shows which test was still running. The run has 35 jobs, past GitHub's limit of 20 at once for a free organization, so 15 (and more while a PR's CI runs) queue until running jobs finish (the short ones, `suite-ci`, `benchmarks` and the `differential` shards, took under 25 min in run 37017691575); a job's time limit starts when it runs. Full-corpus parity stays local (decision-004) |
 | `bench` → `bench` (advisory: not a required check yet) | pytest-benchmark on the 5k fixture index (`backend/tests/bench`, task-031): the PR's base and head on one runner; a minimum time over 20% slower than the base fails, and each benchmark asserts its spec 03 budget (p95). It becomes required once it has run green on a few PRs without false failures (runner noise); a maintainer adds it to `dev`'s required checks |
@@ -225,7 +227,16 @@ is a breaking release (0.13.0 shipped "Breaking changes"; PR #132), so it is upg
 goes once uv reaches 1.0), and only its patches and digest bumps arrive here; `docker_digest.py` stops any 0.x minor
 of an image as well, and the weekly routine reports a newer uv minor (`prs.py uv-release`) or a uv advisory to the
 owner. uv 0.12.24 → 0.13.0 was done by hand on 2026-10-16, once 0.13.0 was 7 days old, with `docker_digest.py`'s age
-and attestation check run locally. A docker image's
+and attestation check run locally. **The api image's uv and CI's move together** (owner decision 2026-10-17,
+TASK-252): every `astral-sh/setup-uv` step under `.github/` names that release (`with: { version: "X.Y.Z" }`), so CI
+runs the reviewed uv under the same 7-day hold instead of setup-uv's newest (on 2026-10-16 CI ran uv 0.13.1, two
+days old, while the image pinned 0.13.0), and `check_uv_pin.py` (in `make tooling`, so in `claude-tooling`) fails
+while any step differs from the image's `ghcr.io/astral-sh/uv` tag, or names no version. A uv bump, by hand or a
+Dependabot docker PR that moves the tag, changes `deploy/api.Dockerfile` and every workflow's `version` in one PR;
+a docker PR moving the tag alone fails `claude-tooling`, and since `prs.py check` allows a docker PR only
+Dockerfiles, the owner makes the bump as a hand PR and closes Dependabot's. A digest-only bump keeps the tag and
+passes. A Dependabot `github-actions` bump of the setup-uv action itself leaves its `version` input alone.
+A docker image's
 `cooldown` holds only on Docker Hub, and only when Docker Hub's API answers: Dependabot dates a tag from that API
 and otherwise skips the cooldown, saying "Cooldown could not be applied" in the PR body (it opened PR #132 about 20
 hours after uv 0.13.0's release). So `prs.py check` stops a PR with that notice. It gives no date for any ghcr.io
@@ -397,8 +408,9 @@ and the pre-push hook refuses every push while it is there; the `gh api` writes 
 step 9's close/reopen and run cancel/rerun) are kept out by the procedure. `record-review.py --attest --pr` also
 refuses wherever GraphQL is refused as a cloud session refuses it, marker or not. These guards stop an honest run's
 mistakes, not a steered one: the session still holds the App's credential, with pull-request and checks write, so it
-could write an attestation marker or a check run under a required check's name (`dev`'s required checks aren't tied
-to an app, `app_id: null`); only the installation's scope (this repository) bounds a steered run. A local run reads
+could write an attestation marker (a check run under a required check's name no longer counts: since 2026-10-17
+`dev`'s required checks accept only GitHub Actions', TASK-251, §Branch protection); only the installation's scope
+(this repository) bounds a steered run. A local run reads
 back every comment and PR body it writes and removes anything added (cheap, though a write from the owner's machine
 hasn't gained a footer). The procedure uses REST only (`gh api repos/<repo>/...`) and checks auth with a
 repository-scoped call (`gh api repos/uw-share-lab/openproceedings`; the proxy refuses paths outside `repos/`, so
@@ -556,7 +568,10 @@ buffer doubles to 32 MiB to hold 16, plus the buffers it outgrew until Go collec
 comparison slot, and `read_body` cuts it; with no limit on how many arrive at once, the memory limit bounds
 the proxy, which past it is killed and restarted, dropping every connection it held, searches included, for a
 few seconds (24 uploads held at once reached the edge of 1 GiB, peaks 890 to 998 MiB, and 32 did not fit;
-Caddy as built limits neither connections nor uploads per client: open, an owner decision once the host is chosen, TASK-256 after TASK-064).
+Caddy as built limits neither connections nor uploads per client. The owner decided on 2026-10-17 (TASK-256, option
+(c)) that the cap will be a per-source connection limit in front of Caddy at the host, for example nftables
+`connlimit` on 443, set once TASK-064 chooses the host; there is no custom Caddy build. Until then it is not
+built, and TASK-256 stays open for it).
 `deploy/smoke-test.sh --compare` checks all of this, and decision-035 makes passing it on the host a
 condition of any public instance enabling comparisons; it passed on Docker Desktop on 2026-10-16
 (`deploy/README.md` §Comparisons; the measurements are in `docs/results/2026-10-16-compare-proxy.md`).
@@ -1090,7 +1105,11 @@ Never hand-roll a serial loop.
 ### Branch protection (GitHub)
 
 `dev` and `main` require a PR, with these checks green: `lint`, `test`, `claude-tooling`, `attribution`,
-`learnings`, `review-attested`. No force-push, no deletion, admins included, and conversations must be
+`learnings`, `review-attested`. On `dev` each must come from GitHub Actions (app_id 15368, applied 2026-10-17,
+TASK-251): a check run of the same name from another app, such as the Claude GitHub App the routine runs under
+(decision-048), doesn't count. They are required in the classic branch protection only (the `dev: merge queue`
+ruleset has no status-check rule); the commands, the evidence and the rollback to `app_id: null` are in
+decision-027's 2026-10-17 addendum. No force-push, no deletion, admins included, and conversations must be
 resolved. `main` required the branch up to date with it until 2026-10-06, when the owner turned that off
 (decision-046), so a release needs no back-merge (§Release step 7). The owner changed only `main`'s required
 approving-review count from 1 to 0 on 2026-10-03 for the solo-maintainer workflow; optional reviews remain
