@@ -230,8 +230,11 @@ and attestation check run locally. **The api image's uv and CI's move together**
 TASK-252): every `astral-sh/setup-uv` step under `.github/` names that release (`with: { version: "X.Y.Z" }`), so CI
 runs the reviewed uv under the same 7-day hold instead of setup-uv's newest (on 2026-10-16 CI ran uv 0.13.1, two
 days old, while the image pinned 0.13.0), and `check_uv_pin.py` (in `make tooling`, so in `claude-tooling`) fails
-while any step differs from the image's `ghcr.io/astral-sh/uv` tag, or names no version; it also refuses uv
-installed any other way under `.github/`, and a job that runs `uv` before its setup-uv step. A uv bump is one hand
+while any step differs from the image's `ghcr.io/astral-sh/uv` tag, or names no version. It also refuses the other
+installs it has patterns for (pip, pip3 or pipx installing or running uv, a package manager's `install … uv`, the
+astral.sh installer, any `astral-sh/uv` path such as a release download or a `container:` image, `uv self update`)
+and a job that runs `uv` before its setup-uv step; it can't see a uv that a script or `make` runs, an install it has
+no pattern for, or a setup-uv step skipped by its `if:` (the docstring lists them). A uv bump is one hand
 PR that changes `deploy/api.Dockerfile` and every workflow's `version`. A Dependabot docker PR moving the tag alone
 fails `claude-tooling`, and since `prs.py check` allows a docker PR only Dockerfiles, the owner remakes it by hand
 and closes Dependabot's; a digest-only bump keeps the tag and passes. A Dependabot `github-actions` bump of the

@@ -9,11 +9,15 @@ closed: no uv stage, two of them, or a tag that isn't an exact `X.Y.Z`; no setup
 workflows can't switch the check off); a step with no `version`, a `version-file` or `manifest-file` (a manifest
 can point a release at any download), or a `with:` or `version:` it can't read (anchors, aliases, multi-line or
 block scalars, an expression, a `#` with no space before it); a step it can't place (a bare `-` line, a flow-style
-step). It also refuses uv from anywhere else: a `pip`/`pipx install … uv`, the astral.sh installer, a
-`docker://…astral-sh/uv` step or `uv self update` anywhere under `.github/`, and in a workflow job, a `uv` or `uvx`
-word outside a `name:` before the job's first setup-uv step (a runner image's own uv). A `uv` that a called script
-or `make` runs is not seen. Steps are read by indentation, as YAML block sequences are; flow mappings
-(`with: { … }`) are read on their own line only. Exits 1 listing every problem."""
+step). It also refuses the other ways to get uv it knows, anywhere in a workflow or composite action: `pip`,
+`pip3` or `pipx` installing or running uv, a package manager's `install … uv` (brew, conda, mamba, cargo, apt and
+the like), the astral.sh installer, any `astral-sh/uv` path (a release download, a `docker://` step, a `container:`
+or `services:` image, `docker run`), and `uv self update`; and in a workflow job, a `uv` or `uvx` word outside a
+`name:` and a trailing comment before the job's first setup-uv step (a runner image's own uv), and a workflow with
+no `jobs:` key it can read. Not seen: a `uv` that a called script or `make` runs, an install it has no pattern for,
+and a setup-uv step whose `if:` skips it while a later step still runs uv. Steps are read by indentation, as YAML
+block sequences are; flow mappings (`with: { … }`) are read on their own line only. Exits 1 listing every
+problem."""
 
 from __future__ import annotations
 
@@ -30,11 +34,18 @@ USES = re.compile(r"""^\s*(-\s+)?uses:\s*["']?astral-sh/setup-uv@""", re.IGNOREC
 MENTION = re.compile(r"astral-sh/setup-uv@", re.IGNORECASE)
 # a YAML comment starts only at a `#` after whitespace, so `0.13.0#x` is one (unreadable) value
 SCALAR = re.compile(r"""^(?:"([^"\\$]*)"|'([^'$]*)'|([^\s"'#&*!|>{}\[\],$][^\s,{}\[\]$]*))(?:\s+#.*)?\s*$""")
+# each install's match stops at a shell separator, so `pip install x && uv sync` is not an install of uv;
+# `astral-sh/uv` can't match `astral-sh/setup-uv`
 OTHER_UV = re.compile(
-    r"pipx?\s+install\b.*\buv\b|astral\.sh/uv|docker://\S*astral-sh/uv|\buv\s+self\s+update", re.IGNORECASE
+    r"\bpip[0-9.]*x?\s+(?:install|run)\b[^;&|#]*\buvx?\b"
+    r"|\b(?:brew|conda|mamba|micromamba|cargo|apt|apt-get|snap|npm)\s+install\b[^;&|#]*\buv\b"
+    r"|astral\.sh/uv|astral-sh/uv(?![\w-])|\buv\s+self\s+update",
+    re.IGNORECASE,
 )
 NAME = re.compile(r"^\s*(-\s+)?name\s*:")  # a step or job label, not a command
-UV_WORD = re.compile(r"(?:^|[\s;&|(`'\"])uvx?(?:\s|$)")
+UV_WORD = re.compile(r"(?:^|[\s;&|(`'\"/])uvx?(?=[\s;&|)`'\"]|$)")
+JOBS = re.compile(r"""^["']?jobs["']?\s*:\s*(#.*)?$""")
+COMMENT = re.compile(r"\s#.*$")
 
 
 def pinned() -> tuple[str | None, list[str]]:
@@ -136,12 +147,13 @@ def version_of(step: list[tuple[int, str]], col: int) -> tuple[str | None, str |
     return next(g for g in m.groups() if g is not None), None
 
 
-def uv_before_setup(lines: list[str]) -> list[tuple[str, int]]:
-    """Each job (and the line) that names `uv` or `uvx` before its first setup-uv step: a runner's own uv."""
+def uv_before_setup(lines: list[str]) -> list[tuple[str, int]] | None:
+    """Each job (and the line) that names `uv` or `uvx` before its first setup-uv step: a runner's own uv. None
+    when there is no `jobs:` key to read."""
     try:
-        top = next(i for i, ln in enumerate(lines) if re.match(r"^jobs\s*:\s*(#.*)?$", ln))
+        top = next(i for i, ln in enumerate(lines) if JOBS.match(ln))
     except StopIteration:
-        return []
+        return None
     body = [i for i in range(top + 1, len(lines)) if not ignorable(lines[i])]
     end = next((i for i in body if indent(lines[i]) == 0), len(lines))
     body = [i for i in body if i < end]
@@ -155,7 +167,11 @@ def uv_before_setup(lines: list[str]) -> list[tuple[str, int]]:
         for i in range(start + 1, stop):
             if USES.match(lines[i]):
                 break
-            if not ignorable(lines[i]) and not NAME.match(lines[i]) and UV_WORD.search(lines[i]):
+            if (
+                not ignorable(lines[i])
+                and not NAME.match(lines[i])
+                and UV_WORD.search(COMMENT.sub("", lines[i]))
+            ):
                 out.append((lines[start].strip().rstrip(":"), i + 1))
                 break
     return out
@@ -191,9 +207,10 @@ for path in files():
         elif want is not None and got != want:
             bad.append(f"{name}:{i + 1}: setup-uv installs uv {got}, {DOCKERFILE} pins {want}")
     if path.parent.name == "workflows":
-        bad += [
-            f"{name}:{n}: job '{job}' runs uv before any setup-uv step" for job, n in uv_before_setup(lines)
-        ]
+        if (early := uv_before_setup(lines)) is None:
+            bad.append(f"{name}: no jobs: key this check can read")
+        else:
+            bad += [f"{name}:{n}: job '{job}' runs uv before any setup-uv step" for job, n in early]
 if steps == 0:
     bad.append("no astral-sh/setup-uv step under .github/")
 for msg in bad:

@@ -6873,20 +6873,20 @@
  {
   "label": "uvpin: pipx install not caught",
   "file": ".claude/scripts/check_uv_pin.py",
-  "old": "r\"pipx?\\s+install",
-  "new": "r\"pip\\s+install"
+  "old": "    r\"\\bpip[0-9.]*x?\\s+(?:install|run)",
+  "new": "    r\"\\bpip[0-9.]*\\s+(?:install|run)"
  },
  {
   "label": "uvpin: uv before setup-uv not checked",
   "file": ".claude/scripts/check_uv_pin.py",
-  "old": "        bad += [\n",
-  "new": "        bad + [\n"
+  "old": "            bad += [f\"{name}:{n}: job",
+  "new": "            bad + [f\"{name}:{n}: job"
  },
  {
   "label": "uvpin: a name: line counts as running uv",
   "file": ".claude/scripts/check_uv_pin.py",
-  "old": "and not NAME.match(lines[i]) and",
-  "new": "and"
+  "old": "                and not NAME.match(lines[i])\n",
+  "new": ""
  },
  {
   "label": "uvpin: uv after setup-uv flagged",
@@ -6935,5 +6935,65 @@
   "file": ".claude/scripts/check_uv_pin.py",
   "old": "        if len(pairs) != len(entries):",
   "new": "        if False:"
+ },
+ {
+  "label": "uvpin: pip3 not caught",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "    r\"\\bpip[0-9.]*x?\\s+(?:install|run)",
+  "new": "    r\"\\bpipx?\\s+(?:install|run)"
+ },
+ {
+  "label": "uvpin: pipx run not caught",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "(?:install|run)\\b[^;&|#]*\\buvx?\\b\"",
+  "new": "(?:install)\\b[^;&|#]*\\buvx?\\b\""
+ },
+ {
+  "label": "uvpin: an install match runs past a separator",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "    r\"\\bpip[0-9.]*x?\\s+(?:install|run)\\b[^;&|#]*\\buvx?\\b\"",
+  "new": "    r\"\\bpip[0-9.]*x?\\s+(?:install|run)\\b.*\\buvx?\\b\""
+ },
+ {
+  "label": "uvpin: package managers not caught",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "    r\"|\\b(?:brew|conda|mamba|micromamba|cargo|apt|apt-get|snap|npm)\\s+install\\b[^;&|#]*\\buv\\b\"\n",
+  "new": ""
+ },
+ {
+  "label": "uvpin: astral-sh/uv paths not caught",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "|astral-sh/uv(?![\\w-])",
+  "new": ""
+ },
+ {
+  "label": "uvpin: a trailing comment read as a run",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "UV_WORD.search(COMMENT.sub(\"\", lines[i]))",
+  "new": "UV_WORD.search(lines[i])"
+ },
+ {
+  "label": "uvpin: a path before uv not seen",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "UV_WORD = re.compile(r\"(?:^|[\\s;&|(`'\\\"/])",
+  "new": "UV_WORD = re.compile(r\"(?:^|[\\s;&|(`'\\\"])"
+ },
+ {
+  "label": "uvpin: a separator after uv not seen",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "uvx?(?=[\\s;&|)`'\\\"]|$)\")",
+  "new": "uvx?(?=\\s|$)\")"
+ },
+ {
+  "label": "uvpin: a quoted jobs: key not read",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "JOBS = re.compile(r\"\"\"^[\"']?jobs[\"']?\\s*:",
+  "new": "JOBS = re.compile(r\"\"\"^jobs\\s*:"
+ },
+ {
+  "label": "uvpin: a workflow with no jobs: passes",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "            bad.append(f\"{name}: no jobs: key this check can read\")\n",
+  "new": "            pass\n"
  }
 ]

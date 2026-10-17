@@ -693,6 +693,42 @@ uvwf "      - run: uv sync --locked
 expect_uv "\\.github/workflows/x\\.yml:4: job 'j' runs uv before any setup-uv step" "uv before the job's setup-uv (the runner's own uv)"
 uvpin; printf 'jobs:\n  j:\n    steps:\n      - uses: %s\n        with: { version: "%s" }\n      - run: uv sync\n  k:\n    steps:\n      - run: make x && uvx ruff\n' "$UVA" "$UVV" > "$TMP/r/.github/workflows/x.yml"
 expect_uv "\\.github/workflows/x\\.yml:9: job 'k' runs uv before any setup-uv step" "a second job with no setup-uv of its own"
+uvwf "      - run: pip3 install uv"
+expect_uv '\.github/workflows/x\.yml:4: installs uv another way' "pip3 install uv"
+uvwf "      - uses: $UVA
+        with: { version: \"$UVV\" }
+      - run: pipx run uv sync"
+expect_uv '\.github/workflows/x\.yml:6: installs uv another way' "pipx run uv"
+uvwf "      - run: brew install uv"
+expect_uv '\.github/workflows/x\.yml:4: installs uv another way' "a package manager's install of uv"
+uvwf "      - run: curl -LO https://github.com/astral-sh/uv/releases/download/0.14.0/uv.tar.gz"
+expect_uv '\.github/workflows/x\.yml:4: installs uv another way' "a uv release download"
+uvpin; printf 'jobs:\n  j:\n    container: ghcr.io/astral-sh/uv:0.14.0-bookworm\n    steps:\n      - uses: %s\n        with: { version: "%s" }\n' "$UVA" "$UVV" > "$TMP/r/.github/workflows/x.yml"
+expect_uv '\.github/workflows/x\.yml:3: installs uv another way' "a job container: image of uv"
+uvwf "      - uses: $UVA
+        with: { version: \"$UVV\" }
+      - run: pip install pre-commit && uv sync"
+expect_uv ok "a pip install of something else, then uv"
+uvwf "      - uses: $UVA
+        with: { version: \"$UVV\" }
+      - run: uv sync"
+expect_uv ok "uv after the job's pinned setup-uv"
+uvwf "      - run: make build # uv comes later
+      - uses: $UVA
+        with: { version: \"$UVV\" }"
+expect_uv ok "a trailing comment naming uv is not a run"
+uvwf "      - run: ~/.local/bin/uv sync
+      - uses: $UVA
+        with: { version: \"$UVV\" }"
+expect_uv "\\.github/workflows/x\\.yml:4: job 'j' runs uv before any setup-uv step" "a path to uv before setup-uv"
+uvwf "      - run: uv;true
+      - uses: $UVA
+        with: { version: \"$UVV\" }"
+expect_uv "\\.github/workflows/x\\.yml:4: job 'j' runs uv before any setup-uv step" "uv followed by a ; before setup-uv"
+uvpin; printf '"jobs":\n  j:\n    steps:\n      - run: uv sync\n      - uses: %s\n        with: { version: "%s" }\n' "$UVA" "$UVV" > "$TMP/r/.github/workflows/x.yml"
+expect_uv "\\.github/workflows/x\\.yml:4: job 'j' runs uv before any setup-uv step" "a quoted jobs: key is read"
+uvpin; printf 'on: push\nsteps:\n  - uses: %s\n    with: { version: "%s" }\n' "$UVA" "$UVV" > "$TMP/r/.github/workflows/x.yml"
+expect_uv '\.github/workflows/x\.yml: no jobs: key this check can read' "a workflow with no jobs: key"
 uvpin; printf 'jobs:\n  j:\n    steps:\n      - uses: %s\n' "$UVA" > "$TMP/r/.github/workflows/x.yaml"
 expect_uv '\.github/workflows/x\.yaml:4: the setup-uv step has no with: version' "a .yaml workflow"
 uvpin; mkdir -p "$TMP/r/.github/actions/u"; printf 'runs:\n  steps:\n    - uses: %s\n' "$UVA" > "$TMP/r/.github/actions/u/action.yaml"
