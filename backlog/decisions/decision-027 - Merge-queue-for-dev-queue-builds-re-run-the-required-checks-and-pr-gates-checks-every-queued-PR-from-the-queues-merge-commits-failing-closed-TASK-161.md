@@ -219,11 +219,26 @@ jq -n '{strict: false, contexts: ["lint","test","claude-tooling","attribution","
   gh api -X PATCH repos/uw-share-lab/openproceedings/branches/dev/protection/required_status_checks --input -
 ```
 
-This rollback has not been run; the pre-change JSON was saved before the apply. `main`'s required checks were not
-changed (still `app_id: null`); pinning them is outside this decision and waits on the owner (TASK-258).
+This rollback has not been run; the pre-change JSON was saved before the apply.
 
 The queue rollback above still holds: `-F strict=true` alone leaves the `checks` list, pins included, as it is.
 What the pin closes is a check run from another app; a workflow's own `GITHUB_TOKEN` writes check runs as GitHub
 Actions too, so a workflow that changes in a PR is still bounded by review, as before. The live check (TASK-251's
 second criterion) is the PR that records this, the first after the change: it is queued only once the pin is in
 place, so it merges only if its queue build's six check runs meet the pinned requirement.
+
+Verified live (TASK-251): #160 merged through the queue as `229478994213e5061d3da56e0b5109a05fc0d0ac` under the pin.
+Its `merge_group` workflow runs on that commit all succeeded, with every check run from GitHub Actions (app 15368):
+`pr-gates` 39024831422 (`attribution`, `learnings`, `review-attested`), `lint` 39024831426, `claude-tooling`
+39024831414 and `test` 39024831433. These are workflow run ids (`actions/runs/<id>`), not check run ids.
+
+### `main` (2026-10-17, TASK-258)
+
+The owner decided yes on 2026-10-17, and it was applied at about 18:50 EDT. The same PATCH, with `main` in place of
+`dev` in the API path, set `main`'s six required checks to app_id 15368 with `strict` false. Before, `main` listed
+the same six with `app_id: null` and `strict` false; the rest of its protection compared equal before and after,
+and `main` has no rulesets (`gh api repos/uw-share-lab/openproceedings/rules/branches/main` returns `[]`). The before
+and after JSON were saved on the owner's machine, outside the repo. The rollback is the one above with
+`branches/main/` in the API path (`app_id: -1`, then the verify step, then the legacy `contexts` fallback). Still
+open: a `dev → main` promotion PR passing its required checks under the pin (TASK-258's second criterion), which
+waits for the next promotion; the owner holds it until TASK-135 is settled.

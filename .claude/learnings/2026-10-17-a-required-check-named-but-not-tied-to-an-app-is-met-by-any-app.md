@@ -2,7 +2,7 @@
 
 **Key lesson:** Pin a branch's required checks to the app that produces them (`PATCH …/protection/required_status_checks` with `checks: [{context, app_id}]`) only after reading `commits/<sha>/check-runs` and `commits/<sha>/status` on both a queue commit and a PR head, and pin every CI tool version to the one an image already reviews, with a `make tooling` check that fails when they differ, because a name-only check and an unpinned `setup-uv` both accept whatever arrives first.
 
-- **Date:** 2026-10-17 · **Task:** task-251, task-252, task-256 · **Area:** tooling | ops
+- **Date:** 2026-10-17 · **Task:** task-251, task-252, task-256, task-258 · **Area:** tooling | ops
 - **Artifacts:** `backlog/decisions/decision-027 - …` (2026-10-17 addendum), `.claude/scripts/check_uv_pin.py`, `.claude/scripts/tests/test-tooling-scripts.sh` (check_uv_pin rows), `.claude/scripts/mutants/gates.json` (`uvpin:` mutants), `docs/specs/08-ops-and-tooling.md` (§Branch protection, §CI "Dependabot", §Deploy)
 
 ## Supersedes
@@ -62,3 +62,20 @@ to the api image's (TASK-252), and record where the per-client proxy cap will li
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/pr-workflow/SKILL.md` (branch protection, the claude-tooling row), `.claude/agents/ci-engineer.md`, `.claude/commands/dependabot-review.md` (step 0, the stop list), spec 08, `deploy/README.md`
 - Test or hook added? — `.claude/scripts/check_uv_pin.py` in `make tooling`, with its rows in `test-tooling-scripts.sh` and its `uvpin:` mutants
+
+## Addendum — 2026-10-17 (TASK-258: `main` pinned too)
+- The owner said yes to pinning `main` the same way, and it was applied with the same PATCH and `main` in the API
+  path. `main` has no rulesets (`gh api repos/<repo>/rules/branches/main` returns `[]`), so the classic protection is
+  again the one place the checks are required. The rollback is decision-027's with `branches/main/`. Spec 08,
+  decision-048 and the `pr-workflow` skill now say both branches are pinned.
+- A pin can be applied before it can be proven on that branch. The proof for `main` is a promotion PR passing
+  under the pin (TASK-258 AC #2). The owner holds promotion until TASK-135 is settled, so the task stays In
+  Progress with that criterion open, rather than closing on the settings change alone.
+- The ids a queue build's checks link to are **workflow run** ids (`actions/runs/<id>`), not check run ids:
+  `gh api repos/<repo>/check-runs/39024831422` returns 404, while
+  `gh api 'repos/<repo>/actions/runs?head_sha=<sha>'` lists it as `pr-gates`, event `merge_group`. To prove a pin
+  held, page through the commit's check runs (the default page of 30 missed every required check on
+  `22947899`, which held 59 runs, and each required name appeared twice, once from the `merge_group` runs and once
+  from the later push runs), keep the runs whose workflow run has event `merge_group`, and cite those workflow run
+  ids with that label:
+  `gh api --paginate 'repos/<repo>/commits/<sha>/check-runs?per_page=100' --jq '.check_runs[] | select(.name | test("^(lint|test|claude-tooling|attribution|learnings|review-attested)$")) | "\(.name) \(.app.id) \(.details_url)"'`.

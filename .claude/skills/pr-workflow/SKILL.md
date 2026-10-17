@@ -17,8 +17,8 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
   spec 08 §Release), which requires green checks but **no mandatory approving review** under the
   solo-maintainer policy applied on 2026-10-03; `main` doesn't require `dev` up to date, so there is no
   back-merge (decision-046).
-- Branch protection: both `dev` and `main` accept only PRs whose required checks are green; on `dev` each must be
-  GitHub Actions' check run (app_id 15368, TASK-251; rollback in decision-027). `dev` merges
+- Branch protection: both `dev` and `main` accept only PRs whose required checks are green, and on each branch every
+  one must be GitHub Actions' check run (app_id 15368: `dev` TASK-251, `main` TASK-258; rollback in decision-027). `dev` merges
   through a **merge queue** (TASK-161, decision-027; §Merge method).
 
 ## Closing order (CLAUDE.md §Closing workflow — approvals are per-commit)
