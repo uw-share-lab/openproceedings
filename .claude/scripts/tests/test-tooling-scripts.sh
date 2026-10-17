@@ -530,6 +530,7 @@ echo "== check_uv_pin.py (every CI setup-uv installs the api image's uv, TASK-25
 # .github/workflows/x.yml, so a row's problem can only come from it (the real workflows stay pinned)
 uvpin() { fresh; cp -R "$SRC/.github" "$TMP/r/.github"; mkdir -p "$TMP/r/deploy"; cp "$SRC/deploy/api.Dockerfile" "$TMP/r/deploy/"; }
 UVV=$(sed -n 's|^FROM ghcr\.io/astral-sh/uv:\([0-9.]*\)@.*|\1|p' "$SRC/deploy/api.Dockerfile")
+[[ $UVV =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "check_uv_pin rows: can't read the api image's uv tag ('$UVV')"; exit 1; }
 UVA="astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7"
 uvwf() { uvpin; printf 'jobs:\n  j:\n    steps:\n%s\n' "$1" > "$TMP/r/.github/workflows/x.yml"; }
 # expect_uv <ok|ERE> <label> — ok: exits 0; otherwise exits 1 AND prints a `uv pin: ` line matching <ERE>, so a
@@ -592,7 +593,7 @@ uvwf "      - uses: $UVA
 expect_uv '\.github/workflows/x\.yml:4: the setup-uv step uses version-file' "a version-file beside the version"
 uvwf "      - uses: $UVA
         with: { version: \"\${{ env.UV }}\" }"
-expect_uv '\.github/workflows/x\.yml:4: the setup-uv step (line 5: )?can.t read' "an expression"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step line 5: can.t read this with:' "an expression in a flow with:"
 uvwf "      - uses: $UVA
         with:
           version: *uv"
@@ -601,7 +602,7 @@ uvwf "      - uses: $UVA
         with:
           version: >
             $UVV"
-expect_uv '\.github/workflows/x\.yml:4: the setup-uv step (can.t read version|line 7: can.t read)' "a block scalar"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step line 7: can.t read this with: entry' "a folded block scalar over two lines"
 uvwf "      - uses: $UVA
         with:
           {
@@ -632,6 +633,70 @@ uvwf "      - { uses: $UVA, with: { version: \"$UVV\" } }"
 expect_uv '\.github/workflows/x\.yml:4: names setup-uv outside a block-style uses: line' "a flow-style step"
 uvwf "    uses: $UVA"
 expect_uv "\\.github/workflows/x\\.yml:4: can.t find the step" "a uses: in no sequence item"
+uvwf "      - name: uv
+# a comment at column 0
+
+        uses: \"$UVA\"
+# another, between uses: and with:
+        with: # the inputs
+          version: \"$UVV\""
+expect_uv ok "comments at column 0, double quotes, with: # comment"
+uvwf "      - with: { version: \"$UVV\" }
+        uses: $UVA"
+expect_uv ok "a with: on the step's dash line, before uses:"
+uvwf "      -
+        uses: $UVA
+        with: { version: \"$UVV\" }"
+expect_uv "\\.github/workflows/x\\.yml:5: can.t find the step" "a bare - line is refused, not guessed"
+uvwf "      - uses: $UVA
+        with:
+          version: \"\${{ env.UV }}\""
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step can.t read version: "\$\{\{' "an expression in a block with:"
+uvwf "      - uses: $UVA
+        with:
+          version: |"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step can.t read version: \|' "an empty block scalar (setup-uv's newest)"
+uvwf "      - uses: $UVA
+        with:
+          version: \"$UVV\"#x"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step can.t read version' "a # with no space before it is not a comment"
+uvwf "      - uses: $UVA
+        with:# c
+          version: \"$UVV\""
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step line 5: can.t read this with:' "with:# with no space"
+uvwf "      - uses: $UVA
+        with:
+          VERSION: \"0.0.1\"
+          version: \"$UVV\""
+expect_uv "\\.github/workflows/x\\.yml:4: the setup-uv step has two 'version' inputs" "input names are case-blind, as the runner reads them"
+uvwf "      - uses: $UVA
+        with: { version: \"$UVV\", manifest-file: m.json }"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step uses manifest-file' "a manifest-file (any download for a release)"
+uvwf "      - uses: $UVA
+        with: { version: \"$UVV\", enable-cache }"
+expect_uv '\.github/workflows/x\.yml:4: the setup-uv step line 5: can.t read this with:' "a flow entry with no value"
+uvwf "      - run: pip install uv==0.13.0"
+expect_uv '\.github/workflows/x\.yml:4: installs uv another way' "pip install uv"
+uvwf "      - run: pipx install uv"
+expect_uv '\.github/workflows/x\.yml:4: installs uv another way' "pipx install uv"
+uvwf "      - run: curl -LsSf https://astral.sh/uv/install.sh | sh"
+expect_uv '\.github/workflows/x\.yml:4: installs uv another way' "the astral.sh installer"
+uvwf "      - uses: docker://ghcr.io/astral-sh/uv:0.13.0"
+expect_uv '\.github/workflows/x\.yml:4: installs uv another way' "a docker:// uv step"
+uvwf "      - uses: $UVA
+        with: { version: \"$UVV\" }
+      - run: uv self update"
+expect_uv '\.github/workflows/x\.yml:6: installs uv another way' "uv self update after a pinned step"
+uvwf "      - run: uv sync --locked
+      - uses: $UVA
+        with: { version: \"$UVV\" }"
+expect_uv "\\.github/workflows/x\\.yml:4: job 'j' runs uv before any setup-uv step" "uv before the job's setup-uv (the runner's own uv)"
+uvpin; printf 'jobs:\n  j:\n    steps:\n      - uses: %s\n        with: { version: "%s" }\n      - run: uv sync\n  k:\n    steps:\n      - run: make x && uvx ruff\n' "$UVA" "$UVV" > "$TMP/r/.github/workflows/x.yml"
+expect_uv "\\.github/workflows/x\\.yml:9: job 'k' runs uv before any setup-uv step" "a second job with no setup-uv of its own"
+uvpin; printf 'jobs:\n  j:\n    steps:\n      - uses: %s\n' "$UVA" > "$TMP/r/.github/workflows/x.yaml"
+expect_uv '\.github/workflows/x\.yaml:4: the setup-uv step has no with: version' "a .yaml workflow"
+uvpin; mkdir -p "$TMP/r/.github/actions/u"; printf 'runs:\n  steps:\n    - uses: %s\n' "$UVA" > "$TMP/r/.github/actions/u/action.yaml"
+expect_uv '\.github/actions/u/action\.yaml:3: the setup-uv step has no with: version' "a composite action.yaml"
 uvpin; mkdir -p "$TMP/r/.github/actions/u"; printf 'runs:\n  steps:\n    - uses: %s\n' "$UVA" > "$TMP/r/.github/actions/u/action.yml"
 expect_uv '\.github/actions/u/action\.yml:3: the setup-uv step has no with: version' "a composite action's step"
 uvpin; rm -rf "$TMP/r/.github"

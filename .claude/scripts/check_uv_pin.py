@@ -4,11 +4,16 @@ work and the image run one reviewed uv, under the same 7-day hold (decision-048)
 
 The pin is the tag of `deploy/api.Dockerfile`'s one `FROM ghcr.io/astral-sh/uv:<X.Y.Z>@sha256:…` stage. Every
 step under `.github/` (workflows and composite actions) whose `uses:` names `astral-sh/setup-uv@` must have a
-`with:` whose `version:` is exactly that release. It fails closed: no uv stage, two of them, or a tag that isn't
-an exact `X.Y.Z`; no setup-uv step at all (so moving the workflows can't switch the check off); a step with no
-`version`, a `version-file`, or a `with:` or `version:` it can't read (anchors, aliases, multi-line or block
-scalars, an expression). Steps are read by indentation, as YAML block sequences are; flow mappings (`with: { … }`)
-are read on their own line only. Exits 1 listing every problem."""
+`with:` whose `version:` is exactly that release (input names read case-blind, as the runner reads them). It fails
+closed: no uv stage, two of them, or a tag that isn't an exact `X.Y.Z`; no setup-uv step at all (so moving the
+workflows can't switch the check off); a step with no `version`, a `version-file` or `manifest-file` (a manifest
+can point a release at any download), or a `with:` or `version:` it can't read (anchors, aliases, multi-line or
+block scalars, an expression, a `#` with no space before it); a step it can't place (a bare `-` line, a flow-style
+step). It also refuses uv from anywhere else: a `pip`/`pipx install … uv`, the astral.sh installer, a
+`docker://…astral-sh/uv` step or `uv self update` anywhere under `.github/`, and in a workflow job, a `uv` or `uvx`
+word outside a `name:` before the job's first setup-uv step (a runner image's own uv). A `uv` that a called script
+or `make` runs is not seen. Steps are read by indentation, as YAML block sequences are; flow mappings
+(`with: { … }`) are read on their own line only. Exits 1 listing every problem."""
 
 from __future__ import annotations
 
@@ -23,7 +28,13 @@ RELEASE = re.compile(r"^\d+\.\d+\.\d+$")
 # GitHub reads an action ref case-blind
 USES = re.compile(r"""^\s*(-\s+)?uses:\s*["']?astral-sh/setup-uv@""", re.IGNORECASE)
 MENTION = re.compile(r"astral-sh/setup-uv@", re.IGNORECASE)
-SCALAR = re.compile(r"""^(?:"([^"\\$]*)"|'([^'$]*)'|([^\s"'#&*!|>{}\[\],$][^\s#,{}\[\]$]*))\s*(?:#.*)?$""")
+# a YAML comment starts only at a `#` after whitespace, so `0.13.0#x` is one (unreadable) value
+SCALAR = re.compile(r"""^(?:"([^"\\$]*)"|'([^'$]*)'|([^\s"'#&*!|>{}\[\],$][^\s,{}\[\]$]*))(?:\s+#.*)?\s*$""")
+OTHER_UV = re.compile(
+    r"pipx?\s+install\b.*\buv\b|astral\.sh/uv|docker://\S*astral-sh/uv|\buv\s+self\s+update", re.IGNORECASE
+)
+NAME = re.compile(r"^\s*(-\s+)?name\s*:")  # a step or job label, not a command
+UV_WORD = re.compile(r"(?:^|[\s;&|(`'\"])uvx?(?:\s|$)")
 
 
 def pinned() -> tuple[str | None, list[str]]:
@@ -79,9 +90,12 @@ def version_of(step: list[tuple[int, str]], col: int) -> tuple[str | None, str |
     if len(keys) > 1:
         return None, "has two with: keys"
     n, line = keys[0]
-    rest = line.split(":", 1)[1].strip()
+    after = line.split(":", 1)[1]
+    if after and not after[0].isspace():
+        return None, f"line {n}: can't read this with:"
+    rest = after.strip()
     if rest.startswith("{"):
-        if not re.fullmatch(r"\{[^{}\[\]&*!|>]*\}\s*(#.*)?", rest):
+        if not re.fullmatch(r"\{[^{}\[\]&*!|>]*\}(?:\s+#.*)?\s*", rest):
             return None, f"line {n}: can't read this with:"
         body = rest[1 : rest.index("}")]
         entries = [e.strip() for e in body.split(",") if e.strip()]
@@ -91,9 +105,8 @@ def version_of(step: list[tuple[int, str]], col: int) -> tuple[str | None, str |
     elif rest and not rest.startswith("#"):
         return None, f"line {n}: can't read this with:"
     else:
-        after = [(m, ln) for m, ln in step if m > n]
         block: list[tuple[int, str]] = []
-        for m, ln in after:
+        for m, ln in [(m, ln) for m, ln in step if m > n]:
             if ignorable(ln):
                 continue
             if indent(ln) <= col:
@@ -109,16 +122,43 @@ def version_of(step: list[tuple[int, str]], col: int) -> tuple[str | None, str |
             pairs.append(tuple(p.strip() for p in ln.split(":", 1)))
     found: dict[str, str] = {}
     for key, value in pairs:
+        key = key.lower()
         if key in found:
             return None, f"has two '{key}' inputs"
         found[key] = value
-    if "version-file" in found:
-        return None, "uses version-file, not version"
+    for other in ("version-file", "manifest-file"):
+        if other in found:
+            return None, f"uses {other}"
     if "version" not in found:
         return None, "has no with: version"
     if not (m := SCALAR.match(found["version"])):
         return None, f"can't read version: {found['version']}"
     return next(g for g in m.groups() if g is not None), None
+
+
+def uv_before_setup(lines: list[str]) -> list[tuple[str, int]]:
+    """Each job (and the line) that names `uv` or `uvx` before its first setup-uv step: a runner's own uv."""
+    try:
+        top = next(i for i, ln in enumerate(lines) if re.match(r"^jobs\s*:\s*(#.*)?$", ln))
+    except StopIteration:
+        return []
+    body = [i for i in range(top + 1, len(lines)) if not ignorable(lines[i])]
+    end = next((i for i in body if indent(lines[i]) == 0), len(lines))
+    body = [i for i in body if i < end]
+    if not body:
+        return []
+    col = indent(lines[body[0]])
+    starts = [i for i in body if indent(lines[i]) == col]
+    out: list[tuple[str, int]] = []
+    for k, start in enumerate(starts):
+        stop = starts[k + 1] if k + 1 < len(starts) else end
+        for i in range(start + 1, stop):
+            if USES.match(lines[i]):
+                break
+            if not ignorable(lines[i]) and not NAME.match(lines[i]) and UV_WORD.search(lines[i]):
+                out.append((lines[start].strip().rstrip(":"), i + 1))
+                break
+    return out
 
 
 def files() -> list[Path]:
@@ -134,6 +174,8 @@ for path in files():
     name = path.relative_to(ROOT).as_posix()
     lines = path.read_text(encoding="utf-8-sig").splitlines()
     for i, line in enumerate(lines):
+        if not ignorable(line) and OTHER_UV.search(line):
+            bad.append(f"{name}:{i + 1}: installs uv another way than a pinned setup-uv step")
         if not MENTION.search(line):
             continue
         if not USES.match(line):  # a flow-style step, a comment: nothing this check can read as a pinned step
@@ -148,6 +190,10 @@ for path in files():
             bad.append(f"{name}:{i + 1}: the setup-uv step {why}")
         elif want is not None and got != want:
             bad.append(f"{name}:{i + 1}: setup-uv installs uv {got}, {DOCKERFILE} pins {want}")
+    if path.parent.name == "workflows":
+        bad += [
+            f"{name}:{n}: job '{job}' runs uv before any setup-uv step" for job, n in uv_before_setup(lines)
+        ]
 if steps == 0:
     bad.append("no astral-sh/setup-uv step under .github/")
 for msg in bad:

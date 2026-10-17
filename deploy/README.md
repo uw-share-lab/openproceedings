@@ -367,8 +367,9 @@ uploads held at once reached its edge (peaks of 890 to 998 MiB) and 32 did not f
 address or many, and Caddy as built here limits
 neither connections nor uploads per client. That bound is not built here yet. The owner decided on 2026-10-17
 (TASK-256) where it goes: a per-source connection limit in front of Caddy at the host, for example nftables
-`connlimit` on 443, set once TASK-064 chooses the host. There will be no custom Caddy build. Until it is set, size
-`OP_CADDY_MEM_LIMIT` as above and expect a restart past it.
+`connlimit` on 443, set once TASK-064 chooses the host. There will be no custom Caddy build. That caps what one
+address can hold; many addresses together can still reach the memory limit, which then restarts the proxy as now.
+Until it is set, size `OP_CADDY_MEM_LIMIT` as above and expect a restart past it.
 
 A stalled upload was cut by the proxy when `read_body` ran out (60 s after its request started, sending
 included) and never reached the API: with uploads stalled in the proxy, a whole 16 MiB comparison ran at once

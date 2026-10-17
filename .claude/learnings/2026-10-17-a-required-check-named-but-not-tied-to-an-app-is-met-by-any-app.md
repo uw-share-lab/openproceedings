@@ -5,6 +5,12 @@
 - **Date:** 2026-10-17 · **Task:** task-251, task-252, task-256 · **Area:** tooling | ops
 - **Artifacts:** `backlog/decisions/decision-027 - …` (2026-10-17 addendum), `.claude/scripts/check_uv_pin.py`, `.claude/scripts/tests/test-tooling-scripts.sh` (check_uv_pin rows), `.claude/scripts/mutants/gates.json` (`uvpin:` mutants), `docs/specs/08-ops-and-tooling.md` (§Branch protection, §CI "Dependabot", §Deploy)
 
+## Supersedes
+- `2026-10-13-a-check-written-for-the-cloud-must-be-one-the-cloud-can-answer.md` said `dev`'s required checks were
+  `app_id: null` and pinning them was the owner's call: since 2026-10-17 they are pinned (TASK-251).
+- `2026-10-07-a-routine-runs-only-what-is-scripted-and-a-fake-must-fail-like-the-real-tool.md` said CI's `setup-uv` runs the newest uv: since 2026-10-17
+  every step names the api image's uv (TASK-252).
+
 ## What we set out to do
 Carry out three owner decisions in one PR: tie `dev`'s six required checks to GitHub Actions (TASK-251), pin CI's uv
 to the api image's (TASK-252), and record where the per-client proxy cap will live (TASK-256).
@@ -20,6 +26,11 @@ to the api image's (TASK-252), and record where the per-client proxy cap will li
 - `PATCH …/required_status_checks` with a `checks` array (and `strict`) changes only that object; the rest of the
   protection compared equal field by field before and after. The queue rollback's `-F strict=true` alone keeps the
   pins.
+- A rollback to "any app" must send `app_id: -1`, not `null`. GitHub's REST docs for `checks[].app_id`: "Omit this
+  field to automatically select the GitHub App that has recently provided this check … Pass -1 to explicitly allow
+  any app". A `null` read back from the API means "any app", but sending it may count as omitting it, which would
+  pin GitHub Actions again, the very state the rollback undoes (found by the security review; the docs read
+  2026-10-17).
 - The pin doesn't cover workflows themselves: a workflow's `GITHUB_TOKEN` writes check runs as GitHub Actions, so a
   changed workflow is still bounded by review.
 - `setup-uv` with no `version` installs uv's newest release with no 7-day hold. On 2026-10-16 CI ran uv 0.13.1 (two

@@ -416,3 +416,11 @@ What follows from it:
 - What would change this: a cloud write path that leaves the text as sent, confirmed by a read-back from a cloud run
   (then comments, and perhaps attestation and queueing, could return to the cloud, with TASK-243 AC2's paths exercised
   first).
+
+## Addendum (2026-10-17, TASK-251: the check half is closed on `dev`)
+
+The owner pinned `dev`'s six required checks to GitHub Actions (app_id 15368) on 2026-10-17; decision-027's
+addendum of that date has the evidence, the commands and the rollback. A check run the Claude GitHub App writes
+under a required name no longer counts on `dev`. What stays open: the attestation marker in a PR body, `main`'s
+checks (still `app_id: null`), and a workflow pushed to a branch, whose check runs come from GitHub Actions; the
+last two are bounded by review, as before.

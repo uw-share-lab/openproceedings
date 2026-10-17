@@ -279,7 +279,7 @@ covers the settings, promoting and retiring an index, takedowns, and what remain
 ```bash
 make test      # backend (pytest, in parallel) and frontend (Vitest)
 make lint      # exactly what CI's lint job runs (ruff, mypy --strict, shellcheck, prettier, eslint, tsc)
-make tooling   # the .claude/ roster, backlog, digest-pin, file-mode and npm manifest/lock checks, and every case table
+make tooling   # the .claude/ roster, backlog, digest-pin, file-mode, CI uv pin and npm manifest/lock checks, and every case table
 make e2e       # full-stack browser, accessibility and visual tests (Playwright)
 make help      # every entry point (openapi, changelog, mutate, …)
 ```

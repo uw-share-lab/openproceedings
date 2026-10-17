@@ -198,14 +198,24 @@ gh api repos/uw-share-lab/openproceedings/branches/dev/protection/required_statu
   --jq '.checks[] | "\(.context) \(.app_id)"'
 ```
 
-Rollback (restores `app_id: null`, any app's check run counts again). Run it at once if the queue stalls on a
-required check that never arrives, or a workflow moves to another app:
+Rollback (any app's check run counts again). Run it at once if the queue stalls on a required check that never
+arrives, or a workflow moves to another app. GitHub's REST docs say an omitted `app_id` makes GitHub pick the app
+that recently set the check, which would pin GitHub Actions again, and `-1` allows any app, so the rollback sends
+`-1`, not `null`:
 
 ```sh
 jq -n '{strict: false, checks: (["lint","test","claude-tooling","attribution","learnings","review-attested"]
-  | map({context: ., app_id: null}))}' |
+  | map({context: ., app_id: -1}))}' |
   gh api -X PATCH repos/uw-share-lab/openproceedings/branches/dev/protection/required_status_checks --input -
+# verify: no line may read 15368 (GitHub has shown "any app" as null; the pre-change state read null)
+gh api repos/uw-share-lab/openproceedings/branches/dev/protection/required_status_checks \
+  --jq '.checks[] | "\(.context) \(.app_id)"'
 ```
+
+If a line still reads 15368, fall back to the legacy form, which is how the checks were first required:
+`jq -n '{strict: false, contexts: [...the six...]}' | gh api -X PATCH …/required_status_checks --input -`. This
+rollback has not been run; the pre-change JSON was saved before the apply. `main`'s required checks were not
+changed (still `app_id: null`); pinning them is outside this decision.
 
 The queue rollback above still holds: `-F strict=true` alone leaves the `checks` list, pins included, as it is.
 What the pin closes is a check run from another app; a workflow's own `GITHUB_TOKEN` writes check runs as GitHub

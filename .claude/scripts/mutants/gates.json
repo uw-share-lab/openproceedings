@@ -6729,8 +6729,8 @@
  {
   "label": "uvpin: version-file allowed",
   "file": ".claude/scripts/check_uv_pin.py",
-  "old": "    if \"version-file\" in found:",
-  "new": "    if False:"
+  "old": "    for other in (\"version-file\", \"manifest-file\"):",
+  "new": "    for other in (\"manifest-file\",):"
  },
  {
   "label": "uvpin: duplicate inputs allowed",
@@ -6813,14 +6813,14 @@
  {
   "label": "uvpin: an expression or alias read as a version",
   "file": ".claude/scripts/check_uv_pin.py",
-  "old": "SCALAR = re.compile(r\"\"\"^(?:\"([^\"\\\\$]*)\"|'([^'$]*)'|([^\\s\"'#&*!|>{}\\[\\],$][^\\s#,{}\\[\\]$]*))\\s*(?:#.*)?$\"\"\")",
-  "new": "SCALAR = re.compile(r\"\"\"^(?:\"([^\"]*)\"|'([^']*)'|(\\S+))\\s*(?:#.*)?$\"\"\")"
+  "old": "SCALAR = re.compile(r\"\"\"^(?:\"([^\"\\\\$]*)\"|'([^'$]*)'|([^\\s\"'#&*!|>{}\\[\\],$][^\\s,{}\\[\\]$]*))(?:\\s+#.*)?\\s*$\"\"\")",
+  "new": "SCALAR = re.compile(r\"\"\"^(?:\"([^\"]*)\"|'([^']*)'|(\\S+))(?:\\s+#.*)?\\s*$\"\"\")"
  },
  {
   "label": "uvpin: anchors and aliases read in a flow with:",
   "file": ".claude/scripts/check_uv_pin.py",
-  "old": "        if not re.fullmatch(r\"\\{[^{}\\[\\]&*!|>]*\\}\\s*(#.*)?\", rest):",
-  "new": "        if not re.fullmatch(r\"\\{[^{}]*\\}\\s*(#.*)?\", rest):"
+  "old": "        if not re.fullmatch(r\"\\{[^{}\\[\\]&*!|>]*\\}(?:\\s+#.*)?\\s*\", rest):",
+  "new": "        if not re.fullmatch(r\"\\{[^{}]*\\}(?:\\s+#.*)?\\s*\", rest):"
  },
  {
   "label": "uvpin: a nested entry read as an input",
@@ -6839,5 +6839,101 @@
   "file": ".claude/scripts/check_uv_pin.py",
   "old": "    if not path.is_file():\n        return None, [f\"{DOCKERFILE} is missing\"]",
   "new": "    if not path.is_file():\n        return None, []"
+ },
+ {
+  "label": "uvpin: manifest-file allowed",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "    for other in (\"version-file\", \"manifest-file\"):",
+  "new": "    for other in (\"version-file\",):"
+ },
+ {
+  "label": "uvpin: a # with no space starts a comment",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "SCALAR = re.compile(r\"\"\"^(?:\"([^\"\\\\$]*)\"|'([^'$]*)'|([^\\s\"'#&*!|>{}\\[\\],$][^\\s,{}\\[\\]$]*))(?:\\s+#.*)?\\s*$\"\"\")",
+  "new": "SCALAR = re.compile(r\"\"\"^(?:\"([^\"\\\\$]*)\"|'([^'$]*)'|([^\\s\"'#&*!|>{}\\[\\],$][^\\s#,{}\\[\\]$]*))\\s*(?:#.*)?$\"\"\")"
+ },
+ {
+  "label": "uvpin: input names read case-sensitively",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "        key = key.lower()\n",
+  "new": ""
+ },
+ {
+  "label": "uvpin: with:#x read as with:",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "    if after and not after[0].isspace():",
+  "new": "    if False:"
+ },
+ {
+  "label": "uvpin: other uv installers allowed",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "        if not ignorable(line) and OTHER_UV.search(line):",
+  "new": "        if False:"
+ },
+ {
+  "label": "uvpin: pipx install not caught",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "r\"pipx?\\s+install",
+  "new": "r\"pip\\s+install"
+ },
+ {
+  "label": "uvpin: uv before setup-uv not checked",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "        bad += [\n",
+  "new": "        bad + [\n"
+ },
+ {
+  "label": "uvpin: a name: line counts as running uv",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "and not NAME.match(lines[i]) and",
+  "new": "and"
+ },
+ {
+  "label": "uvpin: uv after setup-uv flagged",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "            if USES.match(lines[i]):\n                break",
+  "new": "            if USES.match(lines[i]):\n                pass"
+ },
+ {
+  "label": "uvpin: only the first job checked",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "    for k, start in enumerate(starts):",
+  "new": "    for k, start in enumerate(starts[:1]):"
+ },
+ {
+  "label": "uvpin: .yaml workflows not read",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "    workflows = [p for p in (gh / \"workflows\").glob(\"*\") if p.suffix in (\".yml\", \".yaml\")]",
+  "new": "    workflows = [p for p in (gh / \"workflows\").glob(\"*\") if p.suffix in (\".yml\",)]"
+ },
+ {
+  "label": "uvpin: action.yaml not read",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "    actions = [p for p in gh.rglob(\"*\") if p.name in (\"action.yml\", \"action.yaml\")]",
+  "new": "    actions = [p for p in gh.rglob(\"*\") if p.name in (\"action.yml\",)]"
+ },
+ {
+  "label": "uvpin: a comment line ends the backward search",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "if not ignorable(lines[j]) and indent(lines[j]) < col",
+  "new": "if indent(lines[j]) < col"
+ },
+ {
+  "label": "uvpin: a comment line ends the step",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "    while end < len(lines) and (ignorable(lines[end]) or indent(lines[end]) > dash):",
+  "new": "    while end < len(lines) and (not lines[end].strip() or indent(lines[end]) > dash):"
+ },
+ {
+  "label": "uvpin: an inline with: value read as a block",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "    elif rest and not rest.startswith(\"#\"):",
+  "new": "    elif False:"
+ },
+ {
+  "label": "uvpin: a flow entry with no value ignored",
+  "file": ".claude/scripts/check_uv_pin.py",
+  "old": "        if len(pairs) != len(entries):",
+  "new": "        if False:"
  }
 ]
