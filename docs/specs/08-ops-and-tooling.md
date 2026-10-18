@@ -1110,13 +1110,12 @@ Never hand-roll a serial loop.
 ### Branch protection (GitHub)
 
 `dev` and `main` require a PR, with these checks green: `lint`, `test`, `claude-tooling`, `attribution`,
-`learnings`, `review-attested`. On `dev` each must come from GitHub Actions (app_id 15368, applied 2026-10-17,
-TASK-251): a check run of the same name from another app, such as the Claude GitHub App the routine runs under
-(decision-048), doesn't count. They are required in the classic branch protection only (the `dev: merge queue`
-ruleset has no status-check rule); the commands, the evidence and the rollback (`app_id: -1`, any app) are in
-decision-027's 2026-10-17 addendum. `main`'s six required checks are not pinned (`app_id: null`): the decision
-covered `dev` only, so a same-named check run from another app still counts on a PR into `main` (an owner
-decision, TASK-258). No force-push, no deletion, admins included, and conversations must be
+`learnings`, `review-attested`. On both branches each must come from GitHub Actions (app_id 15368, applied
+2026-10-17: `dev` by TASK-251, `main` by TASK-258): a check run of the same name from another app, such as the Claude
+GitHub App the routine runs under (decision-048), doesn't count. They are required in the classic branch protection
+only (the `dev: merge queue` ruleset has no status-check rule, and `main` has no rulesets); the commands, the
+evidence and the rollback (`app_id: -1`, any app, with the branch in the API path) are in decision-027's 2026-10-17
+addendum. No force-push, no deletion, admins included, and conversations must be
 resolved. `main` required the branch up to date with it until 2026-10-06, when the owner turned that off
 (decision-046), so a release needs no back-merge (§Release step 7). The owner changed only `main`'s required
 approving-review count from 1 to 0 on 2026-10-03 for the solo-maintainer workflow; optional reviews remain
