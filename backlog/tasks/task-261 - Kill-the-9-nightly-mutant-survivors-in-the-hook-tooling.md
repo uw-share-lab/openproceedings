@@ -4,7 +4,7 @@ title: Kill the 9 nightly mutant survivors in the hook tooling
 status: In Progress
 assignee: []
 created_date: '2026-10-18 14:16'
-updated_date: '2026-10-18 15:10'
+updated_date: '2026-10-18 15:44'
 labels:
   - tooling
   - mutation
@@ -23,7 +23,7 @@ Found by the v0.4.0 release (2026-10-18, spec 08 §Release step 1): the schedule
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 Each of the 9 mutants is killed by a case-table row that fails on the message it asserts, or recorded as equivalent with the reason in the mutant file
-- [ ] #2 mutate.py on each affected shard (at --jobs 2) reports no survivors locally
+- [x] #2 mutate.py on each affected shard (at --jobs 2) reports no survivors locally
 - [ ] #3 A nightly dispatched on the merged head is green
 <!-- AC:END -->
 
@@ -43,5 +43,21 @@ Found by the v0.4.0 release (2026-10-18, spec 08 §Release step 1): the schedule
 - glob: a glob matching a trailer file is refused unexpanded too; a new row globs a clean file (allow);
 - TASK-243 two walks: a new row writes the sent file only in the HOME '' walk;
 - pdd find: killed on macOS, but on Linux the mktemp root is under /tmp, so 'find /tmp .' blocked on its first start; the row is now 'find src .'.
-Each mutant fails exactly its new row (scratch single-table runs). The caffeinate rows stay, for the known-wrapper path. make lint and make tooling are green.
+Each mutant fails exactly its new row (scratch single-table runs). The caffeinate rows stay as regression rows: they cannot tell the walk unwrapping from the git_calls fallback, and the TASK-248 rows kill the known-wrapper mutants. make lint and make tooling are green.
+
+2026-10-18: mutate.py --jobs 2, one --match at a time, 0 problems for each:
+- 'PR gate: git': 4 mutants;
+- 'PR gate: aliases': 1;
+- 'pdd: find checks only': 1;
+- 'two walks': 1;
+- 'pass skipped': 2, including require-review's;
+- 'glob in a file word': 1;
+- 'inherited HOOK_INPUT': 1.
+AC #1's 'the message it asserts' is the row's asserted verdict (exit 2 or 0). The case tables don't capture stderr, and each new row's other inputs are made harmless, so only the check under test decides the verdict. The AC wasn't reworded, because the CLI would renumber AC #3.
+Review round 1 (code, docs, security, QA): no Must. Fixed:
+- git_calls' docstring example;
+- positive controls for the data-only find row and the two-walks row;
+- a sibling absolute find start;
+- xargs mv -t /tmp → frontend (on Linux /tmp is above the table's repo);
+- relabels.
 <!-- SECTION:NOTES:END -->

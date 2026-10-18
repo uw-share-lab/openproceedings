@@ -28,7 +28,8 @@ only, with nine survivors in the hook gates.
 - **A fixture can differ by OS.** `pdd: find checks only its first start` was killed on macOS and survived on CI.
   The row was `find /tmp . -delete` in a `mktemp -d` root, which is under `/var/folders` on macOS but under `/tmp`
   on Linux. On Linux the first start already covered the root. `find src .` uses a start inside the root on both
-  systems.
+  systems. The same held for `ls | xargs mv -t /tmp`, now `mv -t frontend`, which was blocked on Linux by the
+  immutable-ancestor check rather than the xargs check it was written for.
 - **Two walks need a probe whose walks really differ.** `TASK-243: the two walks compared as one` needs a write
   that only the HOME '' walk makes. `cd ~; printf … > op-243w.md; gh … --body-file "$REPO/op-243w.md"` writes the
   file only where `cd ~` stays put. The first walk must still refuse the missing file; the mutant borrows the
