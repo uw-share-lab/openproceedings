@@ -19,8 +19,8 @@ label). A mutant whose `old` text is missing from any of its files is STALE and 
 list never rots. One whose `old` text occurs more than once in a file is AMBIGUOUS (only the first would change,
 an accident of order that hid what the mutant meant: TASK-254), and one whose edit stops a file compiling that
 compiled is UNCOMPILABLE (any table that runs the file would "kill" it); both fail the run without running a
-table. `compiles` reads a .py file, a .json file, and a shell script (`bash -n`) with each `<<'PY'` heredoc
-in it compiled as Python; other files always compile. `--check` vets every selected mutant this way and runs no
+table. `breaks_compile` reads a .py file, a .json file, and a shell script (`bash -n`) with each `<<'PY'`
+heredoc in it compiled as Python; other files always compile. `--check` vets every selected mutant this way and runs no
 table, in seconds (`make tooling`).
 
 A mutant is killed when any case table fails; the first failure decides it. So each mutant runs, first, the
@@ -213,7 +213,7 @@ def _python_compiles(text: str, name: str) -> bool:
 
 
 def _parts(file: str, text: str) -> list[tuple[str, str]] | None:
-    """What `compiles` checks in `file`, as (kind, text) pairs, or None: nothing (a file it can't check)."""
+    """What `breaks_compile` checks in `file`, as (kind, text) pairs, or None: nothing (a file it can't check)."""
     if file.endswith(".py"):
         return [("python", text)]
     if file.endswith(".json"):
@@ -251,7 +251,7 @@ def breaks_compile(file: str, before: str, after: str) -> bool:
         return all(_compiled_before(*o, file) for o in old) and not all(_part_compiles(*n, file) for n in new)
     return any(
         _compiled_before(*o, file) and not _part_compiles(*n, file)
-        for o, n in zip(old, new, strict=True)
+        for o, n in zip(old, new, strict=False)
         if o != n
     )
 

@@ -2230,6 +2230,7 @@ check $R block "flock -n <lock> --command 'git push'"           "$(payload_bash 
 check $R block "unbuffer -p git push"                           "$(payload_bash 'unbuffer -p git push origin other2')"
 check $R block "doas -a passwd git push (-a takes a style)"     "$(payload_bash 'doas -a passwd git push origin other2')"
 check $R allow "flock <lock> -c 'git status'"                   "$(payload_bash "flock /tmp/op.lock -c 'git status'")"
+check $R allow "flock <lock> --command 'git status'"            "$(payload_bash "flock /tmp/op.lock --command 'git status'")"
 # flock creates its lock file: a write, as a `>>` redirect is (review round 1: it hid an op-reviews/ path)
 check $R block "flock .git/op-reviews/<sha> true (creates a record)" "$(payload_bash 'flock .git/op-reviews/0123abc true')"
 check $R block "flock -w 5 .git/op-reviews/<sha> -c true"       "$(payload_bash "flock -w 5 .git/op-reviews/0123abc -c 'true'")"
@@ -2278,6 +2279,13 @@ check $R block "flock <lock> -n git push (an option after the lock file)" "$(pay
 check $R block "sudo -Q root git push (an option sudo doesn't have)" "$(payload_bash 'sudo -Q root git push origin other2')"
 check $R allow "flock --wai 5 <lock> git status"                "$(payload_bash 'flock --wai 5 /tmp/op.lock git status')"
 check $R allow "sudo -nu root git status"                       "$(payload_bash 'sudo -nu root git status')"
+# an optional value is only ever attached: `sudo -h` and `--preserve-env` alone take no word
+check $R block "sudo -h git push (-h's host only attached)"     "$(payload_bash 'sudo -h git push origin other2')"
+check $R block "sudo --preserve-env git push"                   "$(payload_bash 'sudo --preserve-env git push origin other2')"
+check $R allow "sudo --preserve-env git status"                 "$(payload_bash 'sudo --preserve-env git status')"
+check $A block "env -a x git commit -F msg (-a takes argv0)"    "$(payload_bash "env -a x git commit -F '$TMP/msg.txt'")"
+check $A allow "nice --5 git commit -F clean notes (nice's --N)" "$(payload_bash "nice --5 git commit -F '$TMP/notes.md'")"
+check $A allow "nice -+5 git commit -F clean notes (nice's -+N)" "$(payload_bash "nice -+5 git commit -F '$TMP/notes.md'")"
 check $P block "data-only: sudo -nu root rm -rf data/snapshots" "$(payload_do 'sudo -nu root rm -rf data/snapshots')"
 check $P block "data-only: flock -nw 5 <lock> rm -rf data/snapshots" "$(payload_do 'flock -nw 5 /tmp/op.lock rm -rf data/snapshots')"
 check $P block "data-only: env - rm -rf data/snapshots (env - is env -i)" "$(payload_do 'env - rm -rf data/snapshots')"
@@ -2289,11 +2297,13 @@ check $P block "data-only: env -C /tmp true; rm -rf data/snapshots" "$(payload_d
 check $P block "data-only: sudo -D /tmp true; rm -rf data/snapshots" "$(payload_do 'sudo -D /tmp true; rm -rf data/snapshots')"
 check $P block "data-only: eval 'env -C /tmp true'; rm -rf data/snapshots" "$(payload_do "eval 'env -C /tmp true'; rm -rf data/snapshots")"
 check $P allow "data-only: env -C /tmp rm -rf data/snapshots (in /tmp)" "$(payload_do 'env -C /tmp rm -rf data/snapshots')"
+check $P block "data-only: env -C src/.. rm -rf data/snapshots (resolved from here)" "$(payload_do 'env -C src/.. rm -rf data/snapshots')"
 check $P block "data-only: env -C /tmp true > data/snapshots/s1/f (the shell opens it)" "$(payload_do 'env -C /tmp true > data/snapshots/s1/f')"
 check $P allow "data-only: env -C /tmp true > /tmp/op-253.out"  "$(payload_do 'env -C /tmp true > /tmp/op-253.out')"
-mkdir -p "$TMP/plain253"   # no repo, no data/ or backlog/: only a ParseError refuses here
-check $P block "outside a repo: env -C /tmp true > \$UNSET (can't anchor it)" "$(payload_at "$TMP/plain253" 'env -C /tmp true > "$OP_UNSET_253"')"
-check $P allow "outside a repo: true > \$UNSET (no env -C: nothing to anchor)" "$(payload_at "$TMP/plain253" 'true > "$OP_UNSET_253"')"
+check $P block "data-only: env -C /tmp true > \$PWD/data/snapshots/s1/f (the shell's PWD)" "$(payload_do 'env -C /tmp true > "$PWD"/data/snapshots/s1/f')"
+check $P allow "data-only: env -C /tmp true 2>&1 <<< \$HOME (no file to anchor)" "$(payload_do 'env -C /tmp true 2>&1 <<< "$HOME"')"
+mkdir -p "$TMP/plain253"   # no repo, no data/ or backlog/
+check $P allow "outside a repo: env -C /tmp true > ~/op-253.log (HOME doesn't move)" "$(payload_at "$TMP/plain253" 'env -C /tmp true > ~/op-253.log')"
 # sh -c and eval keep their own redirects
 check $P block "sh -c 'echo x' >> backlog/tasks/x"              "$(payload_bl "sh -c 'echo x' >> backlog/tasks/x")"
 check $P block "eval echo x >> backlog/tasks/x"                 "$(payload_bl 'eval echo x >> backlog/tasks/x')"
@@ -2310,6 +2320,9 @@ check $P block "data-only: mv -t /tmp data/snapshots"           "$(payload_do 'm
 check $P block "data-only: mv --target-directory=/tmp src/x.md data/indexes" "$(payload_do 'mv --target-directory=/tmp src/x.md data/indexes')"
 check $P block "data-only: mv -t data/snapshots/s1 src/x.md"    "$(payload_do 'mv -t data/snapshots/s1 src/x.md')"
 check $P block "data-only: mv -t\$UNSET src/x.md (attached, unresolved)" "$(payload_do 'mv -t"$OP_UNSET_253" src/x.md')"
+check $P allow "data-only: mv src/x.md src/x.md~ (a ~ in a plain name)" "$(payload_do 'mv src/x.md src/x.md~')"
+check $P block "data-only: mv -St <repo> ../moved (the t is -S's suffix)" "$(payload_do "mv -St '../data only' ../moved")"
+check $P block "data-only: mv -t /tmp -- -t <repo> (after --, operands)" "$(payload_do "mv -t /tmp -- -t '../data only'")"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")

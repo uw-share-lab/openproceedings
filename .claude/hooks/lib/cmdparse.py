@@ -79,7 +79,8 @@ SEP_CHARS = set(";&|()\n")
 PUNCT = ";&|()\n<>"
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 # Wrappers that run the rest of the line as a command, with the options of EACH that consume the next word
-# (review round 2: one shared set made `sudo -n git push` skip `git`). A wrapper not listed takes none.
+# (review round 2: one shared set made `sudo -n git push` skip `git`). A wrapper not listed takes none (the getopt
+# wrappers are in GETOPT_WRAPPERS, below).
 WRAPPER_VALUE_OPTS: dict[str, set[str]] = {
     "command": set(),
     "builtin": set(),
@@ -115,8 +116,8 @@ WRAPPER_VALUE_OPTS: dict[str, set[str]] = {
 # nowhere to come from is a ParseError (`_getopt`): this parser can't tell which word is the command.
 GETOPT_WRAPPERS: dict[str, tuple[str, str]] = {
     "env": (
-        "i0vu:C:S:P:L:U:",
-        "ignore-environment/i null/0 unset=/u chdir=/C split-string=/S block-signal[=] default-signal[=]"
+        "i0va:u:C:S:P:L:U:",
+        "ignore-environment/i null/0 argv0=/a unset=/u chdir=/C split-string=/S block-signal[=] default-signal[=]"
         " ignore-signal[=] list-signal-handling debug/v help version",
     ),
     "sudo": (
@@ -1413,7 +1414,8 @@ def _getopt(name: str, argv: list[str], i: int) -> tuple[list[tuple[str, str | N
             break
         if word == "-":  # `env -` is `env -i`
             found.append(("-i", None, i))
-        elif name == "nice" and re.fullmatch(r"-\d+", word):  # `nice -5`: the old form of `-n 5`
+        # `nice -5`, `nice --5`, `nice -+5`: the old form of `-n`
+        elif name == "nice" and re.fullmatch(r"-[-+]?\d+", word):
             found.append(("-n", word[1:], i))
         elif word.startswith("--"):
             given, eq, attached = word[2:].partition("=")
@@ -2088,15 +2090,19 @@ def _subshell(body: str, state: dict) -> Iterator[tuple[Argv, str, list[tuple[st
         state.update(saved)
 
 
+PWD_LEAD = re.compile(r"(\$PWD|\$\{PWD\}|~\+)(?=/|$)")
+
+
 def _anchor(op: str, target: str, directory: str) -> str:
     """A redirect's target as a path from `directory`, where the shell opens it: `env -C /tmp true > f` writes ./f,
-    not /tmp/f (TASK-253). One this parser can't anchor (`$X`, `~`, a substitution) raises ParseError."""
+    not /tmp/f (TASK-253). A leading `$PWD` or `~+` is the shell's directory too; another leading `$`/`~` word
+    doesn't depend on the directory, and is left for the gate to resolve."""
     if op.startswith("<<") or (op.endswith("&") and (target.isdigit() or target == "-")):
         return target  # a heredoc, a herestring or a descriptor: no file
-    if not target or os.path.isabs(target):
+    if PWD_LEAD.match(target):
+        return PWD_LEAD.sub(lambda _: directory, target, count=1)
+    if not target or os.path.isabs(target) or target[0] in "$~":
         return target
-    if re.search(r"[$`~]", target):
-        raise ParseError(f"can't tell where the redirect to {target} is under env -C / sudo -D")
     return os.path.join(directory, target)
 
 

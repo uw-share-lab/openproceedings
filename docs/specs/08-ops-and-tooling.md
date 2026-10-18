@@ -1017,7 +1017,7 @@ them:
   lock file than `-c`/`--command` is a ParseError, since the command can't be told (TASK-253). `env -S '<words>'`
   is read as more of env's own words, options included. `env -C dir` and `sudo -D dir` move only the command they
   run (`Argv.chdir`), never a later one, and that command's redirects are still opened where the shell is
-  (`env -C /tmp true > f` writes `./f`; a redirect target there with `$`, `~` or a backquote is a ParseError); a
+  (`env -C /tmp true > f` writes `./f`, and `> "$PWD"/f` too; another target led by `$` or `~` is left as it is); a
   directory they name with `$`, `~` or a backquote leaves the directory where it was, marked unknown, as an
   unresolvable `cd` does. The assignments are kept, and a command run by `xargs` is marked, because the words xargs appends
   are invisible (`xargs_hides_args` flags `rm`, `mv` and `git push`/`add`/`commit`/`rm`/`mv` run that way;

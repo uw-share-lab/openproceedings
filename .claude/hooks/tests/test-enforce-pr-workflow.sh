@@ -259,6 +259,7 @@ check main  block "flock -n /tmp/op.lock -c 'git commit -m x'"        # -c runs 
 check feature/x block "flock /tmp/op.lock --command 'git status; git push origin HEAD:dev'"
 check main  block 'unbuffer -p git commit -m x'
 check main  allow "flock /tmp/op.lock -c 'git status'"                # positive control: a read in the shell
+check main  allow "flock /tmp/op.lock --command 'git status'"         # --command is -c
 check main  allow 'xcrun -sdk macosx git log -1'                      # positive control
 
 echo "git -c config overrides and aliases are expanded before classifying (TASK-067):"

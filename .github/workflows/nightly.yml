@@ -202,7 +202,7 @@ jobs:
   # that name a mutant's file first and stops at the first failure (about a third of the CPU time on those
   # logs; the verdicts are the same), and stops a table past 10x its baseline (TIMEOUT, killed, only if it
   # hangs again alone), so 12 shards have room again.
-  # A surviving or stale mutant fails its shard, and so does a shard cut off at 140 min (its
+  # A surviving or unrunnable mutant fails its shard, and so does a shard cut off at 140 min (its
   # unchecked mutants would go unchecked). Shard 1's first step vets every mutant (`mutate.py --check`: stale,
   # ambiguous or uncompilable), in seconds; such a mutant also fails its own shard.
   mutate:
@@ -226,7 +226,7 @@ jobs:
         if: matrix.shard == 1
         run: python3 .claude/scripts/mutate.py --check
       - name: mutate.py --shard (every mutant in this shard killed, or documented as equivalent; 140 min limit)
-        if: ${{ !cancelled() }}  # a stale mutant above doesn't hide tonight's survivors
+        if: ${{ !cancelled() }}  # an unrunnable mutant above doesn't hide tonight's survivors
         shell: bash  # -eo pipefail, so the pipe through tee keeps mutate.py's status (the default bash -e has no pipefail)
         run: |
           git config --global user.email ci@example.invalid

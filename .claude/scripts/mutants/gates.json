@@ -8,7 +8,7 @@
  {
   "label": "env not a wrapper",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    \"env\": (\n        \"i0vu:C:S:P:L:U:\",\n        \"ignore-environment/i null/0 unset=/u chdir=/C split-string=/S block-signal[=] default-signal[=]\"\n        \" ignore-signal[=] list-signal-handling debug/v help version\",\n    ),\n",
+  "old": "    \"env\": (\n        \"i0va:u:C:S:P:L:U:\",\n        \"ignore-environment/i null/0 argv0=/a unset=/u chdir=/C split-string=/S block-signal[=] default-signal[=]\"\n        \" ignore-signal[=] list-signal-handling debug/v help version\",\n    ),\n",
   "new": ""
  },
  {
@@ -3184,8 +3184,8 @@
  {
   "label": "cmdparse: a substitution's cd and variables leak out of its subshell (TASK-156)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        for key in SUBSHELL_STATE:\n            state.pop(key, None)\n        state.update(saved)\n\n\ndef _anchor",
-  "new": "        pass\n\n\ndef _anchor"
+  "old": "        for key in SUBSHELL_STATE:\n            state.pop(key, None)\n        state.update(saved)\n\n\nPWD_LEAD",
+  "new": "        pass\n\n\nPWD_LEAD"
  },
  {
   "label": "cmdparse: a substitution body ends at a ) in its heredoc (TASK-156)",
@@ -5696,26 +5696,26 @@
  {
   "label": "pdd backlog guard (TASK-244 additive): -t cluster not read",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        elif a.startswith(\"-\") and not a.startswith(\"--\") and \"t\" in a[1:]:",
-  "new": "        elif a == \"-t\":"
+  "old": "        elif a.startswith(\"-\") and not a.startswith(\"--\") and (t := short_t(a)) is not None:",
+  "new": "        elif a == \"-t\" and (t := short_t(a)) is not None:"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): -t attached not read",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            out.append(rest or (args[k + 1] if k + 1 < len(args) else \"\"))\n    return out",
-  "new": "            out.append(args[k + 1] if k + 1 < len(args) else \"\")\n    return out"
+  "old": "        if letter == \"t\":\n            return word[n:]\n",
+  "new": "        if letter == \"t\":\n            return \"\"\n"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): --target-directory separate not read",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            out.append(value if eq else (args[k + 1] if k + 1 < len(args) else \"\"))\n        elif a.startswith(\"-\") and not",
-  "new": "            out.append(value)\n        elif a.startswith(\"-\") and not"
+  "old": "            if not eq:\n                k += 1\n                value = args[k] if k < len(args) else \"\"\n",
+  "new": ""
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): --target-directory prefix not read",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "len(name) >= len(\"--tar\") and \"--target-directory\".startswith(name):\n            out.append(",
-  "new": "name == \"--target-directory\":\n            out.append("
+  "old": "len(name) >= len(\"--tar\") and \"--target-directory\".startswith(name):\n            if not eq:",
+  "new": "name == \"--target-directory\":\n            if not eq:"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): sponge/touch allowed",
@@ -7107,7 +7107,7 @@
  {
   "label": "cmdparse getopt: nice's -N form not read (TASK-253)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        elif name == \"nice\" and re.fullmatch(r\"-\\d+\", word):",
+  "old": "        elif name == \"nice\" and re.fullmatch(r\"-[-+]?\\d+\", word):",
   "new": "        elif False:"
  },
  {
@@ -7119,8 +7119,8 @@
  {
   "label": "cmdparse getopt: env -u takes no value (TASK-253)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "\"i0vu:C:S:P:L:U:\"",
-  "new": "\"i0vuC:S:P:L:U:\""
+  "old": "\"i0va:u:C:S:P:L:U:\"",
+  "new": "\"i0va:uC:S:P:L:U:\""
  },
  {
   "label": "cmdparse getopt: nice -n takes no value (TASK-253)",
@@ -7183,10 +7183,10 @@
   "new": ""
  },
  {
-  "label": "cmdparse: a redirect under env -C that can't be anchored is joined anyway (TASK-253)",
+  "label": "cmdparse: a $PWD redirect under env -C is read in the command's directory (TASK-253)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        raise ParseError(f\"can't tell where the redirect to {target} is under env -C / sudo -D\")\n",
-  "new": "        pass\n"
+  "old": "    if PWD_LEAD.match(target):\n        return PWD_LEAD.sub(lambda _: directory, target, count=1)\n",
+  "new": ""
  },
  {
   "label": "cmdparse: sh -c drops its own redirects (TASK-253)",
@@ -7203,14 +7203,8 @@
  {
   "label": "pdd mv -t (TASK-253): the -t directory read as a source",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            k += 1 if a[a.index(\"t\", 1) + 1 :] else 2\n",
-  "new": "            k += 1\n"
- },
- {
-  "label": "pdd mv -t (TASK-253): the --target-directory value read as a source",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            k += 1 if \"=\" in a else 2\n",
-  "new": "            k += 1\n"
+  "old": "            if not t:\n                k += 1\n",
+  "new": "            if False:\n                k += 1\n"
  },
  {
   "label": "pdd mv -t (TASK-253): a source under -t that covers data/snapshots not refused",
@@ -7221,7 +7215,43 @@
  {
   "label": "pdd mv -t (TASK-253): an attached -t$X not refused",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "                if has_data and any(re.search(r\"[$`~]\", t) for t in dests):",
+  "old": "                if has_data and any(re.search(r\"[$`~]\", t) for t in dests if t not in paths):",
   "new": "                if False:"
+ },
+ {
+  "label": "cmdparse getopt: an optional short value takes the next word (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                if kind == \"value\" and value is None:",
+  "new": "                if kind != \"flag\" and value is None:"
+ },
+ {
+  "label": "cmdparse getopt: an optional long value takes the next word (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if kind == \"value\" and not eq:",
+  "new": "            if kind != \"flag\" and not eq:"
+ },
+ {
+  "label": "cmdparse getopt: env -a takes no value (TASK-253 review)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "\"i0va:u:C:S:P:L:U:\"",
+  "new": "\"i0vau:C:S:P:L:U:\""
+ },
+ {
+  "label": "cmdparse: env -C's directory is not resolved where it runs (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    out.chdir = here if unknown else _resolve(value, here)\n",
+  "new": "                    out.chdir = here if unknown else value\n"
+ },
+ {
+  "label": "pdd mv -t (TASK-253 review): -S's suffix read as -t",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if letter in COPY_VALUE_LETTERS:\n            return None\n",
+  "new": ""
+ },
+ {
+  "label": "pdd mv -t (TASK-253 review): -- doesn't end the options",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if a == \"--\":\n            rest += args[k:]\n            break\n",
+  "new": ""
  }
 ]

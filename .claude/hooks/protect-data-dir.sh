@@ -842,40 +842,54 @@ GUARD_DESTROY = {"unlink", "rm", "rmdir", "shred", "truncate"}
 GUARD_DEST_LAST = {"rsync", "cp", "install", "ln", "ditto"}
 GUARD_EDITORS = ("sed", "perl", "ruby", "awk", "gawk")
 
-def target_dirs(args):
-    """GNU's destination-first directory: `-t <dir>`, `-t<dir>`, `-vt <dir>`, `--target-directory[=]<dir>` (or a
-    unique prefix of it, `--target`)."""
-    out = []
-    for k, a in enumerate(args):
-        name, eq, value = a.partition("=")
-        if a.startswith("--") and len(name) >= len("--tar") and "--target-directory".startswith(name):
-            out.append(value if eq else (args[k + 1] if k + 1 < len(args) else ""))
-        elif a.startswith("-") and not a.startswith("--") and "t" in a[1:]:
-            rest = a[a.index("t", 1) + 1 :]
-            out.append(rest or (args[k + 1] if k + 1 < len(args) else ""))
-    return out
+COPY_VALUE_LETTERS = "Sgmo"  # cp/mv/ln -S SUFFIX and install -g/-m/-o take a value: it ends a short group
 
-def mv_operands(args):
-    """mv's sources and destinations: under `-t <dir>` (target_dirs) every other word is a source, else the last word
-    is the destination (TASK-253: `mv -t .. README.md` read `..` as a source, which holds data/snapshots)."""
-    dirs = target_dirs(args)
-    if not dirs:
-        paths = [a for a in args if not a.startswith("-")]
-        return paths[:-1], paths[-1:]
-    sources, k = [], 0
+def short_t(word):
+    """A short group's -t value (the rest of the word; '' when it is the next word), or None when the group has no
+    -t: a value letter before it ends the group (`-St`: the t is -S's suffix, TASK-253 review)."""
+    for n, letter in enumerate(word[1:], start=2):
+        if letter == "t":
+            return word[n:]
+        if letter in COPY_VALUE_LETTERS:
+            return None
+    return None
+
+def target_operands(args):
+    """GNU's destination-first directory, as cp/mv/ln/install read it: `-t <dir>`, `-t<dir>`, `-vt <dir>`,
+    `--target-directory[=]<dir>` (or a unique prefix of it, `--target`), and none after `--`. Returns (the
+    directories, the other words, `--` and the operands after it included)."""
+    dirs, rest, k = [], [], 0
     while k < len(args):
         a = args[k]
-        name = a.partition("=")[0]
+        name, eq, value = a.partition("=")
+        if a == "--":
+            rest += args[k:]
+            break
         if a.startswith("--") and len(name) >= len("--tar") and "--target-directory".startswith(name):
-            k += 1 if "=" in a else 2
-            continue
-        if a.startswith("-") and not a.startswith("--") and "t" in a[1:]:
-            k += 1 if a[a.index("t", 1) + 1 :] else 2
-            continue
-        if not a.startswith("-"):
-            sources.append(a)
+            if not eq:
+                k += 1
+                value = args[k] if k < len(args) else ""
+            dirs.append(value)
+        elif a.startswith("-") and not a.startswith("--") and (t := short_t(a)) is not None:
+            if not t:
+                k += 1
+                t = args[k] if k < len(args) else ""
+            dirs.append(t)
+        else:
+            rest.append(a)
         k += 1
-    return sources, dirs
+    return dirs, rest
+
+def target_dirs(args):
+    return target_operands(args)[0]
+
+def mv_operands(args):
+    """mv's sources and destinations: under `-t <dir>` every other operand is a source, else the last one is the
+    destination (TASK-253: `mv -t .. README.md` read `..` as a source, which holds data/snapshots)."""
+    dirs, rest = target_operands(args)
+    cut = rest.index("--") if "--" in rest else len(rest)
+    words = [w for w in rest[:cut] if not w.startswith("-")] + rest[cut + 1 :]
+    return (words, dirs) if dirs else (words[:-1], words[-1:])
 
 def backlog_guard(cmd, where, depth=0):
     """TASK-244's added blocks, run before every older check and exit path in main(): it refuses (exit 2) or returns,
@@ -1283,7 +1297,8 @@ def main():
                 refuse(IMMUTABLE_MSG + " To retire an old version use `op index retire <index_version>` (it refuses while a search record pins it).")
             if head == "mv" and paths:
                 sources, dests = mv_operands(args)
-                if has_data and any(re.search(r"[$`~]", t) for t in dests):  # an attached `-t$X` is never resolved
+                # an attached `-t$X` is never resolved (a separate word is: refuse_unresolved above)
+                if has_data and any(re.search(r"[$`~]", t) for t in dests if t not in paths):
                     refuse(UNRESOLVED_MSG)
                 if any(covers_immutable(p, d) for p in sources) or any(any_rel(inside_immutable, t, d) for t in dests):
                     refuse(IMMUTABLE_MSG)

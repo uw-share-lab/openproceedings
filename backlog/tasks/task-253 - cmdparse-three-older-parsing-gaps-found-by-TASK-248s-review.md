@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-16 22:50'
-updated_date: '2026-10-18 17:03'
+updated_date: '2026-10-18 17:59'
 labels:
   - tooling
 dependencies: []
@@ -40,4 +40,6 @@ Found while reviewing TASK-248 (PR #158, 2026-10-16); all predate that branch an
 Lead's addition (TASK-261 review): protect-data-dir's older mv check read mv's -t value as a source, so mv -t .. README.md was refused wherever .. holds data/snapshots. mv_operands now reads -t DIR / --target-directory[=]DIR (and unique prefixes, attached -tDIR) as the destination and every other word as a source; an attached -t$X is refused where data/ is. Rows: mv -t .. / --target .. / --target-directory=.. / -vt.. allowed, mv src ..  and cp -t .. allowed, mv -t /tmp data/snapshots and --target-directory=/tmp ... data/indexes refused.
 
 Related (not an AC), decided here: python3 -c / heredoc programs that write under backlog/ stay outside protect-data-dir's model (the hook's documented limit: interpreters writing files are obfuscation it doesn't parse); refusing every interpreter call that names a backlog/ path would refuse reads too, and the CLI-only rule is backed by review and enforce-backlog-cli's file-tool guard.
+
+2026-10-18, review round 1: _anchor no longer raises: a leading $PWD/${PWD}/~+ is the shell's directory, another leading $ or ~ target is left for the gate (a ~/x or $HOME/x redirect under env -C was a ParseError, which sent block-ai-attribution to its text-only scan). nice's old form also takes --N and -+N; env gains -a/--argv0. protect-data-dir: target_operands walks a short group as getopt does (a value letter, -S's suffix or install's -g/-m/-o, ends it, so mv -St DIR keeps DIR a source), every word after -- is an operand, and the attached -t$X refusal reads only attached -t values (mv a a~ was refused).
 <!-- SECTION:NOTES:END -->
