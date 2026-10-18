@@ -3,7 +3,7 @@
 **Key lesson:** Vet a mutant before crediting a kill: its `old` text must occur exactly once in each file and its edit must leave the file compiling (`mutate.py --check`, in `make tooling`); and read a wrapper's options as its getopt does (groups, attached values, unique long prefixes) or refuse the command, since one misplaced value word becomes the command.
 
 - **Date:** 2026-10-18 · **Task:** task-253, task-254 · **Area:** tooling
-- **Artifacts:** `.claude/scripts/mutate.py` (`vet`, `breaks_compile`, `check_scopes`, `--check`), `.claude/hooks/lib/cmdparse.py` (`GETOPT_WRAPPERS`, `_getopt`, `Argv.chdir`, `_anchor`), `.claude/hooks/protect-data-dir.sh` (`mv_operands`), `.claude/scripts/tests/test-mutate-run.sh`, `.claude/hooks/tests/test-openproceedings-gates.sh` and `test-enforce-pr-workflow.sh` (TASK-253 sections)
+- **Artifacts:** `.claude/scripts/mutate.py` (`vet`, `breaks_compile`, `check_scopes`, `--check`), `.claude/hooks/lib/cmdparse.py` (`GETOPT_WRAPPERS`, `_getopt`, `Argv.chdir`), `.claude/hooks/protect-data-dir.sh` (`mv_operands`), `.claude/scripts/tests/test-mutate-run.sh`, `.claude/hooks/tests/test-openproceedings-gates.sh` and `test-enforce-pr-workflow.sh` (TASK-253 sections)
 
 ## What we set out to do
 Close three older cmdparse gaps (grouped wrapper options, `env -C` moving every later command, `sh -c`/`eval` dropping their redirects) and the mv `-t` misread, and make mutate.py refuse mutants that can't be run as written.
@@ -13,9 +13,9 @@ Close three older cmdparse gaps (grouped wrapper options, `env -C` moving every 
 - An ambiguous mutant's first occurrence is not always the one its label meant; `git log -S'<label>' -- .claude/scripts/mutants/gates.json` and the hook at that commit show which line it was written for (`dd branch removed` was the immutable `of=` check, now the second of three matches).
 - Compiling 1,650 mutants serially took 14 s, half of it recompiling the unmutated files; caching the originals and a process pool brought `--check` to about 2-3 s, cheap enough for `make tooling`.
 - A table's scope must list everything it reads, not only the script it is named for: `test-merge-group-gate.sh`'s wiring row reads four workflows, and the `pr-gates.yml`, `lint.yml` and `test.yml` mutants are killed only there.
-- `env -C dir cmd > f` writes `./f`, not `dir/f`: the shell opens the redirect before env changes directory, so moving the command's directory has to leave its redirects where the shell is (`_anchor`), or a write to `backlog/` reads as one to `/tmp/backlog/`.
+- `env -C dir cmd > f` writes `./f`, not `dir/f`: the shell opens the redirect before env changes directory, so moving the command's directory has to leave its redirects where the shell is, or a write to `backlog/` reads as one to `/tmp/backlog/`. Rewriting each target (round 1's `_anchor`) kept missing cases: a `$X` holding a relative path still read from the command's directory (review round 2). Yielding the redirects as a command of none in the shell's directory, as `sh -c` and `eval` do, leaves no target to rewrite.
 - Getopt reading has to stop where getopt stops: in GNU mv's `-St DIR`, the `t` is `-S`'s suffix and `DIR` is still
-  a source (review round 1 found `mv -St ../repo ../moved` allowed), every word after `--` is an operand, `nice --5`
+  a source (review round 1 found `mv -St ../repo ../moved` allowed; round 2's automated review: `mv -S -t .. x` and `--suffix -t` take `-t` as the suffix), every word after `--` is an operand, `nice --5`
   and `nice -+5` are nice's old adjustment form, and `env -a ARG` exists in coreutils 9: an option missing from a
   table is a ParseError, which block-ai-attribution answers with a text-only scan.
 - A short group ending in a value letter (`sudo -nu root git push`) read `root` as the command and hid the push from every gate; so did `flock --wai 5` (an unknown long option, so `5` was the lock file and the lock file the command).

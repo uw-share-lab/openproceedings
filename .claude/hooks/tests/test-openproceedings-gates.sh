@@ -2303,7 +2303,11 @@ check $P block "data-only: env -C src/.. rm -rf data/snapshots (resolved from he
 check $P block "data-only: env -C /tmp true > data/snapshots/s1/f (the shell opens it)" "$(payload_do 'env -C /tmp true > data/snapshots/s1/f')"
 check $P allow "data-only: env -C /tmp true > /tmp/op-253.out"  "$(payload_do 'env -C /tmp true > /tmp/op-253.out')"
 check $P block "data-only: env -C /tmp true > \$PWD/data/snapshots/s1/f (the shell's PWD)" "$(payload_do 'env -C /tmp true > "$PWD"/data/snapshots/s1/f')"
-check $P allow "data-only: env -C /tmp true 2>&1 <<< \$HOME (no file to anchor)" "$(payload_do 'env -C /tmp true 2>&1 <<< "$HOME"')"
+check $P allow "data-only: env -C /tmp true 2>&1 <<< \$HOME (no file)" "$(payload_do 'env -C /tmp true 2>&1 <<< "$HOME"')"
+check $P block "data-only: X=data/snapshots/s1; env -C /tmp true > \$X/f (a relative \$X)" "$(payload_do 'X=data/snapshots/s1; env -C /tmp true > "$X"/f')"
+check $P block "data-only: D=data; env -C /tmp true > \$D/snapshots/x" "$(payload_do 'D=data; env -C /tmp true > $D/snapshots/x')"
+check $P block "data-only: D=data; sudo -D /tmp true >> \$D/snapshots/x" "$(payload_do 'D=data; sudo -D /tmp true >> $D/snapshots/x')"
+check $P allow "data-only: env -C /tmp true > \$HOME/x"         "$(payload_do 'env -C /tmp true > "$HOME"/op-253.x')"
 mkdir -p "$TMP/plain253"   # no repo, no data/ or backlog/
 check $P allow "outside a repo: env -C /tmp true > ~/op-253.log (HOME doesn't move)" "$(payload_at "$TMP/plain253" 'env -C /tmp true > ~/op-253.log')"
 # sh -c and eval keep their own redirects
@@ -2325,6 +2329,12 @@ check $P block "data-only: mv -t\$UNSET src/x.md (attached, unresolved)" "$(payl
 check $P allow "data-only: mv src/x.md src/x.md~ (a ~ in a plain name)" "$(payload_do 'mv src/x.md src/x.md~')"
 check $P block "data-only: mv -St <repo> ../moved (the t is -S's suffix)" "$(payload_do "mv -St '../data only' ../moved")"
 check $P block "data-only: mv -t /tmp -- -t <repo> (after --, operands)" "$(payload_do "mv -t /tmp -- -t '../data only'")"
+# another option's value is no -t: `mv -S -t .. x` moves `..` (it holds data/snapshots) with suffix -t
+check $P block "data-only: mv -S -t .. ../moved (-t is -S's value)" "$(payload_do 'mv -S -t .. ../moved')"
+check $P block "data-only: mv -bS -t .. ../moved"               "$(payload_do 'mv -bS -t .. ../moved')"
+check $P block "data-only: mv --suffix -t .. ../moved"          "$(payload_do 'mv --suffix -t .. ../moved')"
+check $P block "data-only: mv -S X -t data/snapshots/s1 src/x.md" "$(payload_do 'mv -S X -t data/snapshots/s1 src/x.md')"
+check $P block "data-only: mv -t\$UNSET '\$UNSET' src/x.md (attached, and a word of the same text)" "$(payload_do "mv -t\"\$OP_UNSET_253\" '\$OP_UNSET_253' src/x.md")"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")

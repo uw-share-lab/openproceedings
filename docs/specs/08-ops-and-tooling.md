@@ -1012,12 +1012,13 @@ them:
   `-c`/`--command '<cmd>'` as `sh -c '<cmd>'`). The getopt wrappers (`env`, `sudo`, `nice`, `timeout`, `doas`,
   `caffeinate`, `flock`) are read with every option each takes, GNU's and BSD's (`GETOPT_WRAPPERS`): a short group
   whose value-taking letter takes the rest of the word or else the next word (`sudo -nu root`, `flock -nw5`), a
-  long option by its unique prefix (`flock --wai 5`), `--` ending the options, `env -` as `env -i` and `nice -5` as
-  `nice -n 5`; an unknown or ambiguous option, a value with nowhere to come from, or another option after flock's
+  long option by its unique prefix (`flock --wai 5`), `--` ending the options, `env -` as `env -i` and `nice -5` (also `--5`
+  and `-+5`) as `nice -n 5`; an unknown or ambiguous option, a value with nowhere to come from, or another option after flock's
   lock file than `-c`/`--command` is a ParseError, since the command can't be told (TASK-253). `env -S '<words>'`
   is read as more of env's own words, options included. `env -C dir` and `sudo -D dir` move only the command they
-  run (`Argv.chdir`), never a later one, and that command's redirects are still opened where the shell is
-  (`env -C /tmp true > f` writes `./f`, and `> "$PWD"/f` too; another target led by `$` or `~` is left as it is); a
+  run (`Argv.chdir`), never a later one, and that command's redirects are still opened where the shell is: they
+  are yielded first as a command of none in the shell's directory, as `sh -c`'s and `eval`'s are (`env -C /tmp
+  true > f` writes `./f`, and `X=d; env -C /tmp true > $X/f` writes `./d/f`); a
   directory they name with `$`, `~` or a backquote leaves the directory where it was, marked unknown, as an
   unresolvable `cd` does. The assignments are kept, and a command run by `xargs` is marked, because the words xargs appends
   are invisible (`xargs_hides_args` flags `rm`, `mv` and `git push`/`add`/`commit`/`rm`/`mv` run that way;

@@ -843,25 +843,29 @@ GUARD_DEST_LAST = {"rsync", "cp", "install", "ln", "ditto"}
 GUARD_EDITORS = ("sed", "perl", "ruby", "awk", "gawk")
 
 COPY_VALUE_LETTERS = "Sgmo"  # cp/mv/ln -S SUFFIX and install -g/-m/-o take a value: it ends a short group
+# their long options that take a value as the next word when it isn't written `--name=value`
+COPY_VALUE_LONGS = ("--suffix", "--mode", "--owner", "--group", "--strip-program", "--sparse", "--no-preserve")
 
-def short_t(word):
-    """A short group's -t value (the rest of the word; '' when it is the next word), or None when the group has no
-    -t: a value letter before it ends the group (`-St`: the t is -S's suffix, TASK-253 review)."""
+def short_group(word):
+    """What a short group ends in, as getopt reads cp/mv/ln/install: ("t", -t's value), ("value", another value
+    letter's value: `-S`, `-bS`, `-St`, whose t is the suffix), or (None, ""); a value '' is the next word."""
     for n, letter in enumerate(word[1:], start=2):
         if letter == "t":
-            return word[n:]
+            return "t", word[n:]
         if letter in COPY_VALUE_LETTERS:
-            return None
-    return None
+            return "value", word[n:]
+    return None, ""
 
 def target_operands(args):
     """GNU's destination-first directory, as cp/mv/ln/install read it: `-t <dir>`, `-t<dir>`, `-vt <dir>`,
-    `--target-directory[=]<dir>` (or a unique prefix of it, `--target`), and none after `--`. Returns (the
+    `--target-directory[=]<dir>` (or a unique prefix of it, `--target`), and none after `--`; another option's
+    value (`-S X`, `-bS X`, `--suffix X`) is skipped, so `mv -S -t a b` has no -t (TASK-253 review). Returns (the
     directories, the other words, `--` and the operands after it included)."""
     dirs, rest, k = [], [], 0
     while k < len(args):
         a = args[k]
         name, eq, value = a.partition("=")
+        kind, attached = short_group(a) if a.startswith("-") and not a.startswith("--") else (None, "")
         if a == "--":
             rest += args[k:]
             break
@@ -870,11 +874,15 @@ def target_operands(args):
                 k += 1
                 value = args[k] if k < len(args) else ""
             dirs.append(value)
-        elif a.startswith("-") and not a.startswith("--") and (t := short_t(a)) is not None:
-            if not t:
+        elif kind == "t":
+            if not attached:
                 k += 1
-                t = args[k] if k < len(args) else ""
-            dirs.append(t)
+                attached = args[k] if k < len(args) else ""
+            dirs.append(attached)
+        elif kind == "value" or (
+                a.startswith("--") and not eq and len(name) > 3 and any(o.startswith(name) for o in COPY_VALUE_LONGS)):
+            rest.append(a)
+            k += 0 if kind == "value" and attached else 1  # the value: not an operand, nor an option to read
         else:
             rest.append(a)
         k += 1

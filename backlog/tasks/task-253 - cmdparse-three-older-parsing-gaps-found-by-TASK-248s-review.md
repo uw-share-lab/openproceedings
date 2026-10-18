@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-16 22:50'
-updated_date: '2026-10-18 17:59'
+updated_date: '2026-10-18 20:15'
 labels:
   - tooling
 dependencies: []
@@ -42,4 +42,6 @@ Lead's addition (TASK-261 review): protect-data-dir's older mv check read mv's -
 Related (not an AC), decided here: python3 -c / heredoc programs that write under backlog/ stay outside protect-data-dir's model (the hook's documented limit: interpreters writing files are obfuscation it doesn't parse); refusing every interpreter call that names a backlog/ path would refuse reads too, and the CLI-only rule is backed by review and enforce-backlog-cli's file-tool guard.
 
 2026-10-18, review round 1: _anchor no longer raises: a leading $PWD/${PWD}/~+ is the shell's directory, another leading $ or ~ target is left for the gate (a ~/x or $HOME/x redirect under env -C was a ParseError, which sent block-ai-attribution to its text-only scan). nice's old form also takes --N and -+N; env gains -a/--argv0. protect-data-dir: target_operands walks a short group as getopt does (a value letter, -S's suffix or install's -g/-m/-o, ends it, so mv -St DIR keeps DIR a source), every word after -- is an operand, and the attached -t$X refusal reads only attached -t values (mv a a~ was refused).
+
+2026-10-18, review round 2: the per-target rewrite (_anchor) is gone. A command run under env -C / sudo -D has its redirects yielded first, as a command of none in the shell's directory (as sh -c's and eval's are), so a $X holding a relative path (X=data/snapshots/s1; env -C /tmp true > $X/f) is judged where the shell opens it. protect-data-dir's target_operands also skips another option's separate value (-S X, -bS X, --suffix/--mode/--owner/--group/--strip-program/--sparse/--no-preserve X), so mv -S -t .. x has no -t.
 <!-- SECTION:NOTES:END -->

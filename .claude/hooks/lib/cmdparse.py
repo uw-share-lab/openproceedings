@@ -2090,22 +2090,6 @@ def _subshell(body: str, state: dict) -> Iterator[tuple[Argv, str, list[tuple[st
         state.update(saved)
 
 
-PWD_LEAD = re.compile(r"(\$PWD|\$\{PWD\}|~\+)(?=/|$)")
-
-
-def _anchor(op: str, target: str, directory: str) -> str:
-    """A redirect's target as a path from `directory`, where the shell opens it: `env -C /tmp true > f` writes ./f,
-    not /tmp/f (TASK-253). A leading `$PWD` or `~+` is the shell's directory too; another leading `$`/`~` word
-    doesn't depend on the directory, and is left for the gate to resolve."""
-    if op.startswith("<<") or (op.endswith("&") and (target.isdigit() or target == "-")):
-        return target  # a heredoc, a herestring or a descriptor: no file
-    if PWD_LEAD.match(target):
-        return PWD_LEAD.sub(lambda _: directory, target, count=1)
-    if not target or os.path.isabs(target) or target[0] in "$~":
-        return target
-    return os.path.join(directory, target)
-
-
 def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tuple[str, str]]]]:
     i = 0
     depth = state.get("subst", 0)  # the command substitutions this walk is inside (`Argv.in_subst`)
@@ -2140,8 +2124,11 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
         args, redirects = split_redirects(raw)
         argv = strip_prefixes(args, state)
         if argv.chdir is not None:
-            # `env -C`/`sudo -D` move the command they run and no later one; the shell opens the redirects (TASK-253)
-            redirects = [(op, _anchor(op, t, state["dir"])) for op, t in redirects]
+            # `env -C`/`sudo -D` move the command they run and no later one (TASK-253). The shell opens its redirects
+            # where it is, before env runs: they go first, as a command of none there (as `sh -c`'s and eval's do)
+            if redirects:
+                yield _context(Argv([]), state), state["dir"], redirects
+                redirects = []
             shell_dir = (state["dir"], state.get("dir_unknown", False))
             state["dir"] = argv.chdir
             state["dir_unknown"] = shell_dir[1] or argv.chdir_unknown

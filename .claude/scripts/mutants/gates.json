@@ -3184,8 +3184,8 @@
  {
   "label": "cmdparse: a substitution's cd and variables leak out of its subshell (TASK-156)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        for key in SUBSHELL_STATE:\n            state.pop(key, None)\n        state.update(saved)\n\n\nPWD_LEAD",
-  "new": "        pass\n\n\nPWD_LEAD"
+  "old": "        for key in SUBSHELL_STATE:\n            state.pop(key, None)\n        state.update(saved)\n\n\ndef _walk",
+  "new": "        pass\n\n\ndef _walk"
  },
  {
   "label": "cmdparse: a substitution body ends at a ) in its heredoc (TASK-156)",
@@ -5696,14 +5696,14 @@
  {
   "label": "pdd backlog guard (TASK-244 additive): -t cluster not read",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        elif a.startswith(\"-\") and not a.startswith(\"--\") and (t := short_t(a)) is not None:",
-  "new": "        elif a == \"-t\" and (t := short_t(a)) is not None:"
+  "old": "        kind, attached = short_group(a) if a.startswith(\"-\") and not a.startswith(\"--\") else (None, \"\")",
+  "new": "        kind, attached = short_group(a) if a == \"-t\" else (None, \"\")"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): -t attached not read",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        if letter == \"t\":\n            return word[n:]\n",
-  "new": "        if letter == \"t\":\n            return \"\"\n"
+  "old": "        if letter == \"t\":\n            return \"t\", word[n:]\n",
+  "new": "        if letter == \"t\":\n            return \"t\", \"\"\n"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): --target-directory separate not read",
@@ -7177,16 +7177,10 @@
   "new": "            state[\"dir_unknown\"] = shell_dir[1]\n"
  },
  {
-  "label": "cmdparse: env -C moves the redirects too (TASK-253)",
+  "label": "cmdparse: env -C's redirects are opened in its directory, not the shell's (TASK-253)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "            redirects = [(op, _anchor(op, t, state[\"dir\"])) for op, t in redirects]\n",
-  "new": ""
- },
- {
-  "label": "cmdparse: a $PWD redirect under env -C is read in the command's directory (TASK-253)",
-  "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    if PWD_LEAD.match(target):\n        return PWD_LEAD.sub(lambda _: directory, target, count=1)\n",
-  "new": ""
+  "old": "            if redirects:\n                yield _context(Argv([]), state), state[\"dir\"], redirects\n                redirects = []\n            shell_dir",
+  "new": "            shell_dir"
  },
  {
   "label": "cmdparse: sh -c drops its own redirects (TASK-253)",
@@ -7203,8 +7197,8 @@
  {
   "label": "pdd mv -t (TASK-253): the -t directory read as a source",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            if not t:\n                k += 1\n",
-  "new": "            if False:\n                k += 1\n"
+  "old": "        elif kind == \"t\":\n            if not attached:\n                k += 1\n",
+  "new": "        elif kind == \"t\":\n            if False:\n                k += 1\n"
  },
  {
   "label": "pdd mv -t (TASK-253): a source under -t that covers data/snapshots not refused",
@@ -7245,7 +7239,7 @@
  {
   "label": "pdd mv -t (TASK-253 review): -S's suffix read as -t",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        if letter in COPY_VALUE_LETTERS:\n            return None\n",
+  "old": "        if letter in COPY_VALUE_LETTERS:\n            return \"value\", word[n:]\n",
   "new": ""
  },
  {
@@ -7253,5 +7247,17 @@
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "        if a == \"--\":\n            rest += args[k:]\n            break\n",
   "new": ""
+ },
+ {
+  "label": "pdd mv -t (TASK-253 review): a short option's separate value read as a word",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            k += 0 if kind == \"value\" and attached else 1  # the value",
+  "new": "            k += 0  # the value"
+ },
+ {
+  "label": "pdd mv -t (TASK-253 review): --suffix's separate value read as a word",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "a.startswith(\"--\") and not eq and len(name) > 3 and any(o.startswith(name) for o in COPY_VALUE_LONGS)",
+  "new": "False"
  }
 ]
