@@ -107,6 +107,18 @@ and a positive control. Dropping an explicit default and forcing its opposite ar
 Compare actual hook verdicts for benign unsupported syntax too: a conservative parser can intentionally
 block a shape that a mutant allows. Identical destructive-case verdicts alone do not prove equivalence.
 
+A killing row decays when later work changes what blocks it first (TASK-261, nine nightly survivors). It can decay
+because a "made-up" fallback case becomes a known one: `caffeinate` became a known wrapper in TASK-248, so the
+unknown-wrapper rows stopped reaching their fallback. It can decay because a newer fail-closed check refuses the
+probe for its own reason: `HOOK_INPUT='{}'` became malformed to `guard_payload`, and a missing message file became
+unreadable under TASK-243. And it can decay because the fixture differs by OS: on Linux, `mktemp -d` is under
+`/tmp`, so `find /tmp .` was blocked by its first start. So:
+- a row probing a fallback uses a name that can never join the known set (`unknown-wrapper`);
+- a block row's other inputs are well formed, present and harmless, so only the check under test can block;
+- a start or path in a row lives inside the table's own root, never at a system path.
+When the nightly reports a survivor, apply that one mutant and run its table on the OS that reported it, before
+assuming the row still kills it.
+
 Case tables must also parse on the developer platform's Bash. Stock macOS Bash 3.2 can misparse a
 case-pattern `)` inside command substitution; compute the case result in a variable outside `$(...)`
 and keep the same assertion. Run the table with stock Bash as well as the CI version when available.

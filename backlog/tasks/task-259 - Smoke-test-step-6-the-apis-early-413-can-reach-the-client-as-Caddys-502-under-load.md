@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-18 04:43'
+updated_date: '2026-10-18 14:16'
 labels:
   - ops
   - deploy
@@ -26,3 +27,9 @@ Found by the 2026-10-17 Dependabot batch (#163): deploy/smoke-test.sh step 6 (64
 - [ ] #1 The race is reproduced or ruled out with a repeated run of step 6 under load (N and load recorded)
 - [ ] #2 If real: a client over the records body limit always gets 413, not 502, and smoke-test.sh asserts it stably; if not real: step 6 is made robust and the cause recorded
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-18: the owner accepted the step-6 failure on #163 as a load flake (PR comment 6245774509) after it passed on dev 22947899 and on a rerun of the PR head.
+<!-- SECTION:NOTES:END -->
