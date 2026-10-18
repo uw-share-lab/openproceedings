@@ -368,7 +368,12 @@ echo "git-<sub> programs are git <sub> (TASK-067 review gate):"
 check feature/x block '$(git --exec-path)/git-push origin HEAD:dev'
 check main      block '/usr/libexec/git-core/git-commit -m x'
 check feature/x allow '/usr/libexec/git-core/git-push origin feat'
-check feature/x block 'caffeinate -i /usr/libexec/git-core/git-push origin HEAD:dev'   # behind a wrapper cmdparse doesn't know
+check feature/x block 'caffeinate -i /usr/libexec/git-core/git-push origin HEAD:dev'   # a known wrapper (TASK-248): the walk unwraps it
+# behind a wrapper cmdparse doesn't know, git_calls reads the git word itself (TASK-261: these rows used caffeinate,
+# which TASK-248 made a known wrapper, so the fallback went untested); the name is made up so it stays unknown
+check feature/x block 'unknown-wrapper -i /usr/libexec/git-core/git-push origin HEAD:dev'   # basenamed, git-<sub> kept as its subcommand
+check main      block 'unknown-wrapper git-commit -m x'
+check feature/x allow 'unknown-wrapper git-push origin feat'          # positive control
 
 echo "an unparseable command with a git write word is refused (TASK-067 final review gate):"
 check main      block 'git cherry-pick x "'
@@ -594,7 +599,8 @@ check_cwd main "$WT" block "cd ~+/\"$WT_TO_REPO\" && git commit -m x"
 check_cwd main "$WT" block 'cd "$OP_UNSET_DIR" && git commit -m x'      # a directory this gate can't tell
 check_cwd main "$WT" allow "pushd \"$WT_TO_REPO\" && popd && git commit -m x"
 check_cwd main "$WT" allow "cd \"\$OP_UNSET_DIR\" && git -C \"$WT\" commit -m x"   # an absolute -C places it
-check feature/x block 'caffeinate git -c alias.p=push p origin HEAD:dev'   # an alias behind an unknown wrapper
+check feature/x block 'caffeinate git -c alias.p=push p origin HEAD:dev'   # an alias behind a known wrapper (TASK-248)
+check feature/x block 'unknown-wrapper git -c alias.p=push p origin HEAD:dev'   # an alias behind an unknown wrapper (TASK-261)
 check feature/x block 'B=dev; git push origin HEAD:$B'
 check feature/x block 'git push origin HEAD:$OP_UNSET_REF'                # a destination this gate can't tell
 check feature/x allow 'B=feat; git push origin HEAD:$B'

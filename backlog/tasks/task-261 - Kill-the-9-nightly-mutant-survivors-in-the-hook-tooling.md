@@ -1,0 +1,47 @@
+---
+id: TASK-261
+title: Kill the 9 nightly mutant survivors in the hook tooling
+status: In Progress
+assignee: []
+created_date: '2026-10-18 14:16'
+updated_date: '2026-10-18 15:10'
+labels:
+  - tooling
+  - mutation
+  - release
+dependencies: []
+priority: high
+ordinal: 174000
+---
+
+## Description
+
+<!-- SECTION:DESCRIPTION:BEGIN -->
+Found by the v0.4.0 release (2026-10-18, spec 08 §Release step 1): the scheduled nightly has been red since 2026-10-15 (runs 38736208920, 38900169100, 39029318530), only in its mutate shards, each failure a deterministic surviving mutant. Red since #149/#150 (between 855749a3 and 79c269fe); four more since #158. Survivors: 'pdd: find checks only its first start'; 'TASK-243: the two walks compared as one'; 'block-ai: HOME '' pass skipped (TASK-156)'; 'block-ai: a glob in a file word isn't expanded (TASK-170)'; 'cmdparse: an inherited HOOK_INPUT read in place of stdin (TASK-156)'; 'PR gate: aliases not expanded'; 'PR gate: git-<sub> behind an unknown wrapper loses its subcommand'; 'PR gate: git not basenamed'; 'PR gate: git-<sub> token skipped'. Not covered by TASK-253 or TASK-254. Blocks v0.4.0.
+<!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [x] #1 Each of the 9 mutants is killed by a case-table row that fails on the message it asserts, or recorded as equivalent with the reason in the mutant file
+- [ ] #2 mutate.py on each affected shard (at --jobs 2) reports no survivors locally
+- [ ] #3 A nightly dispatched on the merged head is green
+<!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Reproduce each survivor locally with one table per mutant. 2. Find why the existing rows stopped killing it. 3. Add or correct rows so each one fails under its mutant and passes on the code. 4. Run mutate.py --match per mutant at --jobs 2. 5. Review gate, PR, merge queue. 6. Dispatch a nightly on the merged dev head (AC #3).
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-18: each survivor reproduced locally, one table per mutant. Causes:
+- the 4 PR-gate mutants: their rows used caffeinate, which TASK-248 made a known wrapper, so git_calls' fallback went untested; new rows go behind 'unknown-wrapper';
+- HOOK_INPUT: '{}' is refused as malformed by guard_payload either way; new rows use a well-formed harmless HOOK_INPUT;
+- block-ai HOME '' pass: with the real HOME the first reading refused the missing op-msg.txt (TASK-243); HOME now holds a clean one;
+- glob: a glob matching a trailer file is refused unexpanded too; a new row globs a clean file (allow);
+- TASK-243 two walks: a new row writes the sent file only in the HOME '' walk;
+- pdd find: killed on macOS, but on Linux the mktemp root is under /tmp, so 'find /tmp .' blocked on its first start; the row is now 'find src .'.
+Each mutant fails exactly its new row (scratch single-table runs). The caffeinate rows stay, for the known-wrapper path. make lint and make tooling are green.
+<!-- SECTION:NOTES:END -->
