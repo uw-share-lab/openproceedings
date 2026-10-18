@@ -3,6 +3,7 @@
 # partition the selected mutants (disjoint, complete, the same split every run) and a bad i/n is refused with a
 # clear error. Every row runs `--list`, which prints the selected labels and runs nothing, so the table takes a
 # second. Mutants in .claude/scripts/mutants/mutate.json. Usage: ./test-mutate-shard.sh
+# mutate-scope: .claude/scripts/mutate.py
 set -u
 # Never inherit a repo from the caller (git exports GIT_DIR etc. to hooks such as pre-push).
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX

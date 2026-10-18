@@ -8,7 +8,7 @@ help:
 	@echo "sync     - uv sync (root uv workspace) + npm ci (root npm workspace: frontend/)"
 	@echo "fmt      - auto-format and auto-fix everything (ruff, prettier, eslint)"
 	@echo "lint     - check-only: what CI's lint job runs (ruff, mypy, shellcheck, frontend)"
-	@echo "tooling  - roster lint, roster/learnings indexes, backlog hygiene, deploy/ digest pins, file modes, CI uv pin, npm specs, probes, case tables"
+	@echo "tooling  - roster lint, roster/learnings indexes, backlog hygiene, deploy/ digest pins, file modes, CI uv pin, npm specs, probes, mutants, case tables"
 	@echo "test     - backend (pytest, parallel via xdist) and frontend (vitest) tests"
 	@echo "e2e      - Playwright spec-05 flow, WCAG 2.2 AA and visual regression"
 	@echo "openapi  - regenerate the OpenAPI snapshot and frontend/src/api/schema.ts (commit both; CI checks)"
@@ -64,6 +64,7 @@ tooling:
 	python3 .claude/scripts/check_uv_pin.py
 	python3 .claude/scripts/dependabot/npm_specs.py
 	python3 .claude/scripts/lint_probes.py
+	python3 .claude/scripts/mutate.py --check
 	@# case tables run in parallel; each writes its output to a temp file, and any failure prints in full
 	@d=$$(mktemp -d); pids=""; for t in .claude/hooks/tests/*.sh .claude/scripts/tests/*.sh; do \
 	  ( bash "$$t" > "$$d/$$(basename $$t).out" 2>&1; echo $$? > "$$d/$$(basename $$t).rc" ) & pids="$$pids $$!"; done; \

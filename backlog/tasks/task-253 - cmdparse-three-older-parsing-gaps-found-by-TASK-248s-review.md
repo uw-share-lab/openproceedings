@@ -3,10 +3,10 @@ id: TASK-253
 title: >-
   cmdparse: wrapper option parsing (grouped and attached short options,
   long-option prefixes) and two older gaps
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-16 22:50'
-updated_date: '2026-10-16 23:10'
+updated_date: '2026-10-18 16:27'
 labels:
   - tooling
 dependencies: []

@@ -242,8 +242,8 @@
  {
   "label": "pr-gates: first job's event guard dropped",
   "file": ".github/workflows/pr-gates.yml",
-  "old": "run: echo \"::error::pr-gates has no check for the $EVENT event\" && exit 1",
-  "new": "run: echo \"pr-gates: $EVENT\""
+  "old": "  attribution:\n    runs-on: ubuntu-latest\n    permissions: { contents: read, pull-requests: read }\n    steps:\n      - name: Refuse an event this gate doesn't check (a job whose steps all skip would pass)\n        if: github.event_name != 'pull_request' && github.event_name != 'merge_group'\n        env: { EVENT: \"${{ github.event_name }}\" }\n        run: echo \"::error::pr-gates has no check for the $EVENT event\" && exit 1\n",
+  "new": "  attribution:\n    runs-on: ubuntu-latest\n    permissions: { contents: read, pull-requests: read }\n    steps:\n      - name: Refuse an event this gate doesn't check (a job whose steps all skip would pass)\n        if: github.event_name != 'pull_request' && github.event_name != 'merge_group'\n        env: { EVENT: \"${{ github.event_name }}\" }\n        run: echo \"pr-gates: $EVENT\"\n"
  },
  {
   "label": "pr-gates: review job runs the learnings gate",
@@ -254,8 +254,8 @@
  {
   "label": "pr-gates: merge_group step loses its event condition",
   "file": ".github/workflows/pr-gates.yml",
-  "old": "        if: github.event_name == 'merge_group'\n        env:\n          GH_TOKEN",
-  "new": "        env:\n          GH_TOKEN"
+  "old": "      - name: No AI authorship in the merge group's commits or any queued PR's text\n        if: github.event_name == 'merge_group'\n",
+  "new": "      - name: No AI authorship in the merge group's commits or any queued PR's text\n"
  },
  {
   "label": "pr-gates: pull_request step runs on merge_group",
@@ -272,14 +272,14 @@
  {
   "label": "pr-gates: head ref not passed",
   "file": ".github/workflows/pr-gates.yml",
-  "old": "--head-ref \"$HEAD_REF\" --repo \"$REPO\"\n",
-  "new": "--head-ref \"refs/heads/x\" --repo \"$REPO\"\n"
+  "old": "attribution --base \"$BASE_SHA\" --head \"$HEAD_SHA\" --head-ref \"$HEAD_REF\" --repo \"$REPO\"\n",
+  "new": "attribution --base \"$BASE_SHA\" --head \"$HEAD_SHA\" --head-ref \"refs/heads/x\" --repo \"$REPO\"\n"
  },
  {
   "label": "pr-gates: pull-requests read dropped",
   "file": ".github/workflows/pr-gates.yml",
-  "old": "    permissions: { contents: read, pull-requests: read }\n",
-  "new": "    permissions: { contents: read }\n"
+  "old": "  attribution:\n    runs-on: ubuntu-latest\n    permissions: { contents: read, pull-requests: read }\n",
+  "new": "  attribution:\n    runs-on: ubuntu-latest\n    permissions: { contents: read }\n"
  },
  {
   "label": "lint: merge_group trigger dropped",
@@ -302,8 +302,8 @@
  {
   "label": "pr-gates: learnings job skipped on merge_group by a job-level if",
   "file": ".github/workflows/pr-gates.yml",
-  "old": "    if: ${{ !(github.head_ref == 'dev' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository) }}",
-  "new": "    if: ${{ github.event_name == 'pull_request' }}"
+  "old": "    # fork branch that happens to be named 'dev' from skipping the gate.\n    if: ${{ !(github.head_ref == 'dev' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository) }}",
+  "new": "    # fork branch that happens to be named 'dev' from skipping the gate.\n    if: ${{ github.event_name == 'pull_request' }}"
  },
  {
   "label": "pr-gates: review gate step continues on error",
@@ -314,8 +314,8 @@
  {
   "label": "pr-gates: merge_group step if: weakened",
   "file": ".github/workflows/pr-gates.yml",
-  "old": "        if: github.event_name == 'merge_group'\n        env:\n          GH_TOKEN",
-  "new": "        if: github.event_name == 'merge_group' && false\n        env:\n          GH_TOKEN"
+  "old": "      - name: No AI authorship in the merge group's commits or any queued PR's text\n        if: github.event_name == 'merge_group'\n",
+  "new": "      - name: No AI authorship in the merge group's commits or any queued PR's text\n        if: github.event_name == 'merge_group' && false\n"
  },
  {
   "label": "merge group: missing git/gh not caught",

@@ -855,6 +855,28 @@ def target_dirs(args):
             out.append(rest or (args[k + 1] if k + 1 < len(args) else ""))
     return out
 
+def mv_operands(args):
+    """mv's sources and destinations: under `-t <dir>` (target_dirs) every other word is a source, else the last word
+    is the destination (TASK-253: `mv -t .. README.md` read `..` as a source, which holds data/snapshots)."""
+    dirs = target_dirs(args)
+    if not dirs:
+        paths = [a for a in args if not a.startswith("-")]
+        return paths[:-1], paths[-1:]
+    sources, k = [], 0
+    while k < len(args):
+        a = args[k]
+        name = a.partition("=")[0]
+        if a.startswith("--") and len(name) >= len("--tar") and "--target-directory".startswith(name):
+            k += 1 if "=" in a else 2
+            continue
+        if a.startswith("-") and not a.startswith("--") and "t" in a[1:]:
+            k += 1 if a[a.index("t", 1) + 1 :] else 2
+            continue
+        if not a.startswith("-"):
+            sources.append(a)
+        k += 1
+    return sources, dirs
+
 def backlog_guard(cmd, where, depth=0):
     """TASK-244's added blocks, run before every older check and exit path in main(): it refuses (exit 2) or returns,
     and never allows anything the checks after it would refuse. Every reading of the command (HOME/TMPDIR/USER as set
@@ -1259,8 +1281,12 @@ def main():
                 refuse_unresolved([p for p in paths if p[:1] in "$~`"], implicit_cwd=True)
             if head in DESTROY and any(covers_immutable(p, d) for p in paths):
                 refuse(IMMUTABLE_MSG + " To retire an old version use `op index retire <index_version>` (it refuses while a search record pins it).")
-            if head == "mv" and paths and (any(covers_immutable(p, d) for p in paths[:-1]) or any_rel(inside_immutable, paths[-1], d)):
-                refuse(IMMUTABLE_MSG)
+            if head == "mv" and paths:
+                sources, dests = mv_operands(args)
+                if has_data and any(re.search(r"[$`~]", t) for t in dests):  # an attached `-t$X` is never resolved
+                    refuse(UNRESOLVED_MSG)
+                if any(covers_immutable(p, d) for p in sources) or any(any_rel(inside_immutable, t, d) for t in dests):
+                    refuse(IMMUTABLE_MSG)
             if head in DEST_LAST and paths and any_rel(is_or_contains_immutable, paths[-1], d):
                 refuse(IMMUTABLE_MSG)
             if head == "rsync" and paths and any(rsync_deletes(a) for a in args) and covers_immutable(paths[-1], d):

@@ -6,6 +6,8 @@
 # a group it can't fully resolve is an error, never a pass, and every err row names the ::error:: it expects,
 # so a row can't pass on an incidental failure.
 # Usage: ./test-merge-group-gate.sh
+# mutate-scope: .claude/scripts/merge_group_gate.py .github/workflows/pr-gates.yml .github/workflows/test.yml
+# mutate-scope: .github/workflows/lint.yml .github/workflows/claude-tooling.yml
 set -u
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX
 SRC="$(cd "$(dirname "$0")/../../.." && pwd)"

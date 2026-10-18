@@ -703,6 +703,14 @@ HOME="$(dirname "$WT")" check_msg dev block no "cd ~/$WT_NAME && cd ~ && git com
 HOME="$(dirname "$WT")" check_msg dev allow no "cd ~/$WT_NAME && git -C $WT commit -m x"        # absolute -C
 HOME="$(dirname "$WT")" check_msg dev block no "cd ~/$WT_NAME && git push origin HEAD:dev"      # not a commit
 
+echo "TASK-253: env -C / sudo -D move only the command they run, read with every option the wrapper takes:"
+check_cwd main "$REPO" block "env -C \"$WT\" true; git commit -m x"         # the commit runs here, on main
+check_cwd main "$REPO" block "sudo -D \"$WT\" true; git commit -m x"
+check_cwd main "$REPO" allow "env -C \"$WT\" git commit -m x"               # the worktree's feature branch
+check_cwd main "$REPO" allow "sudo -nD \"$WT\" git commit -m x"             # a group ending in -D: the next word
+check_cwd main "$REPO" allow "env --ch=\"$WT\" git commit -m x"             # a unique prefix of --chdir
+check_cwd main "$WT"   block 'env -C "$OP_UNSET_253" git commit -m x'      # a directory it can't resolve
+
 echo "TASK-172: the payload reaches Python on stdin, so a command past ARG_MAX is parsed, not text-checked:"
 BIG=$(python3 -c 'import json; print(json.dumps({"tool_input":{"command":"git commit -m \"" + "x" * 1100000 + "\""}}))')
 check_json feature/x allow "1.1 MB git commit -m on a feature branch" "$BIG"

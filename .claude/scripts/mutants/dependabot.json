@@ -1040,14 +1040,14 @@
   {
     "label": "dependabot: prs: GitHub's file list ignored",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "        paths.add(f[\"filename\"])\n",
-    "new": "        pass\n"
+    "old": "    paths = {p for p in diff.split(\"\\0\") if p}\n    for f in api_pages(f\"repos/{REPO}/pulls/{number}/files\"):\n        paths.add(f[\"filename\"])\n",
+    "new": "    paths = {p for p in diff.split(\"\\0\") if p}\n    for f in api_pages(f\"repos/{REPO}/pulls/{number}/files\"):\n        pass\n"
   },
   {
     "label": "dependabot: prs: a rename's old path on GitHub ignored",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "        if f.get(\"previous_filename\"):\n",
-    "new": "        if False:\n"
+    "old": "    paths = {p for p in diff.split(\"\\0\") if p}\n    for f in api_pages(f\"repos/{REPO}/pulls/{number}/files\"):\n        paths.add(f[\"filename\"])\n        if f.get(\"previous_filename\"):\n",
+    "new": "    paths = {p for p in diff.split(\"\\0\") if p}\n    for f in api_pages(f\"repos/{REPO}/pulls/{number}/files\"):\n        paths.add(f[\"filename\"])\n        if False:\n"
   },
   {
     "label": "dependabot: prs: GitHub's and git's commits not compared",

@@ -3,10 +3,10 @@ id: TASK-254
 title: >-
   Mutation testing: compile-check mutants, reject ambiguous ones, and scope the
   remaining single-script tables
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-16 22:50'
-updated_date: '2026-10-16 23:17'
+updated_date: '2026-10-18 16:27'
 labels:
   - tooling
   - tests

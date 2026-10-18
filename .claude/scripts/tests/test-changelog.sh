@@ -6,6 +6,7 @@
 # REST-shaped fixture: no test reaches GitHub), and checks the exit status and the CHANGELOG.md it writes,
 # or that a refusal wrote nothing and printed no traceback.
 # Usage: ./test-changelog.sh
+# mutate-scope: .claude/scripts/changelog.py
 set -u
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX
 unset OP_DATA_DIR  # the script reads it as its default --data-dir, as op does
