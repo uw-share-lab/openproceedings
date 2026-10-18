@@ -11,7 +11,7 @@
 # `docker` entry bumps the digests (spec 08 §Deploy, TASK-149; .claude/scripts/check_digest_pins.py checks it).
 # The compose file, TLS and the api image are TASK-065.
 
-FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS build
+FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS build
 ARG OPENPROCEEDINGS_INSTANCE
 ARG NEXT_PUBLIC_TAKEDOWN_CONTACT=""
 ARG NEXT_PUBLIC_API_BASE_URL=""
@@ -28,7 +28,7 @@ RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY frontend/ frontend/
 RUN npm run build --workspace frontend
 
-FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
+FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
 WORKDIR /app
 COPY --from=build --chown=node:node /repo/frontend/.next/standalone ./
