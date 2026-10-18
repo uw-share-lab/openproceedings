@@ -24,7 +24,18 @@ stale version mentions.
   the edit) readable.
 - **An owner's acceptance belongs to one package at one version.** `OWNER_ACCEPTED` keys on `name@version`, so a
   later version of the accepted package is a new package again, and an accepted package still goes through the
-  registry checks (integrity, tarball, cooldown) like a changed entry. A row and a mutant pin each half.
+  registry checks (integrity, tarball, cooldown) like a changed entry. Review round 1 found the cooldown half
+  unpinned: passing the entry as its own previous version (`check_entry(rep, k, new[k], new[k])`) skipped the
+  cooldown and passed all 45 npm rows (qa-auditor, by hand in a scratch copy); a row and a mutant now pin it.
+- **A new package has no previous version to compare publisher, provenance or install scripts against**, so the
+  accepted path would have printed `ok` over a `postinstall`. Its `ok` line now names the publisher and provenance
+  (for the comment to match), an install script on it is a PROBLEM, and an alias entry (`"name"` in the lock entry)
+  is never accepted (security-reviewer, round 1).
+- **Every GitHub write in a local run goes out under the maintainer's own login**, so no comment, merge or reaction
+  proves the owner's hand; the procedure says so, and the allowlist PR's reviewers check that the URL names
+  exactly that `name@version` on that PR (security-reviewer, round 1).
+- **`$RUN` holds dev's checkers as extracted at step 0**, so an allowlist that merges mid-run changes nothing until
+  they are extracted again (docs-reviewer, round 1).
 - **Free ports picked one at a time collide with the e2e fixture server**, which also listens on API +1 and +2
   (`tight`, `plain`; TASK-182): `make e2e` failed with `EADDRINUSE` twice in the batch. Step 5 now picks an API
   port whose +1 and +2 are free and a web port 5 above it.

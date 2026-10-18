@@ -370,7 +370,7 @@ the PR head with its merge base on `origin/dev`, so a PR behind `dev` shows only
 | Ecosystem | Run `python3 $RUN/.claude/scripts/dependabot/…` |
 |---|---|
 | `uv` | `uv_lock.py`: each bumped package's sdist and wheel sha256 against PyPI's JSON API, every file on files.pythonhosted.org, nothing yanked, nothing younger than 7 days, the PEP 740 provenance publisher of every file against the previous version's; no added or removed package; `uv.lock` unchanged outside its package list, and each `pyproject.toml` changed only in specifiers of packages the lock moved; `tantivy` untouched |
-| `npm_and_yarn` | `npm_lock.py`: every changed lock entry's version, `resolved` and `integrity` against `npm view <pkg>@<ver>` on registry.npmjs.org (run outside the repo, so no `.npmrc` there applies), and its dependencies, `os`, `cpu` and `libc` against the manifest; nothing younger than 7 days; no package added or removed, none switched to another name or to a link; no field dropped; no install script appeared; publisher (`_npmUser`) and npm provenance (present, and from the same source repository) against the previous version's; the manifests and the lock's workspace entries changed only in dependency values of packages the lock moved, and equal to each other (step 3) |
+| `npm_and_yarn` | `npm_lock.py`: every changed lock entry's version, `resolved` and `integrity` against `npm view <pkg>@<ver>` on registry.npmjs.org (run outside the repo, so no `.npmrc` there applies), and its dependencies, `os`, `cpu` and `libc` against the manifest; nothing younger than 7 days; no package added or removed (a new package `OWNER_ACCEPTED` lists at that version is an `ok`, §10), none switched to another name or to a link; no field dropped; no install script appeared; publisher (`_npmUser`) and npm provenance (present, and from the same source repository) against the previous version's; the manifests and the lock's workspace entries changed only in dependency values of packages the lock moved, and equal to each other (step 3) |
 | `docker` | `docker_digest.py`: each changed Dockerfile differs only in its pins' `:tag@digest`; an anonymous token from the registry, then `HEAD /v2/<image>/manifests/<tag>` with the OCI-index `Accept` header must give the pinned digest, as an index; for a ghcr.io image, `gh attestation verify oci://<image>@<digest> --owner <org>` for the new and the previous pin: the new one must have an attestation by the previous pin's publisher (source repository and signing workflow, ref aside), and its earliest verified timestamp must be 7 days old or more; an image on another registry than Docker Hub and ghcr.io, a 0.x minor, or any new `python` tag, is a hard stop |
 | `github_actions` | `actions_pins.py`: each changed file differs only in its pins' `@<sha> # <tag>`; each new pin must be the commit the tag `<tag>` names (`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`, annotated tags peeled); no new action, no unpinned `uses:` (in the cloud: a PROBLEM, the proxy refuses the tag lookup) |
 
@@ -459,13 +459,14 @@ dependencies the tests load can't read the token (the cloud runs none of this, �
 | PR | Run |
 |---|---|
 | uv or npm | `make test` |
-| npm with `next` (or anything the frontend build reads) | also `OP_E2E_API_PORT=<api> OP_E2E_WEB_PORT=<web> make e2e`, with the two ports from the recipe below the table |
+| npm with `next` (or anything the frontend build reads) | also `make e2e` on the ports the recipe below the table picks, in the same Bash call as the recipe |
 | docker | `OP_HTTP_PORT=<free> OP_HTTPS_PORT=<free> deploy/smoke-test.sh` when `docker info` works (another compose stack of this repo running on the machine holds the internal network's default subnet, and `docker compose up` then fails with "Pool overlaps with other one on this address space": also set `OP_INTERNAL_SUBNET=172.30.91.0/24 OP_INTERNAL_IP_RANGE=172.30.91.128/25 OP_PROXY_ADDRESS=172.30.91.2`, or another free /24, `deploy/README.md`) |
 | every PR | `make lint`, `make tooling`, `make mutate-changed` (cloud: `make tooling` and `make mutate-changed` only) |
 
 The e2e fixture server listens on the API port and on the two after it (`tight` on +1, `plain` on +2; TASK-182),
 so two free ports picked one at a time can collide: a web port at API +1 failed `make e2e` with `EADDRINUSE`
-before any test ran, twice in the 2026-10-17/18 batch. This picks an API port whose +1 and +2 are free too, and a web port 5 above it:
+before any test ran, twice in the 2026-10-17/18 batch. This picks an API port whose +1 and +2 are free too, and a
+web port 5 above it, then runs `make e2e` on them. Run it as one Bash call: shell variables don't outlive the call.
 
 ```bash
 read -r API WEB < <(python3 -c 'import random, socket
@@ -481,6 +482,7 @@ while True:
     if all(map(free, (a, a + 1, a + 2, a + 5))):
         print(a, a + 5)
         break')
+env -u GH_TOKEN -u GITHUB_TOKEN GH_CONFIG_DIR=<an empty directory under $RUN> OP_E2E_API_PORT="$API" OP_E2E_WEB_PORT="$WEB" make e2e
 ```
 
 Where a run can't happen here, say so in the PR body and rely on CI instead, never on nothing: without Docker,
@@ -723,16 +725,22 @@ Don't push half-finished fixes to it, don't label it `no-learning`, and don't qu
 ### When the owner accepts a hard stop (local only)
 
 The owner may accept one hard stop on a PR (a new package, say) and have the run go on. Only the owner's own
-decision counts, given in this session or relayed by the lead with the owner's words; an agent's suggestion or
-a reviewer's APPROVE never does. Then:
+decision counts: given in this session, or relayed in the owner's words by the session that started this run. An
+agent's suggestion or a reviewer's APPROVE never does. Every write here goes out under the maintainer's own `gh`
+login, so nothing on GitHub tells the owner's hand from an agent's; the record below is what a later reader checks,
+not proof of who decided. Then:
 
 1. **Record it on the PR.** Post a comment as above stating the decision and its date, exactly what it covers
-   (the hard stop's PROBLEM line, check or Must, for one package at one version) and that every other check still
-   applies; read it back. Its URL (`https://github.com/uw-share-lab/openproceedings/pull/<n>#issuecomment-<id>`) is
+   (the hard stop's PROBLEM line, check or Must; for a package, that one package at one version, with its
+   publisher, provenance and install scripts) and that every other check still applies; read it back. Its URL (`https://github.com/uw-share-lab/openproceedings/pull/<n>#issuecomment-<id>`) is
    the record: step 8's body cites it under **Supply chain** (or **Tests**, **Review**), and the summary (§11) lists
    it. For a new npm package, `npm_lock.py`'s `OWNER_ACCEPTED` takes `"<name>@<version>": "<the comment URL>"`
-   through an ordinary PR into `dev`, never the Dependabot PR (whose shape check allows no tooling change); until
-   that merges, `npm_lock.py` still prints the one PROBLEM line, and the comment covers that line only.
+   through an ordinary PR into `dev`, never the Dependabot PR (whose shape check allows no tooling change). That
+   PR's reviewers open the URL and confirm it is a comment on that Dependabot PR naming exactly that
+   `name@version`. The acceptance never covers an install script: `npm_lock.py` reports one on an accepted package
+   as a PROBLEM. Until that PR merges, `npm_lock.py` still prints the one PROBLEM line, and the comment covers that
+   line only; once it merges, `git fetch origin dev` and extract dev's checkers into `$RUN` again (step 0's `git
+   archive` line), since `$RUN` holds the copy taken at step 0.
 2. **Re-run the checks on the head to be attested.** The acceptance covers that one finding, so run the checker
    that reported it again on the head: every line but the accepted one must be clean (exit 0 once the package is
    in `OWNER_ACCEPTED`). Then every step after the one that stopped runs as usual on that head, and step 5's tests

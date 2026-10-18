@@ -980,8 +980,8 @@
   {
     "label": "dependabot: npm: the owner allowlist is never read",
     "file": ".claude/scripts/dependabot/npm_lock.py",
-    "old": "            if accepted := OWNER_ACCEPTED.get(f\"{name}@{version}\"):\n",
-    "new": "            if accepted := None:\n"
+    "old": "            if accepted:\n",
+    "new": "            if False:\n"
   },
   {
     "label": "dependabot: npm: the owner allowlist matches the name at any version",
@@ -1000,6 +1000,30 @@
     "file": ".claude/scripts/dependabot/npm_lock.py",
     "old": "if old_v not in (None, new_v) else",
     "new": "if old_v != new_v else"
+  },
+  {
+    "label": "dependabot: npm: an owner-accepted package skips the cooldown",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "                check_entry(rep, k, None, new[k])\n",
+    "new": "                check_entry(rep, k, new[k], new[k])\n"
+  },
+  {
+    "label": "dependabot: npm: an owner-accepted alias is accepted",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "None if \"name\" in new[k] else ",
+    "new": ""
+  },
+  {
+    "label": "dependabot: npm: an owner-accepted package's install script passes",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "    if old is None and install_scripts(m):  # an owner-accepted",
+    "new": "    if False:  # an owner-accepted"
+  },
+  {
+    "label": "dependabot: npm: an owner-accepted package's provenance not shown",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "prov = f\", provenance {provenance_repo(m) or 'none'}\" if old is None else \"\"",
+    "new": "prov = \"\""
   },
   {
     "label": "npm specs: neither file passes",

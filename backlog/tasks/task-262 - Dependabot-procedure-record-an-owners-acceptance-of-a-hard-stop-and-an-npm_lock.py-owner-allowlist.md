@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-18 14:16'
-updated_date: '2026-10-18 14:27'
+updated_date: '2026-10-18 15:04'
 labels:
   - tooling
   - dependabot
@@ -31,4 +31,6 @@ Found by the 2026-10-17/18 Dependabot batch (#163, #165): procedure §10 has no 
 
 <!-- SECTION:NOTES:BEGIN -->
 dependabot-review §10 gains 'When the owner accepts a hard stop (local only)': only the owner's own decision counts; record = a PR comment saying exactly what it covers (its URL cited in the body and in §11's merged line); re-run the reporting checker on the head (every other line clean) and every step after the stop, plus steps 5/6 if a commit was added after them; attest only that head, a new head is a new run. Intro and Hard stops section point to it; spec 08 §Dependabot says the same. npm_lock.py: OWNER_ACCEPTED (name@version -> comment URL), seeded with @codemirror/streamparser@6.0.0 -> PR #165 comment 6245774665 (verified: posted by the owner's account 2026-10-18). An accepted new package at that exact version is an ok line naming the URL and still goes through check_entry against the registry; another version is a new-package PROBLEM. A new entry's label no longer reads 'None -> version'. Case rows (dependabot_cases.py): accepted at that version (ok + matches the registry), another version (PROBLEM), accepted but integrity differs (PROBLEM). Four mutants in mutants/dependabot.json (allowlist never read, name-only match, registry check skipped, label).
+
+Review round 1: the accepted path also refuses an alias entry, names publisher and provenance in its ok line, and reports any install script as a PROBLEM; rows for provenance, alias, cooldown and install script, and mutants for each (8 in all). §10 says GitHub writes go out under the maintainer's login (no GitHub act proves the owner's hand), the comment lists publisher/provenance/install scripts, the allowlist PR's reviewers confirm the URL, and 's checkers are re-extracted after it merges; step 2's npm row names the exception; step 5's recipe runs make e2e in the same call.
 <!-- SECTION:NOTES:END -->

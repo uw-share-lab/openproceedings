@@ -30,9 +30,12 @@ workspace entry that isn't an object, a workspace entry missing from the lock (o
 repaired in the PR: a manifest/lock pin that differs, a dropped `libc`.
 
 `OWNER_ACCEPTED` lists the new packages the owner has accepted, each as `name@version` with the URL of the PR
-comment that records the decision (/dependabot-review §10, TASK-262). Such a package, at exactly that version, is
-an `ok` line naming the comment instead of the new-package PROBLEM, and is still checked against the registry like
-a changed entry; any other version of it is a new package again.
+comment that records the decision (/dependabot-review §10, TASK-262). Such a package, at exactly that version and
+under its own name (not an alias), is an `ok` line naming the comment instead of the new-package PROBLEM, and is
+still checked against the registry like a changed entry, cooldown included; its `ok` line names its publisher and
+provenance, and an install script is a PROBLEM (the acceptance never covers one). Any other version of it is a new
+package again. An entry stays after its PR merges, as the record; it matters again only if the package leaves the
+lock and comes back at that version.
 """
 
 from __future__ import annotations
@@ -195,8 +198,13 @@ def check_entry(rep: Report, key: str, old: Entry | None, new: Entry) -> None:
             rep.problem(f"{label}: {old_v} had npm provenance ({was}), {new_v} has none")
         elif was and now != was:
             rep.problem(f"{label}: provenance repository changed from {was} to {now}")
+    if old is None and install_scripts(m):  # an owner-accepted new package (OWNER_ACCEPTED)
+        rep.problem(
+            f"{label}: install script(s) {', '.join(sorted(install_scripts(m)))}: never owner-accepted"
+        )
     if len(rep.problems) + len(rep.fixes) == found:
-        rep.ok(f"{label}: matches the registry (publisher {npm_user(m)!r})")
+        prov = f", provenance {provenance_repo(m) or 'none'}" if old is None else ""
+        rep.ok(f"{label}: matches the registry (publisher {npm_user(m)!r}{prov})")
 
 
 def without_deps(doc: dict[str, Any]) -> dict[str, Any]:
@@ -310,7 +318,8 @@ def main() -> None:
         name = package_name(k, new[k])
         if name not in versions[0]:
             version = new[k].get("version")
-            if accepted := OWNER_ACCEPTED.get(f"{name}@{version}"):
+            accepted = None if "name" in new[k] else OWNER_ACCEPTED.get(f"{name}@{version}")
+            if accepted:
                 rep.ok(f"{k} {version}: added to the lock, a new package the owner accepted ({accepted})")
                 check_entry(rep, k, None, new[k])
             else:

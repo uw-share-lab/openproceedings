@@ -143,7 +143,7 @@ describe("incremental reparsing after an edit gives the same tokens as a fresh p
       tree = parser.parse(doc, fragments);
       if ([...subtrees(tree)].some((t) => before.has(t))) reused += 1;
       const [got, want] = [tokens(tree), tokens(parser.parse(doc))];
-      // toEqual on ~4k tokens per step is slow; it runs only to show a difference the cheap compare found
+      // a cheap compare first; toEqual runs only to show a difference, with the step in the message
       if (JSON.stringify(got) !== JSON.stringify(want)) expect(got, label).toEqual(want);
       fragments = TreeFragment.addTree(tree, fragments);
     }
