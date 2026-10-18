@@ -3,7 +3,7 @@
 **Key lesson:** When the nightly reports a survivor, apply that one mutant and run its table on the reporting OS before trusting the old row. Write each killing row so that only the check under test can block it: use a fallback name that can never become known, give it well-formed and present harmless inputs, and keep paths inside the table's own root.
 
 - **Date:** 2026-10-18 · **Task:** task-261 · **Area:** tooling
-- **Artifacts:** `.claude/hooks/tests/test-enforce-pr-workflow.sh` (the `unknown-wrapper` rows), `.claude/hooks/tests/test-openproceedings-gates.sh` (the TASK-261 rows), `.claude/skills/testing-standards/SKILL.md` §Mutation testing; nightly runs 38736208920, 38900169100, 39029318530
+- **Artifacts:** `.claude/hooks/enforce-pr-workflow.sh` (`git_calls`' docstring example), `.claude/hooks/tests/test-enforce-pr-workflow.sh` (the `unknown-wrapper` rows), `.claude/hooks/tests/test-openproceedings-gates.sh` (the TASK-261 rows), `.claude/skills/testing-standards/SKILL.md` §Mutation testing; nightly runs 38736208920, 38900169100, 39029318530
 
 ## What we set out to do
 Make the scheduled nightly green for the v0.4.0 release. It had been red since 2026-10-15 in its `mutate` shards
@@ -37,11 +37,12 @@ only, with nine survivors in the hook gates.
 ## Dead ends — don't repeat these
 - Re-running a red nightly. The same mutants survived every night (deterministic, no shard timeouts), as the
   2026-10-11 learning warned.
-- Trusting that a row still kills a mutant because its label names it. Six of the nine had a row written for them.
+- Trusting that a row still kills a mutant because its label or comment names it. Most of the nine had a row written for them.
 
 ## Decisions (and what would change them)
-- Keep the `caffeinate` rows (they now test the known-wrapper path) and add `unknown-wrapper` rows for the fallback.
-  This would change only if `git_calls`' fallback were removed.
+- Keep the `caffeinate` rows as regression rows: they can't tell the walk's unwrapping from `git_calls`' fallback,
+  and the known-wrapper mutants are killed by the TASK-248 rows. Add `unknown-wrapper` rows for the fallback. This
+  would change only if `git_calls`' fallback were removed.
 - Row verdicts (exit 2 or 0) are the assertion. The tables don't match stderr, and each new row's other inputs
   are made harmless so that only the check under test decides the verdict.
 
