@@ -59,7 +59,8 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
   directly read the same two). Locally the config reuses a server already on its port, so with another
   instance on 8000/3000 an unset run would test *that* instance: set both variables. The owner's dev servers
   run `main`-branch code on the real index, so from a worktree an unset run failed all 66 tests; always run
-  `OP_E2E_API_PORT=8100 OP_E2E_WEB_PORT=3100 make e2e`.
+  `OP_E2E_API_PORT=8100 OP_E2E_WEB_PORT=3100 make e2e`. The fixture server also listens on the API port + 1 and
+  + 2 (`tight`, `plain`; TASK-182), so the web port never sits there (`/dependabot-review` step 5 picks both).
 
 ## Rules
 1. **TDD.** Write the failing test first, watch it fail for the right reason, then implement. A bug fix

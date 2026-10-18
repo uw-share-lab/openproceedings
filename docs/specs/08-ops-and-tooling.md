@@ -322,6 +322,13 @@ with a comment for the owner, a PR with:
   that shows records unchanged needs the owner's `data/`. A new digest for the same `python` tag is merged like
   any other.
 
+The owner may accept one of these hard stops on a PR, and a local run then goes on with it: the decision is
+recorded as a comment on the PR saying exactly what it covers, the checks run again on the head to be attested,
+and only that head is attested (procedure §10, "When the owner accepts a hard stop"). `npm_lock.py`'s
+`OWNER_ACCEPTED` lists the new npm packages accepted that way, each as `name@version` with that comment's URL; such
+a package, at that version only, is an `ok` line naming the comment and is still checked against the registry
+(TASK-262).
+
 The checkers (and `prs.py check`) print `ok`, `FIX` (the routine repairs it) or `PROBLEM` (a hard stop) per finding,
 and exit 0, 3 (only FIX lines), 1 (a PROBLEM) or 2 (the check couldn't run, also a hard stop). Every outside call
 goes through `git`, `curl`, `npm` or `gh`, so the case table `.claude/scripts/tests/test-dependabot.sh` (in `make

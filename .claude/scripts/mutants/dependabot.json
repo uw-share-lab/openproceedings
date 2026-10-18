@@ -978,6 +978,30 @@
     "new": "        if entry is None:\n"
   },
   {
+    "label": "dependabot: npm: the owner allowlist is never read",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "            if accepted := OWNER_ACCEPTED.get(f\"{name}@{version}\"):\n",
+    "new": "            if accepted := None:\n"
+  },
+  {
+    "label": "dependabot: npm: the owner allowlist matches the name at any version",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "OWNER_ACCEPTED.get(f\"{name}@{version}\")",
+    "new": "next((u for p, u in OWNER_ACCEPTED.items() if p.startswith(f\"{name}@\")), None)"
+  },
+  {
+    "label": "dependabot: npm: an owner-accepted package skips the registry check",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "                check_entry(rep, k, None, new[k])\n",
+    "new": "                pass\n"
+  },
+  {
+    "label": "dependabot: npm: a new entry's label reads None -> version",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "if old_v not in (None, new_v) else",
+    "new": "if old_v != new_v else"
+  },
+  {
     "label": "npm specs: neither file passes",
     "file": ".claude/scripts/dependabot/npm_specs.py",
     "old": "            return [f\"no package.json or package-lock.json in {root}: nothing to compare (a wrong --root?)\"]\n",

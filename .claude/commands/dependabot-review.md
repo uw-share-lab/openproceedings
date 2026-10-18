@@ -11,7 +11,8 @@ runs from their own clone. It assumes nothing from an earlier session: a fresh c
 the owner's machine. Every step below is required. **Where it runs decides what it may do** (§Where it runs):
 
 - **Locally** (a maintainer's clone with their own `gh` login), a PR that passes every step is merged through the
-  queue, and a PR that hits a **hard stop** is never merged: it is left open with a comment for the owner (§10).
+  queue, and a PR that hits a **hard stop** is never merged: it is left open with a comment for the owner (§10),
+  unless the owner accepts that one hard stop, recorded on the PR (§10, "When the owner accepts a hard stop").
 - **In the cloud** (the weekly routine) the run is **notify-only** (the owner's decision, 2026-10-16, decision-048):
   it runs every check a cloud session can, and reports through its run summary (§11), which the routine's push
   notification carries. It makes **no GitHub write**: no comment, label, PR-body edit or attestation, no queueing or
@@ -23,7 +24,7 @@ When unsure, leave it open. The end of the run is a summary (§11).
 ## Hard stops: leave the PR open, comment (locally), never merge
 
 In the cloud a hard stop is reported in the summary instead of a comment (notify-only); nothing below changes what
-counts as one.
+counts as one. Only the owner can accept a hard stop, one at a time, in a local run (§10).
 
 - a commit on the branch that isn't Dependabot's (signed and verified), a file outside what its ecosystem's
   update touches, or any change in a file beyond its dependency versions and pins;
@@ -458,9 +459,29 @@ dependencies the tests load can't read the token (the cloud runs none of this, �
 | PR | Run |
 |---|---|
 | uv or npm | `make test` |
-| npm with `next` (or anything the frontend build reads) | also `OP_E2E_API_PORT=<free> OP_E2E_WEB_PORT=<free> make e2e` (free ports: `python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])'`, twice) |
+| npm with `next` (or anything the frontend build reads) | also `OP_E2E_API_PORT=<api> OP_E2E_WEB_PORT=<web> make e2e`, with the two ports from the recipe below the table |
 | docker | `OP_HTTP_PORT=<free> OP_HTTPS_PORT=<free> deploy/smoke-test.sh` when `docker info` works (another compose stack of this repo running on the machine holds the internal network's default subnet, and `docker compose up` then fails with "Pool overlaps with other one on this address space": also set `OP_INTERNAL_SUBNET=172.30.91.0/24 OP_INTERNAL_IP_RANGE=172.30.91.128/25 OP_PROXY_ADDRESS=172.30.91.2`, or another free /24, `deploy/README.md`) |
 | every PR | `make lint`, `make tooling`, `make mutate-changed` (cloud: `make tooling` and `make mutate-changed` only) |
+
+The e2e fixture server listens on the API port and on the two after it (`tight` on +1, `plain` on +2; TASK-182),
+so two free ports picked one at a time can collide: a web port at API +1 failed `make e2e` with `EADDRINUSE`
+before any test ran, twice in the 2026-10-17/18 batch. This picks an API port whose +1 and +2 are free too, and a web port 5 above it:
+
+```bash
+read -r API WEB < <(python3 -c 'import random, socket
+def free(p):
+    with socket.socket() as s:
+        try:
+            s.bind(("127.0.0.1", p))
+        except OSError:
+            return False
+        return True
+while True:
+    a = random.randrange(20000, 60000, 10)
+    if all(map(free, (a, a + 1, a + 2, a + 5))):
+        print(a, a + 5)
+        break')
+```
 
 Where a run can't happen here, say so in the PR body and rely on CI instead, never on nothing: without Docker,
 CI's `web-image` check must be green on the PR (it builds the web image only; say the api image wasn't built);
@@ -699,6 +720,27 @@ Then read it back and compare (§Where it runs, "Read back every write of text")
 
 Don't push half-finished fixes to it, don't label it `no-learning`, and don't queue it.
 
+### When the owner accepts a hard stop (local only)
+
+The owner may accept one hard stop on a PR (a new package, say) and have the run go on. Only the owner's own
+decision counts, given in this session or relayed by the lead with the owner's words; an agent's suggestion or
+a reviewer's APPROVE never does. Then:
+
+1. **Record it on the PR.** Post a comment as above stating the decision and its date, exactly what it covers
+   (the hard stop's PROBLEM line, check or Must, for one package at one version) and that every other check still
+   applies; read it back. Its URL (`https://github.com/uw-share-lab/openproceedings/pull/<n>#issuecomment-<id>`) is
+   the record: step 8's body cites it under **Supply chain** (or **Tests**, **Review**), and the summary (§11) lists
+   it. For a new npm package, `npm_lock.py`'s `OWNER_ACCEPTED` takes `"<name>@<version>": "<the comment URL>"`
+   through an ordinary PR into `dev`, never the Dependabot PR (whose shape check allows no tooling change); until
+   that merges, `npm_lock.py` still prints the one PROBLEM line, and the comment covers that line only.
+2. **Re-run the checks on the head to be attested.** The acceptance covers that one finding, so run the checker
+   that reported it again on the head: every line but the accepted one must be clean (exit 0 once the package is
+   in `OWNER_ACCEPTED`). Then every step after the one that stopped runs as usual on that head, and step 5's tests
+   and step 6's reviewers run again if this run added a commit after they ran.
+3. **Attest only that head.** Steps 7 and 8 run for the head of item 2, and `--attest --pr <n>` names it alone.
+   A new head (a fix, a Dependabot rebase) is a new run: the acceptance still holds only if the accepted package
+   and version are unchanged on it, and items 2 and 3 run again.
+
 ## 11. Summary (the run log)
 
 End with exactly this block, and nothing after it. **Locally:**
@@ -706,7 +748,7 @@ End with exactly this block, and nothing after it. **Locally:**
 ```
 dependabot-review <YYYY-MM-DD>: <k> PR(s) reviewed
 merged:
-- #<n> <title> (<ecosystem>; <from → to, one line>)
+- #<n> <title> (<ecosystem>; <from → to, one line>[; owner accepted <the hard stop, one line>: <the comment URL>])
 left open:
 - #<n> <title>: <the hard stop, one line> (comment posted)
 not reviewed:

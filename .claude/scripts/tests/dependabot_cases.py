@@ -626,6 +626,38 @@ def _(c: Case) -> None:
     c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM node_modules/x 1\.0\.0: added")
 
 
+# npm_lock.OWNER_ACCEPTED's seed: 6.0.0, PR #165's owner comment (TASK-262)
+ACCEPTED = "@codemirror/streamparser"
+
+
+def npm_added(c: Case, name: str, v: str, **extra: Any) -> list[str]:
+    view(c, "next", "16.3.8")
+    view(c, name, v)
+    new = {"next": entry("next", "16.3.8"), name: entry(name, v, **extra)}
+    return npm_case(c, {"next": entry("next", "16.3.8")}, new)
+
+
+@row("npm: a new package the owner accepted, at that version")
+def _(c: Case) -> None:
+    args = npm_added(c, ACCEPTED, "6.0.0")
+    c.expect("npm_lock.py", args, OK, r"^ok +node_modules/@codemirror/streamparser 6\.0\.0: added to the lock, a new "
+             r"package the owner accepted \(https://github\.com/uw-share-lab/openproceedings/pull/165"
+             r"#issuecomment-6245774665\)$")  # fmt: skip
+    c.expect("npm_lock.py", args, OK, r"^ok +@codemirror/streamparser 6\.0\.0: matches the registry")
+
+
+@row("npm: an owner-accepted package at another version is a new package")
+def _(c: Case) -> None:
+    args = npm_added(c, ACCEPTED, "6.0.1")
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM node_modules/@codemirror/streamparser 6\.0\.1: added")
+
+
+@row("npm: an owner-accepted package is still checked against the registry")
+def _(c: Case) -> None:
+    args = npm_added(c, ACCEPTED, "6.0.0", integrity="sha512-x")
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM @codemirror/streamparser 6\.0\.0: integrity differs")
+
+
 @row("npm: a removed package")
 def _(c: Case) -> None:
     args = npm_case(

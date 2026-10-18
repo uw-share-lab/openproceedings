@@ -531,7 +531,7 @@ echo "== check_uv_pin.py (every CI setup-uv installs the api image's uv, TASK-25
 uvpin() { fresh; cp -R "$SRC/.github" "$TMP/r/.github"; mkdir -p "$TMP/r/deploy"; cp "$SRC/deploy/api.Dockerfile" "$TMP/r/deploy/"; }
 UVV=$(sed -n 's|^FROM ghcr\.io/astral-sh/uv:\([0-9.]*\)@.*|\1|p' "$SRC/deploy/api.Dockerfile")
 [[ $UVV =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "check_uv_pin rows: can't read the api image's uv tag ('$UVV')"; exit 1; }
-UVA="astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7"
+UVA="astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884" # the workflows' pin (v10.3.0); any sha would do
 uvwf() { uvpin; printf 'jobs:\n  j:\n    steps:\n%s\n' "$1" > "$TMP/r/.github/workflows/x.yml"; }
 # expect_uv <ok|ERE> <label> — ok: exits 0; otherwise exits 1 AND prints a `uv pin: ` line matching <ERE>, so a
 # crash or an unrelated problem can't pass the row
