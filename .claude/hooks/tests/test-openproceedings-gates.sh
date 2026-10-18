@@ -2255,6 +2255,8 @@ check $P block "flock backlog/tasks/x.lock eval true"           "$(payload_bl 'f
 check $P block "data-only: flock data/snapshots/x.lock env -C /tmp true (created where flock runs)" "$(payload_do 'flock data/snapshots/x.lock env -C /tmp true')"
 check $P allow "cd backlog/tasks && flock -n 9 (a file descriptor, not a file)" "$(payload_bl 'cd backlog/tasks && flock -n 9')"
 check $P allow "data-only: flock <lock> -c 'ls data/snapshots'" "$(payload_do "flock /tmp/op.lock -c 'ls data/snapshots'")"
+# protect-data-dir refuses every command it can't parse, so this is the row that tells --command from a stray option
+check $P allow "data-only: flock <lock> --command 'ls data/snapshots'" "$(payload_do "flock /tmp/op.lock --command 'ls data/snapshots'")"
 check $P allow "data-only: caffeinate -t 5 ls data/snapshots"   "$(payload_do 'caffeinate -t 5 ls data/snapshots')"
 check $P block "xcrun git restore -s dev <task>"                "$(payload_bl "xcrun git restore -s dev $T1")"
 check $P block "flock <lock> -c 'git restore -s dev <task>'"    "$(payload_bl "flock /tmp/op.lock -c 'git restore -s dev $T1'")"

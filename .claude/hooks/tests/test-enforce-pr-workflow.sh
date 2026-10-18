@@ -711,6 +711,7 @@ check_cwd main "$REPO" allow "env -C \"$WT\" git commit -m x"               # th
 check_cwd main "$REPO" allow "sudo -nD \"$WT\" git commit -m x"             # a group ending in -D: the next word
 check_cwd main "$REPO" allow "env --ch=\"$WT\" git commit -m x"             # a unique prefix of --chdir
 check_cwd main "$WT"   block 'env -C "$OP_UNSET_253" git commit -m x'      # a directory it can't resolve
+check_cwd main "$WT"   allow 'env -C . git commit -m x'                    # resolved from the call's cwd, not the hook's
 
 echo "TASK-172: the payload reaches Python on stdin, so a command past ARG_MAX is parsed, not text-checked:"
 BIG=$(python3 -c 'import json; print(json.dumps({"tool_input":{"command":"git commit -m \"" + "x" * 1100000 + "\""}}))')
