@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-16 22:50'
-updated_date: '2026-10-18 20:15'
+updated_date: '2026-10-18 22:31'
 labels:
   - tooling
 dependencies: []
@@ -44,4 +44,6 @@ Related (not an AC), decided here: python3 -c / heredoc programs that write unde
 2026-10-18, review round 1: _anchor no longer raises: a leading $PWD/${PWD}/~+ is the shell's directory, another leading $ or ~ target is left for the gate (a ~/x or $HOME/x redirect under env -C was a ParseError, which sent block-ai-attribution to its text-only scan). nice's old form also takes --N and -+N; env gains -a/--argv0. protect-data-dir: target_operands walks a short group as getopt does (a value letter, -S's suffix or install's -g/-m/-o, ends it, so mv -St DIR keeps DIR a source), every word after -- is an operand, and the attached -t$X refusal reads only attached -t values (mv a a~ was refused).
 
 2026-10-18, review round 2: the per-target rewrite (_anchor) is gone. A command run under env -C / sudo -D has its redirects yielded first, as a command of none in the shell's directory (as sh -c's and eval's are), so a $X holding a relative path (X=data/snapshots/s1; env -C /tmp true > $X/f) is judged where the shell opens it. protect-data-dir's target_operands also skips another option's separate value (-S X, -bS X, --suffix/--mode/--owner/--group/--strip-program/--sparse/--no-preserve X), so mv -S -t .. x has no -t.
+
+2026-10-18, review round 3: protect-data-dir reads cp, mv, ln and install each from its own GNU option table (COPY_OPTIONS: short getopt string, long options with flag/value/optional), long options resolved as getopt_long does (exact name, then unique prefix; ambiguous refused; unknown stays a word), so --strip is a flag for mv/cp (prefix of --strip-trailing-slashes) and install (exact). cmdparse tracks a git config write in an env -C command's redirects before yielding them in the shell's directory (env -C /tmp true >> .git/config; git p ... is FailClosed).
 <!-- SECTION:NOTES:END -->

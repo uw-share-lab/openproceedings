@@ -2334,6 +2334,17 @@ check $P block "data-only: mv -S -t .. ../moved (-t is -S's value)" "$(payload_d
 check $P block "data-only: mv -bS -t .. ../moved"               "$(payload_do 'mv -bS -t .. ../moved')"
 check $P block "data-only: mv --suffix -t .. ../moved"          "$(payload_do 'mv --suffix -t .. ../moved')"
 check $P block "data-only: mv -S X -t data/snapshots/s1 src/x.md" "$(payload_do 'mv -S X -t data/snapshots/s1 src/x.md')"
+# each command's own long options, resolved as getopt_long does: an exact name wins, then a unique prefix
+check $P block "data-only: cp --strip -t data/snapshots/s1 src/x.md (cp's --strip-trailing-slashes)" "$(payload_do 'cp --strip -t data/snapshots/s1 src/x.md')"
+check $P block "data-only: install --strip -t data/indexes/i1 src/x.md (install's --strip, exact)" "$(payload_do 'install --strip -t data/indexes/i1 src/x.md')"
+check $P block "data-only: install --strip -t data/snapshots/s1 src/x.md" "$(payload_do 'install --strip -t data/snapshots/s1 src/x.md')"
+check $P block "data-only: install --strip-program x -t data/indexes/i1 f" "$(payload_do 'install --strip-program x -t data/indexes/i1 f')"
+check $P block "data-only: mv --strip -t data/snapshots/s1 f"   "$(payload_do 'mv --strip -t data/snapshots/s1 f')"
+check $P block "data-only: mv --strip data/snapshots /tmp/x (a flag: the source stays)" "$(payload_do 'mv --strip data/snapshots /tmp/x')"
+check $P block "data-only: mv --str data/snapshots/ /tmp/x"     "$(payload_do 'mv --str data/snapshots/ /tmp/x')"
+check $P block "data-only: cp --str -r src -t data/indexes/i1" "$(payload_do 'cp --str -r src -t data/indexes/i1')"
+check $P allow "data-only: install --strip -t /tmp src/x.md (an exact name is no ambiguity)" "$(payload_do 'install --strip -t /tmp src/x.md')"
+check $P block "data-only: mv --s -t .. ../moved (--strip-… or --suffix: ambiguous)" "$(payload_do 'mv --s -t .. ../moved')"
 check $P block "data-only: mv -t\$UNSET '\$UNSET' src/x.md (attached, and a word of the same text)" "$(payload_do "mv -t\"\$OP_UNSET_253\" '\$OP_UNSET_253' src/x.md")"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"

@@ -5672,7 +5672,7 @@
  {
   "label": "pdd backlog guard (TASK-244 additive): -t not read",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        dirs = target_dirs(args) if head in (\"cp\", \"mv\", \"ln\", \"install\") else []",
+  "old": "        dirs = target_dirs(head, args) if head in COPY_OPTIONS else []",
   "new": "        dirs = []"
  },
  {
@@ -5696,26 +5696,26 @@
  {
   "label": "pdd backlog guard (TASK-244 additive): -t cluster not read",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        kind, attached = short_group(a) if a.startswith(\"-\") and not a.startswith(\"--\") else (None, \"\")",
-  "new": "        kind, attached = short_group(a) if a == \"-t\" else (None, \"\")"
+  "old": "            for n, letter in enumerate(a[1:], start=2):",
+  "new": "            for n, letter in enumerate(a[1:2], start=2):"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): -t attached not read",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        if letter == \"t\":\n            return \"t\", word[n:]\n",
-  "new": "        if letter == \"t\":\n            return \"t\", \"\"\n"
+  "old": "                    value = a[n:]\n",
+  "new": "                    value = \"\"\n"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): --target-directory separate not read",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            if not eq:\n                k += 1\n                value = args[k] if k < len(args) else \"\"\n",
-  "new": ""
+  "old": "            if kind == \"value\" and not eq:\n",
+  "new": "            if kind == \"value\" and not eq and names != [\"target-directory\"]:\n"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): --target-directory prefix not read",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "len(name) >= len(\"--tar\") and \"--target-directory\".startswith(name):\n            if not eq:",
-  "new": "name == \"--target-directory\":\n            if not eq:"
+  "old": "            names = [given] if given in long_kinds else [n for n in long_kinds if n.startswith(given)]\n            if len(names) > 1:\n                refuse(f\"Blocked: {a.partition",
+  "new": "            names = [given] if given in long_kinds else []\n            if len(names) > 1:\n                refuse(f\"Blocked: {a.partition"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): sponge/touch allowed",
@@ -7179,8 +7179,8 @@
  {
   "label": "cmdparse: env -C's redirects are opened in its directory, not the shell's (TASK-253)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "            if redirects:\n                yield _context(Argv([]), state), state[\"dir\"], redirects\n                redirects = []\n            shell_dir",
-  "new": "            shell_dir"
+  "old": "                yield _context(Argv([]), state), state[\"dir\"], redirects\n                redirects = []\n",
+  "new": ""
  },
  {
   "label": "cmdparse: sh -c drops its own redirects (TASK-253)",
@@ -7193,12 +7193,6 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "            if redirects:  # `eval",
   "new": "            if False:  # `eval"
- },
- {
-  "label": "pdd mv -t (TASK-253): the -t directory read as a source",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        elif kind == \"t\":\n            if not attached:\n                k += 1\n",
-  "new": "        elif kind == \"t\":\n            if False:\n                k += 1\n"
  },
  {
   "label": "pdd mv -t (TASK-253): a source under -t that covers data/snapshots not refused",
@@ -7239,8 +7233,8 @@
  {
   "label": "pdd mv -t (TASK-253 review): -S's suffix read as -t",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        if letter in COPY_VALUE_LETTERS:\n            return \"value\", word[n:]\n",
-  "new": ""
+  "old": "    \"mv\": (\"bfintuvS:t:TZ\",",
+  "new": "    \"mv\": (\"bfintuvSt:TZ\","
  },
  {
   "label": "pdd mv -t (TASK-253 review): -- doesn't end the options",
@@ -7251,13 +7245,31 @@
  {
   "label": "pdd mv -t (TASK-253 review): a short option's separate value read as a word",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            k += 0 if kind == \"value\" and attached else 1  # the value",
-  "new": "            k += 0  # the value"
+  "old": "                    if not value:\n                        k += 1\n",
+  "new": "                    if False:\n                        k += 1\n"
  },
  {
   "label": "pdd mv -t (TASK-253 review): --suffix's separate value read as a word",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "a.startswith(\"--\") and not eq and len(name) > 3 and any(o.startswith(name) for o in COPY_VALUE_LONGS)",
-  "new": "False"
+  "old": "            if kind == \"value\" and not eq:\n",
+  "new": "            if kind == \"value\" and not eq and names == [\"target-directory\"]:\n"
+ },
+ {
+  "label": "pdd mv -t (TASK-253 review 3): an exact long name doesn't win over its longer ones",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            names = [given] if given in long_kinds else [n for n in long_kinds if n.startswith(given)]\n            if len(names) > 1:\n",
+  "new": "            names = [n for n in long_kinds if n.startswith(given)]\n            if len(names) > 1:\n"
+ },
+ {
+  "label": "pdd mv -t (TASK-253 review 3): an ambiguous long prefix takes the first match",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if len(names) > 1:\n                refuse(f\"Blocked: {a.partition",
+  "new": "            if False:\n                refuse(f\"Blocked: {a.partition"
+ },
+ {
+  "label": "cmdparse: env -C's redirect into .git/config not tracked (TASK-253 review 3)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                if writes_git_config(Argv([]), redirects, state):\n                    state[\"config_written\"] = True\n                yield _context",
+  "new": "                yield _context"
  }
 ]

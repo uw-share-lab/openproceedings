@@ -2127,6 +2127,9 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
             # `env -C`/`sudo -D` move the command they run and no later one (TASK-253). The shell opens its redirects
             # where it is, before env runs: they go first, as a command of none there (as `sh -c`'s and eval's do)
             if redirects:
+                # what they write is tracked here, before they leave the command (`>> .git/config`: review round 3)
+                if writes_git_config(Argv([]), redirects, state):
+                    state["config_written"] = True
                 yield _context(Argv([]), state), state["dir"], redirects
                 redirects = []
             shell_dir = (state["dir"], state.get("dir_unknown", False))
