@@ -731,9 +731,9 @@ login, so nothing on GitHub tells the owner's hand from an agent's; the record b
 not proof of who decided. Then:
 
 1. **Record it on the PR.** Post a comment as above stating the decision and its date, exactly what it covers
-   (the hard stop's PROBLEM line, check or Must; for a package, that one package at one version, with its
-   publisher, provenance and install scripts) and that every other check still applies; read it back. Its URL (`https://github.com/uw-share-lab/openproceedings/pull/<n>#issuecomment-<id>`) is
-   the record: step 8's body cites it under **Supply chain** (or **Tests**, **Review**), and the summary (§11) lists
+   (the hard stop's PROBLEM line, check or Must; for a package, that one package at one version, naming its
+   publisher and provenance, and that it has no install script) and that every other check still applies; read
+   it back. Its URL (`https://github.com/uw-share-lab/openproceedings/pull/<n>#issuecomment-<id>`) is the record: step 8's body cites it under **Supply chain** (or **Tests**, **Review**), and the summary (§11) lists
    it. For a new npm package, `npm_lock.py`'s `OWNER_ACCEPTED` takes `"<name>@<version>": "<the comment URL>"`
    through an ordinary PR into `dev`, never the Dependabot PR (whose shape check allows no tooling change). That
    PR's reviewers open the URL and confirm it is a comment on that Dependabot PR naming exactly that
