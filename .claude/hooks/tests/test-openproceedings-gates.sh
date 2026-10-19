@@ -2329,7 +2329,7 @@ check $P block "data-only: mv -t\$UNSET src/x.md (attached, unresolved)" "$(payl
 check $P allow "data-only: mv src/x.md src/x.md~ (a ~ in a plain name)" "$(payload_do 'mv src/x.md src/x.md~')"
 check $P block "data-only: mv -St <repo> ../moved (the t is -S's suffix)" "$(payload_do "mv -St '../data only' ../moved")"
 check $P block "data-only: mv -t /tmp -- -t <repo> (after --, operands)" "$(payload_do "mv -t /tmp -- -t '../data only'")"
-check $P allow "data-only: mv -t /tmp -- src/x.md (-- is no option)" "$(payload_do 'mv -t /tmp -- src/x.md')"
+check $P allow "data-only: mv -t /tmp -- src/x.md (-- ends the options, not an ambiguous long prefix)" "$(payload_do 'mv -t /tmp -- src/x.md')"
 # another option's value is no -t: `mv -S -t .. x` moves `..` (it holds data/snapshots) with suffix -t
 check $P block "data-only: mv -S -t .. ../moved (-t is -S's value)" "$(payload_do 'mv -S -t .. ../moved')"
 check $P block "data-only: mv -bS -t .. ../moved"               "$(payload_do 'mv -bS -t .. ../moved')"

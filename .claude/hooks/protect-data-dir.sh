@@ -46,7 +46,8 @@
 #   grep -O<cmd>, difftool -x, filter-branch filters and --setup; a `git config [--file f] [set] <key> <value>`
 #   value for those keys) is checked as a command, up to four levels. Shell writes refused too: touch/sponge in
 #   backlog/, a cp/rsync/ditto whose copy lands there (dest/<name>, or each entry of a `src/` and of every ditto
-#   source), cp/mv/ln/install `-t <dir>` into it, patch(1) (not --dry-run), tar -x/unzip into backlog/, a worktree
+#   source), cp/mv/ln/install `-t <dir>` into it (each read with its own GNU option table, COPY_OPTIONS; an
+#   ambiguous long option is refused), patch(1) (not --dry-run), tar -x/unzip into backlog/, a worktree
 #   root or above, find -fprint/-fls into it, and a find that deletes or runs anything but a reader (`-exec grep`;
 #   `rg --pre` is no reader) from backlog/, a worktree root or above (BSD `-f <path>` starts; GNU's leading -D/-O
 #   skipped), and the finds the older check misreads (those starts, -O/-D, a cluster such as -Lx) and copies into
