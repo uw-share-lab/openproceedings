@@ -8,7 +8,7 @@
  {
   "label": "env not a wrapper",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    \"env\": {\"-u\", \"-C\", \"-S\", \"--unset\", \"--chdir\", \"--split-string\"},\n",
+  "old": "    \"env\": (\n        \"i0va:u:C:S:P:L:U:\",\n        \"ignore-environment/i null/0 argv0=/a unset=/u chdir=/C split-string=/S block-signal[=] default-signal[=]\"\n        \" ignore-signal[=] list-signal-handling debug/v help version\",\n    ),\n",
   "new": ""
  },
  {
@@ -26,7 +26,7 @@
  {
   "label": "caffeinate not a wrapper (TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    \"caffeinate\": {\"-t\", \"-w\"},\n",
+  "old": "    \"caffeinate\": (\"disumt:w:\", \"\"),\n",
   "new": ""
  },
  {
@@ -38,13 +38,13 @@
  {
   "label": "doas not a wrapper (TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    \"doas\": {\"-a\", \"-u\", \"-C\"},\n",
+  "old": "    \"doas\": (\"Lnsa:C:u:\", \"\"),\n",
   "new": ""
  },
  {
   "label": "flock not a wrapper (TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    \"flock\": {\"-w\", \"-E\", \"--wait\", \"--timeout\", \"--conflict-exit-code\"},\n",
+  "old": "    \"flock\": (\n        \"sexunoFhVw:E:\",\n        \"shared/s exclusive/x unlock/u nonblock/n nb/n close/o no-fork/F verbose fcntl help/h version/V wait=/w\"\n        \" timeout=/w conflict-exit-code=/E\",\n    ),\n",
   "new": ""
  },
  {
@@ -62,8 +62,8 @@
  {
   "label": "caffeinate's value-taking options not skipped (TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    \"caffeinate\": {\"-t\", \"-w\"},\n",
-  "new": "    \"caffeinate\": set(),\n"
+  "old": "    \"caffeinate\": (\"disumt:w:\", \"\"),\n",
+  "new": "    \"caffeinate\": (\"disumtw\", \"\"),\n"
  },
  {
   "label": "arch's value-taking options not skipped (TASK-248)",
@@ -74,20 +74,20 @@
  {
   "label": "doas's value-taking options not skipped (TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    \"doas\": {\"-a\", \"-u\", \"-C\"},\n",
-  "new": "    \"doas\": set(),\n"
+  "old": "    \"doas\": (\"Lnsa:C:u:\", \"\"),\n",
+  "new": "    \"doas\": (\"LnsaCu\", \"\"),\n"
  },
  {
   "label": "flock's value-taking options not skipped (TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    \"flock\": {\"-w\", \"-E\", \"--wait\", \"--timeout\", \"--conflict-exit-code\"},\n",
-  "new": "    \"flock\": set(),\n"
+  "old": "        \"sexunoFhVw:E:\",\n",
+  "new": "        \"sexunoFhVwE\",\n"
  },
  {
   "label": "flock's lock file read as the command (TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "                    out.creates.append((state[\"dir\"] if state is not None else \"\", argv[i]))\n                i += 1\n",
-  "new": "                    out.creates.append((state[\"dir\"] if state is not None else \"\", argv[i]))\n                i += 0\n"
+  "old": "                    out.creates.append((out.chdir or (state[\"dir\"] if state is not None else \"\"), argv[i]))\n                i += 1\n",
+  "new": "                    out.creates.append((out.chdir or (state[\"dir\"] if state is not None else \"\"), argv[i]))\n                i += 0\n"
  },
  {
   "label": "flock -c's string not run as sh -c (TASK-248)",
@@ -98,13 +98,13 @@
  {
   "label": "flock --command not read as -c (TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "argv[i] in (\"-c\", \"--command\"):",
-  "new": "argv[i] in (\"-c\",):"
+  "old": "argv[i] not in (\"-c\", \"--command\")",
+  "new": "argv[i] not in (\"-c\",)"
  },
  {
   "label": "flock's lock file not a write (it hid an op-reviews/ path; TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "                    out.creates.append((state[\"dir\"] if state is not None else \"\", argv[i]))\n",
+  "old": "                    out.creates.append((out.chdir or (state[\"dir\"] if state is not None else \"\"), argv[i]))\n",
   "new": "                    pass\n"
  },
  {
@@ -140,8 +140,8 @@
  {
   "label": "doas -a takes no value (TASK-248)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    \"doas\": {\"-a\", \"-u\", \"-C\"},\n",
-  "new": "    \"doas\": {\"-u\", \"-C\"},\n"
+  "old": "    \"doas\": (\"Lnsa:C:u:\", \"\"),\n",
+  "new": "    \"doas\": (\"LnsaC:u:\", \"\"),\n"
  },
  {
   "label": "arch -e takes no value (TASK-248)",
@@ -338,8 +338,8 @@
  {
   "label": "gh pr edit not checked",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "{\"create\", \"edit\", ",
-  "new": "{\"create\", "
+  "old": "GH_PR_WRITE = {\"create\", \"edit\", ",
+  "new": "GH_PR_WRITE = {\"create\", "
  },
  {
   "label": "git tag not checked",
@@ -368,8 +368,8 @@
  {
   "label": "dd branch removed",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "    if head == \"dd\"",
-  "new": "    if False and head == \"dd\""
+  "old": "            if head == \"dd\" and any(a.startswith(\"of=\") and inside_immutable(",
+  "new": "            if False and head == \"dd\" and any(a.startswith(\"of=\") and inside_immutable("
  },
  {
   "label": "rsync not DEST_LAST",
@@ -554,7 +554,7 @@
  {
   "label": "env -S not split",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "                if name == \"env\" and opt in (\"-S\", \"--split-string\") and value is not None:",
+  "old": "                if name == \"env\" and opt == \"-S\" and value is not None:",
   "new": "                if False:"
  },
  {
@@ -1023,7 +1023,7 @@
  {
   "label": "PR gate: xargs verdict dropped",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "        return \"xargs\"",
+  "old": "        return \"xargs\", branch",
   "new": "        pass"
  },
  {
@@ -1389,8 +1389,8 @@
  {
   "label": "autofix: .prettierrc not watched",
   "file": ".claude/hooks/autofix.sh",
-  "old": "'frontend/.prettierrc*' ",
-  "new": ""
+  "old": "        'frontend/.prettierrc*' 'frontend/prettier.config.*' '.prettierrc*'",
+  "new": "        'frontend/prettier.config.*' '.prettierrc*'"
  },
  {
   "label": "git inside a shell alias not given the outer settings",
@@ -1564,8 +1564,8 @@
  {
   "label": "pdd: find with no start is not .",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "    return starts or [\".\"]",
-  "new": "    return starts"
+  "old": "        starts.append(args[k]); k += 1\n    return starts or [\".\"]\n\ndef ",
+  "new": "        starts.append(args[k]); k += 1\n    return starts\n\ndef "
  },
  {
   "label": "pdd: find -L read as a start",
@@ -1577,7 +1577,7 @@
   "label": "pdd: perl read like sed",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "            if head == \"perl\":\n                in_place = perl_in_place(args)\n",
-  "new": "    "
+  "new": ""
  },
  {
   "label": "pdd: perl -M value read as switches",
@@ -1993,7 +1993,7 @@
   "label": "protect-data-dir: ruby -i not in place",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "            if head == \"ruby\":\n                in_place = perl_in_place(args, \"0EFICrxWKT\")\n",
-  "new": "    "
+  "new": ""
  },
  {
   "label": "protect-data-dir: ruby read with perl's valued switches",
@@ -3509,7 +3509,7 @@
   "label": "cmdparse: the join counts no arithmetic (TASK-164)",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "        elif text.startswith(\"$((\", k) or (",
-  "new": "        elif False and (text.startswith(\"$((\", k) or ("
+  "new": "        elif False and text.startswith(\"$((\", k) or False and ("
  },
  {
   "label": "cmdparse: the join counts no parens inside arithmetic (TASK-164)",
@@ -3760,8 +3760,8 @@
  {
   "label": "cmdparse: the walk leaves in_subst set after it (TASK-170)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        yield _context(argv, state), state[\"dir\"], redirects\n    state[\"subst\"] = depth\n",
-  "new": "        yield _context(argv, state), state[\"dir\"], redirects\n"
+  "old": "        state[\"dir\"], state[\"dir_unknown\"] = shell_dir\n    state[\"subst\"] = depth\n",
+  "new": "        state[\"dir\"], state[\"dir_unknown\"] = shell_dir\n"
  },
  {
   "label": "cmdparse: Argv.in_subst never set (TASK-170)",
@@ -4079,7 +4079,7 @@
   "label": "modes: continuation not joined",
   "file": ".claude/scripts/check_file_modes.py",
   "old": "            buf += raw[:-1]\n            continue\n",
-  "new": ""
+  "new": "            pass\n"
  },
  {
   "label": "modes: a continued line with # passes",
@@ -5672,7 +5672,7 @@
  {
   "label": "pdd backlog guard (TASK-244 additive): -t not read",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        dirs = target_dirs(args) if head in (\"cp\", \"mv\", \"ln\", \"install\") else []",
+  "old": "        dirs = target_dirs(head, args) if head in COPY_OPTIONS else []",
   "new": "        dirs = []"
  },
  {
@@ -5696,26 +5696,26 @@
  {
   "label": "pdd backlog guard (TASK-244 additive): -t cluster not read",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        elif a.startswith(\"-\") and not a.startswith(\"--\") and \"t\" in a[1:]:",
-  "new": "        elif a == \"-t\":"
+  "old": "            for n, letter in enumerate(a[1:], start=2):",
+  "new": "            for n, letter in enumerate(a[1:2], start=2):"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): -t attached not read",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            out.append(rest or (args[k + 1] if k + 1 < len(args) else \"\"))\n    return out",
-  "new": "            out.append(args[k + 1] if k + 1 < len(args) else \"\")\n    return out"
+  "old": "                    value = a[n:]\n",
+  "new": "                    value = \"\"\n"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): --target-directory separate not read",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            out.append(value if eq else (args[k + 1] if k + 1 < len(args) else \"\"))\n        elif a.startswith(\"-\") and not",
-  "new": "            out.append(value)\n        elif a.startswith(\"-\") and not"
+  "old": "            if kind == \"value\" and not eq:\n",
+  "new": "            if kind == \"value\" and not eq and names != [\"target-directory\"]:\n"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): --target-directory prefix not read",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "len(name) >= len(\"--tar\") and \"--target-directory\".startswith(name):",
-  "new": "name == \"--target-directory\":"
+  "old": "            names = [given] if given in long_kinds else [n for n in long_kinds if n.startswith(given)]\n            if len(names) > 1:\n                refuse(f\"Blocked: {a.partition",
+  "new": "            names = [given] if given in long_kinds else []\n            if len(names) > 1:\n                refuse(f\"Blocked: {a.partition"
  },
  {
   "label": "pdd backlog guard (TASK-244 additive): sponge/touch allowed",
@@ -7043,5 +7043,233 @@
   "file": ".claude/scripts/check_uv_pin.py",
   "old": "        elif quote != \"'\" and ch == \"\\\\\":",
   "new": "        elif quote == '\"' and ch == \"\\\\\":"
+ },
+ {
+  "label": "cmdparse getopt: a short group stops at its first flag (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    found.append((f\"-{letter}\", None, i))\n                    continue\n",
+  "new": "                    found.append((f\"-{letter}\", None, i))\n                    break\n"
+ },
+ {
+  "label": "cmdparse getopt: a short value is never the rest of its word (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                value: str | None = word[k:] or None\n",
+  "new": "                value: str | None = None\n"
+ },
+ {
+  "label": "cmdparse getopt: a short value never takes the next word (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    value, i = argv[i], i + 1\n",
+  "new": "                    value, i = argv[i], i\n"
+ },
+ {
+  "label": "cmdparse getopt: an unknown short option read as a flag (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                kind = shorts.get(letter)\n",
+  "new": "                kind = shorts.get(letter, \"flag\")\n"
+ },
+ {
+  "label": "cmdparse getopt: an exact long name loses to the longer ones it begins (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            names = [given] if given in long_kinds else [n for n in long_kinds if n.startswith(given)]",
+  "new": "            names = [n for n in long_kinds if n.startswith(given)]"
+ },
+ {
+  "label": "cmdparse getopt: an ambiguous long prefix takes the first match (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if len(names) != 1 or not given:",
+  "new": "            if not names or not given:"
+ },
+ {
+  "label": "cmdparse getopt: a long value never takes the next word (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                long_value, i = argv[i], i + 1\n",
+  "new": "                long_value, i = argv[i], i\n"
+ },
+ {
+  "label": "cmdparse getopt: a long option with a short one isn't read as it (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "out[name] = (kind, f\"-{short}\" if short else f\"--{name}\")",
+  "new": "out[name] = (kind, f\"--{name}\")"
+ },
+ {
+  "label": "cmdparse getopt: -- doesn't end the options (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        if word == \"--\":\n            break\n        if word == \"-\":",
+  "new": "        if word == \"-\":"
+ },
+ {
+  "label": "cmdparse getopt: env - is not an option (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": " and (argv[i] != \"-\" or name == \"env\"):",
+  "new": " and argv[i] != \"-\":"
+ },
+ {
+  "label": "cmdparse getopt: nice's -N form not read (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif name == \"nice\" and re.fullmatch(r\"-[-+]?\\d+\", word):",
+  "new": "        elif False:"
+ },
+ {
+  "label": "cmdparse getopt: sudo -u takes no value (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "\"ABbEeHh::iKklNnPSsVva:C:c:D:g:p:R:r:T:t:U:u:\"",
+  "new": "\"ABbEeHh::iKklNnPSsVva:C:c:D:g:p:R:r:T:t:U:u\""
+ },
+ {
+  "label": "cmdparse getopt: env -u takes no value (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "\"i0va:u:C:S:P:L:U:\"",
+  "new": "\"i0va:uC:S:P:L:U:\""
+ },
+ {
+  "label": "cmdparse getopt: nice -n takes no value (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"nice\": (\"n:\", \"adjustment=/n help version\"),",
+  "new": "    \"nice\": (\"n\", \"adjustment=/n help version\"),"
+ },
+ {
+  "label": "cmdparse getopt: timeout -k takes no value (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(\"fpvk:s:\", ",
+  "new": "(\"fpvks:\", "
+ },
+ {
+  "label": "cmdparse getopt: flock --wait takes no value (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": " wait=/w\"\n",
+  "new": " wait/w\"\n"
+ },
+ {
+  "label": "cmdparse: env -S's words are not env's own (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "return _strip_prefixes([\"env\", *tokenize(value), *argv[after:]], state, out)",
+  "new": "return _strip_prefixes([*tokenize(value), *argv[after:]], state, out)"
+ },
+ {
+  "label": "cmdparse: flock takes an option after its lock file as no command (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    if argv[i] not in (\"-c\", \"--command\") or i + 1 >= len(argv):\n                        raise ParseError",
+  "new": "                    if False:\n                        raise ParseError"
+ },
+ {
+  "label": "cmdparse: env -C / sudo -D don't move their command (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            state[\"dir\"] = argv.chdir\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse: env -C / sudo -D move every later command (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        if shell_dir is not None:\n            state[\"dir\"], state[\"dir_unknown\"] = shell_dir\n            shell_dir = None\n",
+  "new": "        if shell_dir is not None:\n            shell_dir = None\n"
+ },
+ {
+  "label": "cmdparse: env -C's directory outlives the walk it's in (eval; TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if shell_dir is not None:\n        state[\"dir\"], state[\"dir_unknown\"] = shell_dir\n    state[\"subst\"] = depth\n",
+  "new": "    state[\"subst\"] = depth\n"
+ },
+ {
+  "label": "cmdparse: env -C to a directory it can't resolve is known (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            state[\"dir_unknown\"] = shell_dir[1] or argv.chdir_unknown\n",
+  "new": "            state[\"dir_unknown\"] = shell_dir[1]\n"
+ },
+ {
+  "label": "cmdparse: env -C's redirects are opened in its directory, not the shell's (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                yield _context(Argv([]), state), state[\"dir\"], redirects\n                redirects = []\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse: sh -c drops its own redirects (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    if redirects:\n                        yield _context(Argv([]), state), state[\"dir\"], redirects\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse: eval drops its own redirects (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if redirects:  # `eval",
+  "new": "            if False:  # `eval"
+ },
+ {
+  "label": "pdd mv -t (TASK-253): a source under -t that covers data/snapshots not refused",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "if any(covers_immutable(p, d) for p in sources) or ",
+  "new": "if "
+ },
+ {
+  "label": "pdd mv -t (TASK-253): an attached -t$X not refused",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                if has_data and any(re.search(r\"[$`~]\", t) for t in dests if t not in paths):",
+  "new": "                if False:"
+ },
+ {
+  "label": "cmdparse getopt: an optional short value takes the next word (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                if kind == \"value\" and value is None:",
+  "new": "                if kind != \"flag\" and value is None:"
+ },
+ {
+  "label": "cmdparse getopt: an optional long value takes the next word (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if kind == \"value\" and not eq:",
+  "new": "            if kind != \"flag\" and not eq:"
+ },
+ {
+  "label": "cmdparse getopt: env -a takes no value (TASK-253 review)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "\"i0va:u:C:S:P:L:U:\"",
+  "new": "\"i0vau:C:S:P:L:U:\""
+ },
+ {
+  "label": "cmdparse: env -C's directory is not resolved where it runs (TASK-253)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    out.chdir = here if unknown else _resolve(value, here)\n",
+  "new": "                    out.chdir = here if unknown else value\n"
+ },
+ {
+  "label": "pdd mv -t (TASK-253 review): -S's suffix read as -t",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    \"mv\": (\"bfintuvS:t:TZ\",",
+  "new": "    \"mv\": (\"bfintuvSt:TZ\","
+ },
+ {
+  "label": "pdd mv -t (TASK-253 review): -- doesn't end the options",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if a == \"--\":\n            rest += args[k:]\n            break\n",
+  "new": ""
+ },
+ {
+  "label": "pdd mv -t (TASK-253 review): a short option's separate value read as a word",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                    if not value:\n                        k += 1\n",
+  "new": "                    if False:\n                        k += 1\n"
+ },
+ {
+  "label": "pdd mv -t (TASK-253 review): --suffix's separate value read as a word",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if kind == \"value\" and not eq:\n",
+  "new": "            if kind == \"value\" and not eq and names == [\"target-directory\"]:\n"
+ },
+ {
+  "label": "pdd mv -t (TASK-253 review 3): an exact long name doesn't win over its longer ones",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            names = [given] if given in long_kinds else [n for n in long_kinds if n.startswith(given)]\n            if len(names) > 1:\n",
+  "new": "            names = [n for n in long_kinds if n.startswith(given)]\n            if len(names) > 1:\n"
+ },
+ {
+  "label": "pdd mv -t (TASK-253 review 3): an ambiguous long prefix takes the first match",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if len(names) > 1:\n                refuse(f\"Blocked: {a.partition",
+  "new": "            if False:\n                refuse(f\"Blocked: {a.partition"
+ },
+ {
+  "label": "cmdparse: env -C's redirect into .git/config not tracked (TASK-253 review 3)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                if writes_git_config(Argv([]), redirects, state):\n                    state[\"config_written\"] = True\n                yield _context",
+  "new": "                yield _context"
  }
 ]

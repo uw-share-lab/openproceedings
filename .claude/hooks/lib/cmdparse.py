@@ -17,16 +17,22 @@ matter to a gate:
     can leave the loop early); `$(mktemp)` is unknown when the command sets or unsets TMPDIR;
   * leading reserved words (`if`/`then`/`do`/`{`/`!` …), `VAR=val`, and wrappers (`env`, `sudo`, `nice`,
     `timeout`, `xargs`, `stdbuf`, `watch`, `exec`, `time`, `nohup`, `command`, `builtin`, `xcrun`, `caffeinate`,
-    `arch`, `doas`, `flock`, `unbuffer`) are stripped, each wrapper with its own table of value-taking options;
-    `env -S '…'` is split, `env -C`/`sudo -D` move dir, `arch -e NAME=value`/`-d NAME` set and unset as env does;
-    flock's lock file is a `>>` redirect of its own, in the directory flock runs in (flock creates it; `flock N`
-    alone is a descriptor), and its `-c`/`--command '…'` is a `sh -c`;
+    `arch`, `doas`, `flock`, `unbuffer`) are stripped, each wrapper with its own table of value-taking options, and
+    the getopt ones (`env`, `sudo`, `nice`, `timeout`, `doas`, `caffeinate`, `flock`) with every option they take:
+    short groups (`sudo -nu root`), attached values (`flock -w5`) and unique long prefixes (`--wai`) read as getopt
+    reads them, and an option this parser can't place a ParseError (TASK-253);
+    `env -S '…'` is split, `env -C`/`sudo -D` move the directory of the command they run (`Argv.chdir`) and no
+    later one, with its redirects still opened where the shell is; `arch -e NAME=value`/`-d NAME` set and unset as
+    env does; flock's lock file is a `>>` redirect of its own, in the directory flock runs in (flock creates it;
+    `flock N` alone is a descriptor), its `-c`/`--command '…'` is a `sh -c`, and another option after the lock file
+    a ParseError;
     the argv comes back as an `Argv` that records the `VAR=val` words and whether xargs runs it;
   * command names compare by basename (`/usr/bin/git` is `git`);
   * redirections leave argv as (operator, target) pairs (`walk` yields them);
   * `cd`, `pushd` and `popd` are tracked (targets through `expand_word`, `-P` physically; one it can't resolve,
     one that doesn't exist, a relative one under CDPATH, or `cd -` back to an unknown one marks the directory
-    unknown) and `bash -c "…"` (with the assignments before it exported to it) / `eval "…"` are recursed into;
+    unknown) and `bash -c "…"` (with the assignments before it exported to it) / `eval "…"` are recursed into,
+    their own redirects yielded first as a command of none;
     `bash script.sh` is yielded as itself;
   * `expand_word` resolves `~`, `~+`, `~-`, `$PWD`, `$HOME` and other variables a command's path names: set
     (or `unset`, `env -u` or `arch -d`: empty) earlier in the command, else only HOME/TMPDIR/USER from this hook's
@@ -73,38 +79,14 @@ SEP_CHARS = set(";&|()\n")
 PUNCT = ";&|()\n<>"
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 # Wrappers that run the rest of the line as a command, with the options of EACH that consume the next word
-# (review round 2: one shared set made `sudo -n git push` skip `git`). A wrapper not listed takes none.
+# (review round 2: one shared set made `sudo -n git push` skip `git`). A wrapper not listed takes none (the getopt
+# wrappers are in GETOPT_WRAPPERS, below).
 WRAPPER_VALUE_OPTS: dict[str, set[str]] = {
-    "env": {"-u", "-C", "-S", "--unset", "--chdir", "--split-string"},
     "command": set(),
     "builtin": set(),
     "exec": {"-a"},
     "time": {"-f", "-o"},
     "nohup": set(),
-    "nice": {"-n"},
-    "sudo": {
-        "-u",
-        "-g",
-        "-h",
-        "-p",
-        "-C",
-        "-D",
-        "-r",
-        "-t",
-        "-U",
-        "-T",
-        "--user",
-        "--group",
-        "--host",
-        "--prompt",
-        "--close-from",
-        "--chdir",
-        "--role",
-        "--type",
-        "--other-user",
-        "--command-timeout",
-    },
-    "timeout": {"-s", "-k", "--signal", "--kill-after"},
     "stdbuf": {"-i", "-o", "-e"},
     "xargs": {
         "-a",
@@ -121,15 +103,42 @@ WRAPPER_VALUE_OPTS: dict[str, set[str]] = {
         "--max-procs",
     },
     "watch": {"-n", "-d", "--interval"},
-    # TASK-248: macOS's xcrun, caffeinate and arch, OpenBSD's doas, util-linux flock, expect's unbuffer
+    # TASK-248: macOS's xcrun and arch, expect's unbuffer
     "xcrun": {"-sdk", "--sdk", "-toolchain", "--toolchain"},
-    "caffeinate": {"-t", "-w"},
     "arch": {"-arch", "-d", "-e"},
-    "doas": {"-a", "-u", "-C"},
-    "flock": {"-w", "-E", "--wait", "--timeout", "--conflict-exit-code"},
     "unbuffer": set(),
 }
-WRAPPERS = set(WRAPPER_VALUE_OPTS)
+# Getopt wrappers, with every option each takes (GNU's and BSD's), so a short group (`sudo -nu root`, `flock -nw5`)
+# and a long option's unique prefix (`flock --wai 5`) are read as the wrapper reads them (TASK-253). Short options
+# are a getopt string: `x:` takes a value (the rest of the word, else the next word), `x::` only the rest of the
+# word. Long options are `name` (a flag), `name=` (a value, after `=` or else the next word) or `name[=]` (a value
+# only after `=`), then `/x` when it is short option x. An option not listed, an ambiguous prefix or a value with
+# nowhere to come from is a ParseError (`_getopt`): this parser can't tell which word is the command.
+GETOPT_WRAPPERS: dict[str, tuple[str, str]] = {
+    "env": (
+        "i0va:u:C:S:P:L:U:",
+        "ignore-environment/i null/0 argv0=/a unset=/u chdir=/C split-string=/S block-signal[=] default-signal[=]"
+        " ignore-signal[=] list-signal-handling debug/v help version",
+    ),
+    "sudo": (
+        "ABbEeHh::iKklNnPSsVva:C:c:D:g:p:R:r:T:t:U:u:",
+        "askpass/A bell/B background/b preserve-env[=] edit/e set-home/H help host= login/i remove-timestamp/K"
+        " reset-timestamp/k list/l no-update/N non-interactive/n preserve-groups/P stdin/S shell/s version/V"
+        " validate/v auth-type=/a close-from=/C login-class=/c chdir=/D group=/g prompt=/p chroot=/R role=/r"
+        " command-timeout=/T type=/t other-user=/U user=/u",
+    ),
+    "nice": ("n:", "adjustment=/n help version"),
+    "timeout": ("fpvk:s:", "foreground/f preserve-status/p verbose/v kill-after=/k signal=/s help version"),
+    # TASK-248: OpenBSD's doas, macOS's caffeinate, util-linux flock
+    "doas": ("Lnsa:C:u:", ""),
+    "caffeinate": ("disumt:w:", ""),
+    "flock": (
+        "sexunoFhVw:E:",
+        "shared/s exclusive/x unlock/u nonblock/n nb/n close/o no-fork/F verbose fcntl help/h version/V wait=/w"
+        " timeout=/w conflict-exit-code=/E",
+    ),
+}
+WRAPPERS = set(WRAPPER_VALUE_OPTS) | set(GETOPT_WRAPPERS)
 # Shell reserved words that can start a simple command without being the command (review 2026-09-25:
 # `if …; then git push; fi`, `{ git push; }`, `! gh pr create` slipped past).
 RESERVED = {
@@ -496,6 +505,10 @@ class Argv(list):
     # `creates`: (directory, file) for each file a stripped wrapper itself creates (flock's lock file), in the
     # directory the wrapper ran in; the walk yields each as a `>>` redirect
     creates: list[tuple[str, str]]
+    # `chdir`: the directory `env -C` / `sudo -D` run it in, for it alone (TASK-253); None: where the shell is.
+    # `chdir_unknown`: one this parser can't resolve (`env -C "$X"`): `chdir` stays where it was, marked unknown
+    chdir: str | None = None
+    chdir_unknown: bool = False
 
     def __init__(self, words: list[str], via_xargs: bool = False, assigns: dict[str, str] | None = None):
         super().__init__(words)
@@ -1361,9 +1374,81 @@ def base(word: str) -> str:
 
 def strip_prefixes(argv: list[str], state: dict | None = None) -> Argv:
     """Drop leading reserved words, `VAR=val` and wrappers (with their option values). `env -S 'cmd'`
-    splits its string into the command; `env -C dir` / `sudo -D dir` change the directory in `state`.
+    splits its string into the command; `env -C dir` / `sudo -D dir` set `Argv.chdir`, the command's own directory.
     The result records whether xargs runs the command and the assignments before it (`Argv`)."""
     return _strip_prefixes(argv, state, Argv([]))
+
+
+def _short_kinds(spec: str) -> dict[str, str]:
+    """A getopt string's options: letter -> "flag", "value" (`x:`) or "optional" (`x::`)."""
+    kinds, k = {}, 0
+    while k < len(spec):
+        colons = len(spec[k + 1 :]) - len(spec[k + 1 :].lstrip(":"))
+        kinds[spec[k]] = ("flag", "value", "optional")[min(colons, 2)]
+        k += 1 + colons
+    return kinds
+
+
+def _long_kinds(specs: str) -> dict[str, tuple[str, str]]:
+    """GETOPT_WRAPPERS' long options: name -> (kind, the option it reads as: `-x`, or `--name` with no short one)."""
+    out = {}
+    for spec in specs.split():
+        name, _, short = spec.partition("/")
+        kind = "optional" if name.endswith("[=]") else "value" if name.endswith("=") else "flag"
+        name = name.removesuffix("[=]").removesuffix("=")
+        out[name] = (kind, f"-{short}" if short else f"--{name}")
+    return out
+
+
+def _getopt(name: str, argv: list[str], i: int) -> tuple[list[tuple[str, str | None, int]], int]:
+    """Wrapper `name`'s options from `argv[i]` on, as getopt reads them (GETOPT_WRAPPERS): [(option, value, the index
+    after it)], each option as its short `-x` when it has one, and the index of the first word after them (a `--`
+    is skipped). Raises ParseError for an option it can't place for certain."""
+    spec, longs = GETOPT_WRAPPERS[name]
+    shorts, long_kinds = _short_kinds(spec), _long_kinds(longs)
+    found: list[tuple[str, str | None, int]] = []
+    while i < len(argv) and argv[i].startswith("-") and (argv[i] != "-" or name == "env"):
+        word = argv[i]
+        i += 1
+        if word == "--":
+            break
+        if word == "-":  # `env -` is `env -i`
+            found.append(("-i", None, i))
+        # `nice -5`, `nice --5`, `nice -+5`: the old form of `-n`
+        elif name == "nice" and re.fullmatch(r"-[-+]?\d+", word):
+            found.append(("-n", word[1:], i))
+        elif word.startswith("--"):
+            given, eq, attached = word[2:].partition("=")
+            names = [given] if given in long_kinds else [n for n in long_kinds if n.startswith(given)]
+            if len(names) != 1 or not given:
+                raise ParseError(
+                    f"{name}: {word.partition('=')[0]} is {'ambiguous' if names else 'not an option'}"
+                )
+            kind, opt = long_kinds[names[0]]
+            if kind == "flag" and eq:
+                raise ParseError(f"{name}: {opt} takes no value")
+            long_value = attached if eq else None
+            if kind == "value" and not eq:
+                if i >= len(argv):
+                    raise ParseError(f"{name}: {opt} needs a value")
+                long_value, i = argv[i], i + 1
+            found.append((opt, long_value, i))
+        else:
+            for k, letter in enumerate(word[1:], start=2):
+                kind = shorts.get(letter)
+                if kind is None:
+                    raise ParseError(f"{name}: -{letter} is not an option")
+                if kind == "flag":
+                    found.append((f"-{letter}", None, i))
+                    continue
+                value: str | None = word[k:] or None
+                if kind == "value" and value is None:
+                    if i >= len(argv):
+                        raise ParseError(f"{name}: -{letter} needs a value")
+                    value, i = argv[i], i + 1
+                found.append((f"-{letter}", value, i))
+                break
+    return found, i
 
 
 def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
@@ -1375,43 +1460,52 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                 name, _, value = a.partition("=")
                 out.assigns[name] = value
             i += 1
+        elif (
+            base(a) in GETOPT_WRAPPERS
+        ):  # env -i, nice -n 5, sudo -nu x, timeout -s KILL, flock -nw5 (TASK-253)
+            name = base(a)
+            opts, i = _getopt(name, argv, i + 1)
+            for opt, value, after in opts:
+                if name == "env" and opt == "-S" and value is not None:
+                    # env reads the split words as its own: options first, then the command (GNU env)
+                    return _strip_prefixes(["env", *tokenize(value), *argv[after:]], state, out)
+                if name == "env" and opt == "-u" and value is not None:
+                    out.assigns[value] = ""  # unset for what it runs: known empty (review gate round 3)
+                if value is not None and (
+                    (name == "env" and opt == "-C") or (name == "sudo" and opt == "-D")
+                ):
+                    # the directory of the command it runs, and of no later one (TASK-253)
+                    here = out.chdir or (state["dir"] if state is not None else "")
+                    # one it can't resolve is read as `cd "$X"` is: the directory stays where it was, unknown
+                    unknown = bool(re.search(r"[$`~]", value))
+                    out.chdir = here if unknown else _resolve(value, here)
+                    out.chdir_unknown = out.chdir_unknown or unknown
+            if name == "timeout" and i < len(argv):  # the duration
+                i += 1
+            if name == "flock" and i < len(argv):  # the lock file, which flock creates where it runs
+                if not (argv[i].isdigit() and i + 1 == len(argv)):  # `flock 9` alone locks a file descriptor
+                    out.creates.append((out.chdir or (state["dir"] if state is not None else ""), argv[i]))
+                i += 1
+                if i < len(argv) and argv[i].startswith("-"):
+                    # `flock <file> -c '<cmd>'`: a shell runs the string; any other option here is no command
+                    if argv[i] not in ("-c", "--command") or i + 1 >= len(argv):
+                        raise ParseError(f"flock: {argv[i]} after the lock file")
+                    argv = [*argv[:i], "sh", "-c", *argv[i + 1 :]]
         elif base(a) in WRAPPERS:
             name = base(a)
             out.via_xargs = out.via_xargs or name == "xargs"
             i += 1
-            while i < len(argv) and argv[i].startswith("-"):  # env -i, nice -n 5, sudo -u x, timeout -s KILL
+            while i < len(argv) and argv[i].startswith("-"):  # xargs -n 1, stdbuf -o L, watch -n 2
                 opt, eq, attached = argv[i].partition("=")
                 takes_value = opt in WRAPPER_VALUE_OPTS[name]
                 value = attached if eq else (argv[i + 1] if takes_value and i + 1 < len(argv) else None)
-                if name == "env" and opt in ("-S", "--split-string") and value is not None:
-                    return _strip_prefixes([*tokenize(value), *argv[i + (1 if eq else 2) :]], state, out)
-                if name == "env" and opt in ("-u", "--unset") and value is not None:
-                    out.assigns[value] = ""  # unset for what it runs: known empty (review gate round 3)
                 # `arch -e NAME=value` sets NAME and `arch -d NAME` unsets it, for what it runs (as env's do)
                 if name == "arch" and opt == "-e" and value is not None:
                     key, _, val = value.partition("=")
                     out.assigns[key] = val
                 if name == "arch" and opt == "-d" and value is not None:
                     out.assigns[value] = ""
-                if (
-                    state is not None
-                    and value is not None
-                    and (
-                        (name == "env" and opt in ("-C", "--chdir"))
-                        or (name == "sudo" and opt in ("-D", "--chdir"))
-                    )
-                ):
-                    state["dir"] = _resolve(value, state["dir"])
                 i += 1 if (eq or not takes_value) else 2
-            if name == "timeout" and i < len(argv):  # the duration
-                i += 1
-            if name == "flock" and i < len(argv):  # the lock file, which flock creates
-                if not (argv[i].isdigit() and i + 1 == len(argv)):  # `flock 9` alone locks a file descriptor
-                    out.creates.append((state["dir"] if state is not None else "", argv[i]))
-                i += 1
-                # `flock <file> -c '<cmd>'`: a shell runs the string
-                if i + 1 < len(argv) and argv[i] in ("-c", "--command"):
-                    argv = [*argv[:i], "sh", "-c", *argv[i + 1 :]]
         else:
             break
     rest = argv[i:]
@@ -2000,7 +2094,12 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
     i = 0
     depth = state.get("subst", 0)  # the command substitutions this walk is inside (`Argv.in_subst`)
     parens: list[bool] = []  # the `(`s open here: True for an unquoted `$(`
+    # where the shell is (directory, unknown), while one command runs elsewhere (`Argv.chdir`)
+    shell_dir: tuple[str, bool] | None = None
     while i < len(tokens):
+        if shell_dir is not None:
+            state["dir"], state["dir_unknown"] = shell_dir
+            shell_dir = None
         j = i
         while j < len(tokens) and not is_separator(tokens[j]):
             j += 1
@@ -2024,6 +2123,18 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
             raw = [_restore(t, subs) for t in raw]
         args, redirects = split_redirects(raw)
         argv = strip_prefixes(args, state)
+        if argv.chdir is not None:
+            # `env -C`/`sudo -D` move the command they run and no later one (TASK-253). The shell opens its redirects
+            # where it is, before env runs: they go first, as a command of none there (as `sh -c`'s and eval's do)
+            if redirects:
+                # what they write is tracked here, before they leave the command (`>> .git/config`: review round 3)
+                if writes_git_config(Argv([]), redirects, state):
+                    state["config_written"] = True
+                yield _context(Argv([]), state), state["dir"], redirects
+                redirects = []
+            shell_dir = (state["dir"], state.get("dir_unknown", False))
+            state["dir"] = argv.chdir
+            state["dir_unknown"] = shell_dir[1] or argv.chdir_unknown
         # a file a wrapper creates is written, as `>>` writes one, whatever runs next (`eval`, `cd`)
         for d, f in argv.creates:
             yield _context(Argv([]), state), d or state["dir"], [(">>", f)]
@@ -2070,7 +2181,9 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
                 if a.startswith("-") and not a.startswith("--") and "c" in a and k + 1 < len(argv):
                     # a child shell: it starts with the caller's exports plus the assignments before it
                     # (`GIT_DIR=… bash -c 'git commit'`: review gate round 3), and what it sets or `cd`s to
-                    # stays inside it
+                    # stays inside it; its own redirects are opened first (`sh -c '…' >> f`: TASK-253)
+                    if redirects:
+                        yield _context(Argv([]), state), state["dir"], redirects
                     saved = {key: state[key] for key in SUBSHELL_STATE if key in state}
                     state["exports"] = dict(argv.assigns)
                     state["vars"] = {**state.get("vars", {}), **argv.assigns}
@@ -2094,9 +2207,13 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
             # `eval eval … git push` chain stays linear)
             rest = argv[1:]
             plain = all(PLAIN_WORD.fullmatch(w) for w in rest)
+            if redirects:  # `eval '…' >> f`: the shell opens f before eval runs anything (TASK-253)
+                yield _context(Argv([]), state), state["dir"], redirects
             yield from _walk(rest if plain else tokenize(" ".join(rest), state["subs"]), state)
             continue
         yield _context(argv, state), state["dir"], redirects
+    if shell_dir is not None:
+        state["dir"], state["dir_unknown"] = shell_dir
     state["subst"] = depth
 
 

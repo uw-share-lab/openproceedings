@@ -202,9 +202,9 @@ jobs:
   # that name a mutant's file first and stops at the first failure (about a third of the CPU time on those
   # logs; the verdicts are the same), and stops a table past 10x its baseline (TIMEOUT, killed, only if it
   # hangs again alone), so 12 shards have room again.
-  # A surviving or stale mutant fails its shard, and so does a shard cut off at 140 min (its
-  # unchecked mutants would go unchecked). Shard 1's first step checks every mutant's pattern still exists, in
-  # seconds; a stale mutant also fails its own shard.
+  # A surviving or unrunnable mutant fails its shard, and so does a shard cut off at 140 min (its
+  # unchecked mutants would go unchecked). Shard 1's first step vets every mutant (`mutate.py --check`: stale,
+  # ambiguous or uncompilable), in seconds; such a mutant also fails its own shard.
   mutate:
     runs-on: ubuntu-latest
     timeout-minutes: 150
@@ -222,21 +222,11 @@ jobs:
         with: { version: "0.13.0" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
         run: uv sync --locked
-      - name: Every mutant's pattern still exists (all of them, in seconds)
+      - name: Every mutant can be run as written (all of them, in seconds; make tooling runs it too)
         if: matrix.shard == 1
-        run: |
-          python3 -c '
-          import glob, json, pathlib, sys
-          ms = [m for f in sorted(glob.glob(".claude/scripts/mutants/*.json")) for m in json.loads(pathlib.Path(f).read_text())]
-          stale = [m["label"] for m in ms
-                   if any(m["old"] not in pathlib.Path(f).read_text() for f in [m["file"], *m.get("also", [])])]
-          for label in stale:
-              print("::error::stale mutant, its pattern is gone from its file: " + label)
-          print(f"{len(ms)} mutants, {len(stale)} stale")
-          sys.exit(1 if stale else 0)
-          '
+        run: python3 .claude/scripts/mutate.py --check
       - name: mutate.py --shard (every mutant in this shard killed, or documented as equivalent; 140 min limit)
-        if: ${{ !cancelled() }}  # a stale mutant above doesn't hide tonight's survivors
+        if: ${{ !cancelled() }}  # an unrunnable mutant above doesn't hide tonight's survivors
         shell: bash  # -eo pipefail, so the pipe through tee keeps mutate.py's status (the default bash -e has no pipefail)
         run: |
           git config --global user.email ci@example.invalid

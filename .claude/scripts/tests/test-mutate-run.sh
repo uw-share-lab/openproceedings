@@ -111,6 +111,28 @@ cat > "$R/.claude/scripts/mutants/m.json" <<'EOF'
  {"label": "m-alsoscoped", "file": "src/u.txt", "old": "upsilon", "new": "phi", "also": ["src/scoped.txt"]}
 ]
 EOF
+# Mutants mutate.py refuses to run as written (TASK-254): an old text that occurs twice, and edits that stop a file
+# compiling (Python, JSON, a shell script by suffix or by its #! line, a heredoc's Python program, a heredoc an edit
+# adds); an edit to a file that already didn't compile is run as usual. No table names these files.
+printf 'zeta zeta\n' > "$R/src/twice.txt"
+printf 'x = 1\n' > "$R/src/ok.py"
+printf 'def (:\n' > "$R/src/bad.py"
+printf '{"a": 1}\n' > "$R/src/ok.json"
+printf '#!/usr/bin/env bash\necho hi\nIFS= read -r -d "" P <<%sPY%s || true\nprint(1)\nPY\n' "'" "'" > "$R/src/hook.sh"
+printf '#!/usr/bin/env bash\necho hi\n' > "$R/src/hook"
+cat > "$R/.claude/scripts/mutants/v.json" <<'JSON'
+[
+ {"label": "v-ambiguous", "file": "src/twice.txt", "old": "zeta", "new": "eta"},
+ {"label": "v-py", "file": "src/ok.py", "old": "x = 1", "new": "x = ("},
+ {"label": "v-broken", "file": "src/bad.py", "old": "def", "new": "dfe"},
+ {"label": "v-json", "file": "src/ok.json", "old": "1}", "new": "1"},
+ {"label": "v-shell", "file": "src/hook.sh", "old": "echo hi", "new": "echo hi; fi"},
+ {"label": "v-heredoc", "file": "src/hook.sh", "old": "print(1)", "new": "print(1"},
+ {"label": "v-shebang", "file": "src/hook", "old": "echo hi", "new": "echo hi; fi"},
+ {"label": "v-bounds", "file": "src/hook.sh", "old": "\nPY\n", "new": "\nPY\nIFS= read -r -d \"\" Q <<'PY' || true\ndef (:\nPY\n"},
+ {"label": "v-fine", "file": "src/ok.py", "old": "x = 1", "new": "x = 2"}
+]
+JSON
 # R3: R with a 5 s floor, so a hang is stopped by a timeout no load can make it refuse (an explicit --table-timeout
 # is refused under 10x the slowest baseline, and a loaded machine can take 0.5 s to start a tiny table)
 R3="$TMP/r3"
@@ -222,6 +244,38 @@ got=$(cd "$SRC" && python3 -c 'import sys; sys.path.insert(0, ".claude/scripts")
 print(sorted(mutate.table_scope(".claude/scripts/tests/test-mutate-run.sh") or []))')
 check "this table declares mutate.py only (its fixtures' declarations aren't its own)" "$got" "['.claude/scripts/mutate.py']"
 
+got=$(cd "$SRC" && python3 -c 'import sys; sys.path.insert(0, ".claude/scripts"); import mutate
+print(mutate.can_kill(".claude/scripts/tests/test-dependabot.sh", [".claude/scripts/mutate.py"]))')
+check "test-dependabot.sh never runs for a mutate.py mutant (it declares the dependabot scripts; TASK-254)" "$got" "False"
+got=$(cd "$SRC" && python3 -c 'import sys; sys.path.insert(0, ".claude/scripts"); import mutate
+for t in ("test-mutate-shard", "test-merge-group-gate", "test-changelog"):
+    print(t, sorted(mutate.table_scope(f".claude/scripts/tests/{t}.sh") or []))')
+want="test-mutate-shard ['.claude/scripts/mutate.py']
+test-merge-group-gate ['.claude/scripts/merge_group_gate.py', '.github/workflows/claude-tooling.yml', '.github/workflows/lint.yml', '.github/workflows/pr-gates.yml', '.github/workflows/test.yml']
+test-changelog ['.claude/scripts/changelog.py']"
+check "the single-script tables declare what they run (TASK-254)" "$got" "$want"
+
+echo "== a mutant that can't be run as written is refused, and no table runs for it (TASK-254)"
+MUT_LOG="$TMP/log" python3 "$R/.claude/scripts/mutate.py" --check --match v- > "$TMP/out" 2>&1
+check "--check: exit 1" "$?" "1"
+got=$(grep -E '^  FAIL ' "$TMP/out" | sed -E 's/ +/ /g; s/^ //')
+want="FAIL AMBIGUOUS v-ambiguous
+FAIL UNCOMPILABLE v-py
+FAIL UNCOMPILABLE v-json
+FAIL UNCOMPILABLE v-shell
+FAIL UNCOMPILABLE v-heredoc
+FAIL UNCOMPILABLE v-shebang
+FAIL UNCOMPILABLE v-bounds"
+check "--check: each refused mutant and why; an edit to a file that didn't compile, and a fine edit, pass" "$got" "$want"
+MUT_LOG="$TMP/log" python3 "$R/.claude/scripts/mutate.py" --check --match v-fine > "$TMP/out" 2>&1
+check "--check: nothing refused: exit 0" "$?" "0"
+run v-ambiguous
+check "a run refuses an ambiguous mutant" "$line" "FAIL AMBIGUOUS v-ambiguous"
+got=$(grep -cv '/baseline$' "$TMP/log")
+check "a refused mutant: no table started for it" "$got" "0"
+run v-broken
+check "an edit to a file that already didn't compile runs (no table names it: it survives)" "$line" "FAIL SURVIVED v-broken"
+
 echo "== the rest, when no table names the file"
 run m-second
 check "killed in the second phase: exit 0" "$rc" "0"
@@ -266,6 +320,17 @@ check "a --table-timeout under 10x a baseline: exit 2" "$rc" "2"
 check "a --table-timeout under 10x a baseline: no mutant judged" "$line" ""
 got=$(grep -c 'under 10x the baseline of t-b.sh' "$TMP/out")
 check "a --table-timeout under 10x a baseline: says which table" "$got" "1"
+
+echo "== a misspelt # mutate-scope: path is refused (TASK-254)"
+R5="$TMP/r5"
+cp -R "$R" "$R5"
+printf '# mutate-scope: src/scoped.txt src/scopd.txt\ntrue\n' > "$R5/.claude/scripts/tests/t-typo.sh"
+python3 "$R5/.claude/scripts/mutate.py" --list --match m-first > "$TMP/out" 2>&1
+check "a declared path that doesn't exist: exit 2" "$?" "2"
+got=$(grep -c "t-typo.sh: src/scopd.txt" "$TMP/out")
+check "a declared path that doesn't exist: says which table and path" "$got" "1"
+python3 "$R/.claude/scripts/mutate.py" --list --match m-first > "$TMP/out" 2>&1
+check "every declared path exists: exit 0" "$?" "0"
 
 echo "== interrupted (Ctrl-C, or CI's timeout; TERM from an outer run's timeout): it stops now, and its tables"
 for sig in INT TERM; do

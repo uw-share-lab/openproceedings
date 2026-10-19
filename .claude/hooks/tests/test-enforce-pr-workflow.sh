@@ -259,6 +259,7 @@ check main  block "flock -n /tmp/op.lock -c 'git commit -m x'"        # -c runs 
 check feature/x block "flock /tmp/op.lock --command 'git status; git push origin HEAD:dev'"
 check main  block 'unbuffer -p git commit -m x'
 check main  allow "flock /tmp/op.lock -c 'git status'"                # positive control: a read in the shell
+check main  allow "flock /tmp/op.lock --command 'git status'"         # --command is -c
 check main  allow 'xcrun -sdk macosx git log -1'                      # positive control
 
 echo "git -c config overrides and aliases are expanded before classifying (TASK-067):"
@@ -702,6 +703,16 @@ check_msg dev block no 'cd ~ && git commit -m x'                                
 HOME="$(dirname "$WT")" check_msg dev block no "cd ~/$WT_NAME && cd ~ && git commit -m x"   # a later cd clears it
 HOME="$(dirname "$WT")" check_msg dev allow no "cd ~/$WT_NAME && git -C $WT commit -m x"        # absolute -C
 HOME="$(dirname "$WT")" check_msg dev block no "cd ~/$WT_NAME && git push origin HEAD:dev"      # not a commit
+
+echo "TASK-253: env -C / sudo -D move only the command they run, read with every option the wrapper takes:"
+check_cwd main "$REPO" block "env -C \"$WT\" true; git commit -m x"         # the commit runs here, on main
+check_cwd main "$REPO" block "sudo -D \"$WT\" true; git commit -m x"
+check_cwd main "$REPO" allow "env -C \"$WT\" git commit -m x"               # the worktree's feature branch
+check_cwd main "$REPO" allow "sudo -nD \"$WT\" git commit -m x"             # a group ending in -D: the next word
+check_cwd main "$REPO" allow "env --ch=\"$WT\" git commit -m x"             # a unique prefix of --chdir
+check_cwd main "$WT"   block 'env -C "$OP_UNSET_253" git commit -m x'      # a directory it can't resolve
+check_cwd main "$WT"   allow 'env -C . git commit -m x'                    # resolved from the call's cwd, not the hook's
+check feature/x block 'env -C /tmp true >> .git/config; git p origin HEAD:main'  # the shell writes ./.git/config
 
 echo "TASK-172: the payload reaches Python on stdin, so a command past ARG_MAX is parsed, not text-checked:"
 BIG=$(python3 -c 'import json; print(json.dumps({"tool_input":{"command":"git commit -m \"" + "x" * 1100000 + "\""}}))')

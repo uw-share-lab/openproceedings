@@ -101,7 +101,11 @@ that fails closed, an unreviewed HEAD) does not count. Isolate the one check the
 identical in several files (the shared AI-attribution pattern) is mutated in all of them at once with `also`
 (`{label, file, old, new, also: [files]}`); a one-file mutant there is killed only by the identity row (TASK-243).
 A table that exercises only some files says so in its header comment (`# mutate-scope: <file> …`, repo-relative paths exactly as a mutant's `file`), and `mutate.py`
-then runs it only for those files' mutants, so a failure from load is never credited with another file's (TASK-238).
+then runs it only for those files' mutants, so a failure from load is never credited with another file's (TASK-238); a
+declared path that doesn't exist is refused (exit 2). A mutant's `old` text must occur exactly once in each of its files,
+and its edit must leave a file that compiled still compiling (`mutate.py --check`, in `make tooling`, refuses `STALE`,
+`AMBIGUOUS` and `UNCOMPILABLE` ones: TASK-254). Make an `old` text unique with the lines around it, and write a `new`
+that compiles (`if False:` for a removed branch, `pass` for a removed body).
 An `equivalent` label needs evidence for the actual replacement, including a distinguishing negative case
 and a positive control. Dropping an explicit default and forcing its opposite are different mutations:
 `--no-renames` makes an unchanged learning rename look newly added, even though `--find-renames` gives 0/0.

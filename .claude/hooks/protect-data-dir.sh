@@ -46,7 +46,8 @@
 #   grep -O<cmd>, difftool -x, filter-branch filters and --setup; a `git config [--file f] [set] <key> <value>`
 #   value for those keys) is checked as a command, up to four levels. Shell writes refused too: touch/sponge in
 #   backlog/, a cp/rsync/ditto whose copy lands there (dest/<name>, or each entry of a `src/` and of every ditto
-#   source), cp/mv/ln/install `-t <dir>` into it, patch(1) (not --dry-run), tar -x/unzip into backlog/, a worktree
+#   source), cp/mv/ln/install `-t <dir>` into it (each read with its own GNU option table, COPY_OPTIONS; an
+#   ambiguous long option is refused), patch(1) (not --dry-run), tar -x/unzip into backlog/, a worktree
 #   root or above, find -fprint/-fls into it, and a find that deletes or runs anything but a reader (`-exec grep`;
 #   `rg --pre` is no reader) from backlog/, a worktree root or above (BSD `-f <path>` starts; GNU's leading -D/-O
 #   skipped), and the finds the older check misreads (those starts, -O/-D, a cluster such as -Lx) and copies into
@@ -842,18 +843,88 @@ GUARD_DESTROY = {"unlink", "rm", "rmdir", "shred", "truncate"}
 GUARD_DEST_LAST = {"rsync", "cp", "install", "ln", "ditto"}
 GUARD_EDITORS = ("sed", "perl", "ruby", "awk", "gawk")
 
-def target_dirs(args):
-    """GNU's destination-first directory: `-t <dir>`, `-t<dir>`, `-vt <dir>`, `--target-directory[=]<dir>` (or a
-    unique prefix of it, `--target`)."""
-    out = []
-    for k, a in enumerate(args):
-        name, eq, value = a.partition("=")
-        if a.startswith("--") and len(name) >= len("--tar") and "--target-directory".startswith(name):
-            out.append(value if eq else (args[k + 1] if k + 1 < len(args) else ""))
-        elif a.startswith("-") and not a.startswith("--") and "t" in a[1:]:
-            rest = a[a.index("t", 1) + 1 :]
-            out.append(rest or (args[k + 1] if k + 1 < len(args) else ""))
-    return out
+# GNU cp, mv, ln and install, each with every option it takes (TASK-253 review rounds 2-3): short options as a getopt
+# string (`x:` takes a value: the rest of the word, else the next word), long options as `name` (a flag), `name=` (a
+# value, after `=` or else the next word) or `name[=]` (a value only after `=`). A long option resolves as
+# getopt_long does: its exact name, else a unique prefix (`--strip` is mv's --strip-trailing-slashes, a flag, but
+# install's --strip); an ambiguous one is refused, an unknown one stays a word (the blocking side).
+COPY_OPTIONS = {
+    "cp": ("abdfHilLnpPrRsS:t:TuvxZ",
+           "archive attributes-only backup[=] copy-contents debug force interactive link dereference no-clobber"
+           " no-dereference preserve[=] no-preserve= parents recursive reflink[=] remove-destination sparse="
+           " strip-trailing-slashes suffix= symbolic-link target-directory= no-target-directory update[=] verbose"
+           " keep-directory-symlink one-file-system context[=] help version"),
+    "mv": ("bfintuvS:t:TZ",
+           "backup[=] debug exchange force interactive no-clobber no-copy no-target-directory strip-trailing-slashes"
+           " suffix= target-directory= update[=] verbose context help version"),
+    "ln": ("bdFfinsLPrS:t:Tv",
+           "backup[=] directory force interactive logical no-dereference physical relative symbolic suffix="
+           " target-directory= no-target-directory verbose help version"),
+    "install": ("bcCdDg:m:o:psS:t:TvZ",
+                "backup[=] compare debug directory group= mode= owner= preserve-timestamps strip strip-program="
+                " suffix= target-directory= no-target-directory verbose preserve-context context[=] help version"),
+}
+
+def _copy_tables(head):
+    shorts, longs = COPY_OPTIONS[head]
+    short_kinds = {c: ("value" if shorts[i + 1 : i + 2] == ":" else "flag") for i, c in enumerate(shorts) if c != ":"}
+    long_kinds = {}
+    for spec in longs.split():
+        kind = "optional" if spec.endswith("[=]") else "value" if spec.endswith("=") else "flag"
+        long_kinds[spec.removesuffix("[=]").removesuffix("=")] = kind
+    return short_kinds, long_kinds
+
+def target_operands(head, args):
+    """GNU's destination-first directory, as `head` (cp, mv, ln or install) reads it (COPY_OPTIONS): `-t <dir>`,
+    `-t<dir>`, `-vt <dir>`, `--target-directory[=]<dir>` or a unique prefix of it, and none after `--`; another
+    option's value (`-S X`, `--suffix X`, `-St`, whose t is the suffix) is skipped, so `mv -S -t a b` has no -t.
+    Returns (the directories, the other words, `--` and the operands after it included)."""
+    short_kinds, long_kinds = _copy_tables(head)
+    dirs, rest, k = [], [], 0
+    while k < len(args):
+        a = args[k]
+        if a == "--":
+            rest += args[k:]
+            break
+        if a.startswith("--"):
+            given, eq, value = a[2:].partition("=")
+            names = [given] if given in long_kinds else [n for n in long_kinds if n.startswith(given)]
+            if len(names) > 1:
+                refuse(f"Blocked: {a.partition('=')[0]} is an ambiguous {head} option; write it out.")
+            kind = long_kinds[names[0]] if names else "flag"
+            if kind == "value" and not eq:
+                k += 1
+                value = args[k] if k < len(args) else ""
+            if names == ["target-directory"]:
+                dirs.append(value)
+            else:
+                rest.append(a)
+        elif a.startswith("-") and len(a) > 1:
+            rest.append(a)
+            for n, letter in enumerate(a[1:], start=2):
+                if short_kinds.get(letter) == "value":
+                    value = a[n:]
+                    if not value:
+                        k += 1
+                        value = args[k] if k < len(args) else ""
+                    if letter == "t":
+                        dirs.append(value)
+                    break
+        else:
+            rest.append(a)
+        k += 1
+    return dirs, rest
+
+def target_dirs(head, args):
+    return target_operands(head, args)[0]
+
+def mv_operands(args):
+    """mv's sources and destinations: under `-t <dir>` every other operand is a source, else the last one is the
+    destination (TASK-253: `mv -t .. README.md` read `..` as a source, which holds data/snapshots)."""
+    dirs, rest = target_operands("mv", args)
+    cut = rest.index("--") if "--" in rest else len(rest)
+    words = [w for w in rest[:cut] if not w.startswith("-")] + rest[cut + 1 :]
+    return (words, dirs) if dirs else (words[:-1], words[-1:])
 
 def backlog_guard(cmd, where, depth=0):
     """TASK-244's added blocks, run before every older check and exit path in main(): it refuses (exit 2) or returns,
@@ -960,7 +1031,7 @@ def guard_walked(walked, where, depth):
             refuse(BACKLOG_MSG)
         if head == "ditto" and paths and any_rel(is_or_contains_immutable, paths[-1], d):
             refuse(IMMUTABLE_MSG)
-        dirs = target_dirs(args) if head in ("cp", "mv", "ln", "install") else []
+        dirs = target_dirs(head, args) if head in COPY_OPTIONS else []
         if dirs:  # GNU `-t <dir>`: the destination comes first
             if any(t in unresolved or re.search(r"[$`~]", t) for t in dirs) and in_backlog_repo:
                 refuse(BACKLOG_MSG + " (a -t directory this guard can't resolve; write it out.)")
@@ -1259,8 +1330,13 @@ def main():
                 refuse_unresolved([p for p in paths if p[:1] in "$~`"], implicit_cwd=True)
             if head in DESTROY and any(covers_immutable(p, d) for p in paths):
                 refuse(IMMUTABLE_MSG + " To retire an old version use `op index retire <index_version>` (it refuses while a search record pins it).")
-            if head == "mv" and paths and (any(covers_immutable(p, d) for p in paths[:-1]) or any_rel(inside_immutable, paths[-1], d)):
-                refuse(IMMUTABLE_MSG)
+            if head == "mv" and paths:
+                sources, dests = mv_operands(args)
+                # an attached `-t$X` is never resolved (a separate word is: refuse_unresolved above)
+                if has_data and any(re.search(r"[$`~]", t) for t in dests if t not in paths):
+                    refuse(UNRESOLVED_MSG)
+                if any(covers_immutable(p, d) for p in sources) or any(any_rel(inside_immutable, t, d) for t in dests):
+                    refuse(IMMUTABLE_MSG)
             if head in DEST_LAST and paths and any_rel(is_or_contains_immutable, paths[-1], d):
                 refuse(IMMUTABLE_MSG)
             if head == "rsync" and paths and any(rsync_deletes(a) for a in args) and covers_immutable(paths[-1], d):
