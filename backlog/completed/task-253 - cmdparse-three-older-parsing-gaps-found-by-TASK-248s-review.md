@@ -3,10 +3,10 @@ id: TASK-253
 title: >-
   cmdparse: wrapper option parsing (grouped and attached short options,
   long-option prefixes) and two older gaps
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-16 22:50'
-updated_date: '2026-10-18 22:31'
+updated_date: '2026-10-19 00:51'
 labels:
   - tooling
 dependencies: []
@@ -22,10 +22,10 @@ Found while reviewing TASK-248 (PR #158, 2026-10-16); all predate that branch an
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 env -C and sudo -D change the directory only for the command they run
-- [ ] #2 sh -c and eval keep their own redirects, so protect-data-dir sees the write
-- [ ] #3 Each case has rows (probes as data only) in the affected gates' tables and a killed mutant in .claude/scripts/mutants/gates.json
-- [ ] #4 Getopt-style wrappers (flock, doas, caffeinate, env, sudo, nice, timeout) split a short-option group, where a value-taking letter takes the rest of the word or else the next word (flock -nw 5 <file>, -w5, sudo -nu root); a long option resolves only by unique prefix of the wrapper's known long options (flock --wai 5 /tmp/l git push hides the push today); an ambiguous or unknown long option, or any argument the parser can't place for certain (an unexpected word after flock's lock file), fails closed with a ParseError
+- [x] #1 env -C and sudo -D change the directory only for the command they run
+- [x] #2 sh -c and eval keep their own redirects, so protect-data-dir sees the write
+- [x] #3 Each case has rows (probes as data only) in the affected gates' tables and a killed mutant in .claude/scripts/mutants/gates.json
+- [x] #4 Getopt-style wrappers (flock, doas, caffeinate, env, sudo, nice, timeout) split a short-option group, where a value-taking letter takes the rest of the word or else the next word (flock -nw 5 <file>, -w5, sudo -nu root); a long option resolves only by unique prefix of the wrapper's known long options (flock --wai 5 /tmp/l git push hides the push today); an ambiguous or unknown long option, or any argument the parser can't place for certain (an unexpected word after flock's lock file), fails closed with a ParseError
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -47,3 +47,9 @@ Related (not an AC), decided here: python3 -c / heredoc programs that write unde
 
 2026-10-18, review round 3: protect-data-dir reads cp, mv, ln and install each from its own GNU option table (COPY_OPTIONS: short getopt string, long options with flag/value/optional), long options resolved as getopt_long does (exact name, then unique prefix; ambiguous refused; unknown stays a word), so --strip is a flag for mv/cp (prefix of --strip-trailing-slashes) and install (exact). cmdparse tracks a git config write in an env -C command's redirects before yielding them in the shell's directory (env -C /tmp true >> .git/config; git p ... is FailClosed).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+cmdparse reads env, sudo, nice, timeout, doas, caffeinate and flock with full GNU/BSD option tables (short groups, attached values, unique long prefixes; unknown or ambiguous options and stray words after flock's lock file are ParseErrors); env -S words are env's own; env -C / sudo -D move only their own command, whose redirects are yielded first in the shell's directory (with git config writes tracked); sh -c and eval keep their redirects. protect-data-dir reads cp/mv/ln/install from per-command option tables, so mv -t DIR is the destination (mv -t .. README.md allowed) and option values (-S, --suffix, ...) never hide a -t or a source. Rows in the gate tables and killed mutants in gates.json (4 review rounds).
+<!-- SECTION:FINAL_SUMMARY:END -->
