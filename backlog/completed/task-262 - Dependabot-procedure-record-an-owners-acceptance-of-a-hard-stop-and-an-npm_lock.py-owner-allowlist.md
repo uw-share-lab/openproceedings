@@ -3,10 +3,10 @@ id: TASK-262
 title: >-
   Dependabot procedure: record an owner's acceptance of a hard stop, and an
   npm_lock.py owner allowlist
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-18 14:16'
-updated_date: '2026-10-18 15:31'
+updated_date: '2026-10-19 00:01'
 labels:
   - tooling
   - dependabot
@@ -34,3 +34,9 @@ dependabot-review §10 gains "When the owner accepts a hard stop (local only)": 
 
 Review round 1: the accepted path also refuses an alias entry, names publisher and provenance in its ok line, and reports any install script as a PROBLEM; rows for provenance, alias, cooldown and install script, and mutants for each (8 in all). §10 says GitHub writes go out under the maintainer's login (no GitHub act proves the owner's hand); the comment names the publisher and provenance and that the package has no install script; the allowlist PR's reviewers confirm the URL; $RUN's checkers are re-extracted after it merges; step 2's npm row names the exception; step 5's recipe runs make e2e in the same call.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+/dependabot-review §10 adds "When the owner accepts a hard stop": the record is a PR comment, the checks run again on the head, and only that head is attested. npm_lock.py reads OWNER_ACCEPTED (name@version -> comment URL), seeded with @codemirror/streamparser@6.0.0 from PR #165. An accepted package at exactly that version and under its own name gets an ok line, and still gets the registry and cooldown checks. Its publisher and provenance are shown, and an install script is a PROBLEM. 7 case rows, 8 mutants, all killed.
+<!-- SECTION:FINAL_SUMMARY:END -->

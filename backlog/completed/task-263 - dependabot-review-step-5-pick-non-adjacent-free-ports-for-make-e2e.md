@@ -1,10 +1,10 @@
 ---
 id: TASK-263
 title: 'dependabot-review step 5: pick non-adjacent free ports for make e2e'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-18 14:16'
-updated_date: '2026-10-18 15:04'
+updated_date: '2026-10-19 00:01'
 labels:
   - tooling
   - dependabot
@@ -31,3 +31,9 @@ Step 5's e2e row now points to a recipe below the table: a python3 snippet picks
 
 Review round 1: the recipe now runs make e2e in the same Bash call (shell variables don't outlive a call).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Step 5's recipe picks an API port whose +1 and +2 are free and a web port 5 above it. It runs make e2e in the same Bash call. testing-standards notes the +1/+2 instances.
+<!-- SECTION:FINAL_SUMMARY:END -->

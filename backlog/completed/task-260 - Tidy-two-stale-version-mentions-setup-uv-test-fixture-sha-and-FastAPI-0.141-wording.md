@@ -3,10 +3,10 @@ id: TASK-260
 title: >-
   Tidy two stale version mentions: setup-uv test fixture sha and 'FastAPI 0.141'
   wording
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-18 04:43'
-updated_date: '2026-10-18 15:04'
+updated_date: '2026-10-19 00:01'
 labels:
   - tooling
   - docs
@@ -34,3 +34,9 @@ check_uv_pin rows' fixture UVA now uses the workflows' current pin (setup-uv v10
 
 Review round 1: backend/src/openproceedings/api/app.py's module docstring said the same 'FastAPI 0.141' and is reworded the same way; the reworded lines rewrapped; the fixture comment no longer names a version.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The check_uv_pin fixture uses the workflows' setup-uv pin, with a comment that any sha would do. The FastAPI route-path note in the fastapi-conventions skill, spec 04 and api/app.py says it was found on 0.141 by task-035, not that 0.141 is current.
+<!-- SECTION:FINAL_SUMMARY:END -->
