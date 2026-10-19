@@ -58,7 +58,7 @@ names the index it was verified on and which saved records still reproduce.
 - index_version `78d2e70310f3`, snapshot `03eab0ef56c4d768ca25c1942207d1c9eaf14a1d852bd276a05e013ae17210c7`
 - TOKENIZER_VERSION 3 · SCHEMA_VERSION 4 · Tantivy 0.26.2 · QUERY_VERSION 2
 - Search records saved under 0.3.0 replay as `reproduced` on the index_version they pin, while it is kept and supported and QUERY_VERSION matches. Earlier records also require a supported retained pin and matching QUERY_VERSION; release tables alone do not determine replay status.
-- Verified on the served index 78d2e70310f3 of the 173,518-paper snapshot of 2026-10-16, built with the same tokenizer, schema, query and Tantivy versions as 0.3.0, so search records saved on a retained supported index still replay as reproduced. The question of OpenAlex's terms (TASK-135) is still open with the university copyright office: the public launch waits on its answer, and the OpenAlex abstract fill is unchanged until then. Promotion does not deploy data.
+- Verified on the served index 78d2e70310f3 of the 173,518-paper snapshot of 2026-10-16, in which AIES 2026 (Vol. 9) joins the corpus (TASK-217). It is built with the same tokenizer, schema, query and Tantivy versions as 0.3.0, so search records saved on a retained supported index still replay as reproduced. The question of OpenAlex's terms (TASK-135) is still open: it has yet to go to the university copyright office, the public launch waits on its answer, and the OpenAlex abstract fill is unchanged until then. Promotion does not deploy data.
 
 ## 0.3.0
 
