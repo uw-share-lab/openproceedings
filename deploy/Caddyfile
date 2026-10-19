@@ -10,6 +10,23 @@
 #             `includeSubDomains` until the hosting domain is decided (TASK-064): the header would then bind
 #             every subdomain of a domain this project may not control. Once it is, set
 #             OP_HSTS="max-age=63072000; includeSubDomains" if every subdomain serves HTTPS.
+# OP_COMPARE  `off` (the default) or `on`: which protocols the server speaks and which body caps the site
+#             imports, below. Only deploy/compare.yml sets it, beside `op serve --compare` (decision-035;
+#             deploy/README.md §Comparisons). Any other value names a snippet (or file) that doesn't exist, and
+#             Caddy refuses to start.
+# OP_READ_BODY  the server's read_body timeout (default 10s); deploy/compare.yml raises it for 16 MiB uploads.
+
+# With comparisons on, no HTTP/3: no stall over QUIC has been run against this block (no HTTP/3 client here).
+# Caddy builds its HTTP/3 server with only the idle timeout; read_body reaches a QUIC stream only through the
+# per-request read deadline Caddy sets since 2.11.6 (modules/caddyhttp/server.go). HTTP/1.1 is cut at read_body
+# (measured; HTTP/2 by the same deadline, not measured).
+(protocols-off) {
+	protocols h1 h2 h3
+}
+(protocols-on) {
+	protocols h1 h2
+}
+
 {
 	skip_install_trust # the local CA's root stays in the caddy-data volume; nothing to install inside a container
 	log default {
@@ -21,19 +38,74 @@
 	}
 	servers {
 		timeouts {
-			read_header 5s # a client's request line and headers (default: no timeout)
-			read_body 10s # its body (default: no timeout)
+			read_header 5s # a client's request line and headers (default: 1m)
+			# its body (default: no timeout). A timeout of the whole server, every path: Caddy has no per-path one.
+			# It is what cuts a stalled upload before the API sees it (request_buffers below)
+			read_body {$OP_READ_BODY:10s}
 			idle 2m # a keep-alive connection between requests
-			# no `write` timeout: an export of the whole matched set streams for as long as it takes
+			# no `write` timeout: an export of the whole matched set streams for as long as it takes; Caddy's
+			# stall-only `write_idle` (default 1m since 2.11.6) still cuts a client that stops reading for a minute
+			# (`read_body_idle`, also 1m, doesn't fire first while `read_body` is at most 1m; leave it non-zero: it is
+			# what sets the per-request read deadline, the only one an HTTP/3 stream gets)
 		}
-		max_header_size 64KB # the API's own request-head limit (a 2,000-code-point q fits)
+		max_header_size 64KiB # the API's own request-head limit (a 2,000-code-point q fits)
+		import protocols-{$OP_COMPARE:off}
+	}
+}
+
+# The body caps with comparisons off: every path gets the API's own 64KiB cap
+(compare-off) {
+	request_body {
+		max_size 64KiB # the API's own body cap: refuse larger before forwarding
+	}
+}
+
+# The body caps with comparisons on (`op serve --compare`, deploy/compare.yml; TASK-183). The 64KiB cap is scoped
+# away from the one path that takes a file: a site-wide cap would wrap the handle below and refuse the file first.
+# 16MiB, not 16MB (16,000,000 bytes): the API's limits.compare.max_body_bytes is 16,777,216. The whole file is
+# buffered here before the API is asked, so a slow upload holds a proxy goroutine and about 50 MiB of this
+# process's memory (measured; compare.yml limits it), never the API's one comparison slot; read_body cuts one
+# that stalls
+(compare-on) {
+	@rest not path /api/v1/compare
+	request_body @rest {
+		max_size 64KiB
+	}
+	@compare path /api/v1/compare
+	handle @compare {
+		# a file must declare its length (411 otherwise). Past request_buffers Caddy streams the rest of a body
+		# to the API, so a chunked (or HTTP/2, unsized) file that went over 16 MiB, or stopped at it, and then
+		# stalled reached the API and held its slot until the API's own upload timeout. A declared length over
+		# the cap is refused here (413) before any of it is read: forwarded, the API refused it from the header
+		# and reset the connection while the proxy was still sending, which the client once saw as a 502. A
+		# length that isn't 1 to 18 plain digits is refused (400; over HTTP/2 Go passes it on, and int() would fail into
+		# a 500). A declared length within the cap is buffered here whole
+		@unsized {
+			method POST
+			not header Content-Length *
+		}
+		respond @unsized "Send the file with a Content-Length." 411
+		@badlength {
+			method POST
+			expression !string({http.request.header.Content-Length}).matches('^0*[0-9]{1,18}$')
+		}
+		respond @badlength "Send the file with a valid Content-Length." 400
+		@oversized {
+			method POST
+			expression int('0' + string({http.request.header.Content-Length})) > 16777216
+		}
+		respond @oversized "The file is over 16 MiB (16,777,216 bytes), the most this instance compares." 413
+		request_body {
+			max_size 16MiB
+		}
+		reverse_proxy api:8000 {
+			request_buffers 16MiB
+		}
 	}
 }
 
 {$OP_DOMAIN:localhost} {
-	request_body {
-		max_size 64KB # the API's own body cap: refuse larger before forwarding
-	}
+	import compare-{$OP_COMPARE:off}
 	header {
 		>Strict-Transport-Security "{$OP_HSTS:max-age=63072000}"
 		-Server
@@ -41,7 +113,9 @@
 	# Caddy sets X-Forwarded-For to the client's address (it trusts no proxy in front of it), and the API
 	# believes it only from this proxy's address (`--trusted-proxy` in compose.yml)
 	reverse_proxy /api/* api:8000 {
-		request_buffers 64KB # read the whole (capped) body before opening the upstream request
+		# read the whole (capped) body before opening the upstream request. A body that declares its length
+		# within the cap is read whole; an unsized (chunked) one that reaches 64KiB has the rest streamed
+		request_buffers 64KiB
 	}
 	reverse_proxy web:3000
 	log {

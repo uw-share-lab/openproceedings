@@ -15,13 +15,40 @@ a task that is Done does not stay in `backlog/tasks/`.
 | Starting work | `backlog task edit <id> -s "In Progress" -a @<you>`; add a plan (`--plan`) |
 | As you go | Tick acceptance criteria as each is met (`--check-ac <n>`); add notes (`--append-notes`; `--notes` replaces them) when you learn something that changes the plan; record any follow-up **when you find it** (in the notes), and file it as a task at the end, after rebasing (§Ids) |
 | Scope changes | Edit the description/ACs so they match what you're actually doing; a stale AC is a lie |
-| Adding a dependency | `--dep` **replaces** the whole list: pass the old ids plus the new (`--dep task-063,task-065,task-133`), then check the `dependencies:` diff |
-| Done | All ACs checked → `backlog task edit <id> -s Done --final-summary "…"` → **`backlog task complete <id>`**, which moves it into `backlog/completed/` |
+| Adding a dependency | `--dep` **replaces** the whole list: pass the old ids plus the new (`--dep task-<old>,task-<new>`), then check the `dependencies:` diff. A completed task can't be named in `--dep` (the CLI refuses the whole edit, other fields included), so drop a completed dependency from the list or record it in the notes |
+| Done | **After the last review round** (a `/review-gate` round left nothing to fix): all ACs checked → `backlog task edit <id> -s Done --final-summary "…"` → **`backlog task complete <id>`**, which moves it into `backlog/completed/` |
 
 `backlog task complete` is the only way a task leaves `backlog/tasks/`. Never move files by hand: editor
-writes under `backlog/` are blocked by `enforce-backlog-cli.sh`, Bash `mv`/`git mv`/`rm` of files under
-`backlog/` are blocked by `protect-data-dir.sh`, and CI's `check_backlog.py` catches a Done task left
-behind in `tasks/`. Archive (`backlog task archive`) is only for tasks that were dropped
+writes under `backlog/` are blocked by `enforce-backlog-cli.sh`; shell writes there (e.g. `mv`, `cp`, `rm`, `touch`,
+redirects, a copy that lands there, `find -delete`/`-exec <writer>`/`-fprint` that can reach it), and every git command that writes its files by pathspec
+(`git restore`, `git checkout <commit> -- <path>`, `git reset <commit> -- <path>`, `git rm`, `git mv`, `git clean`,
+`git stash push -- <path>`, `git apply`, `git am`, `git merge-file`, `git checkout-index`, `git update-index`, `git
+read-tree --prefix`/`-u`, `-p` with no path, a whole-tree pathspec such as `.`, `'*.md'` or `:/` included), `patch`, an archive
+extracted where backlog/ is, and a git pager, editor or `--exec` command that does any of that, are blocked by
+`protect-data-dir.sh` (TASK-244); and CI's
+`check_backlog.py` catches a Done task left behind in `tasks/`. Git still may unstage there (`git restore
+--staged`, `git reset -- <path>`), read (`log`, `show`, `diff`), dry-run (`git clean -n`, `git apply --check`; `git rm -n`/`git mv -n` there
+stay refused), move whole branches and commits
+(checkout/switch a branch, rebase, merge, cherry-pick, `reset --soft`/`--mixed` to a commit), and settle a file a
+rebase or merge stopped on (`git checkout --theirs <path>`, or `git add -u <path>` to accept a deletion; `git rm`
+there stays refused); a whole-tree restore can leave backlog/ out with
+`':!backlog'`. `git reset --hard`/`--merge`/`--keep` are refused where backlog/ is; the whole-tree discards still allowed
+(`git checkout -f`, `git switch --discard-changes`, `git stash`) undo an uncommitted CLI change like any other, so
+commit what the CLI wrote right away. The hook is a guard against
+mistakes, not a boundary: an obfuscated command may get past it, and git history plus review are the backstop.
+
+**Finalize only after the last review round.** Backlog.md 1.53 can't edit a task once it is in `completed/`
+("Task not found"), and nothing may move it back: so a task completed while review is still running can't take
+the next round's notes or ticks. Finalizing is a commit of only the CLI's files, reviewed (`code-reviewer`,
+`docs-reviewer`) and attested as a new head. If that round finds a Must or Should, fix it in a new commit and
+re-review; never edit or reopen the completed task: record the change in the PR body and the learnings entry, and
+file a follow-up task only for work that can't be done yet. If a task was completed early anyway, leave the completed file as it is and never put the
+pre-completion copy back with git (PR #146 did, three times, and lost the plan once; that is what TASK-244
+closed). Put what the later rounds changed in the PR body and the learnings entry; if they found more work, file
+it as a follow-up task with `backlog task create` (at the end of the branch, §Ids) whose description names the
+completed task. Only the owner reopens a completed task.
+
+Archive (`backlog task archive`) is only for tasks that were dropped
 unfinished. Give the reason in the notes first.
 Backlog.md 1.53 reuses an archived task's id: the next `backlog task create` after an archive gets the
 same number (task-075 twice, 2026-09-26). After archiving, say which task an id means in both tasks' notes,
@@ -80,10 +107,11 @@ exactly this, and a stale doc is a **Should** at minimum (**Must** if it would s
   - fails if `.claude/README.md` or `.claude/learnings/INDEX.md` is stale;
   - fails if the roster lint finds any reference to a missing agent, skill or command.
 - **`/review-gate`:** `docs-reviewer` always runs.
-- **Closing workflow** (`CLAUDE.md`): step 2 (Backlog) and step 3 (docs) come before the learning and the review.
+- **Closing workflow** (`CLAUDE.md`): ACs, notes (step 2) and docs (step 3) come before the learning and the
+  review; `backlog task complete` comes after the last review round, as its own reviewed head (step 5).
 
 ## Anti-patterns
 - "I'll update the docs in a follow-up PR." No. The PR that changes behaviour changes its docs.
-- Leaving a task In Progress after the PR merges. Complete it before the PR is opened. Its final summary
-  is part of what gets reviewed.
+- Leaving a task In Progress after the PR merges. Complete it after the last review round and before the PR
+  is opened; the completion commit is reviewed and attested as a new head, so its final summary is reviewed too.
 - A Done task left in `tasks/`. CI rejects it. Run `backlog task complete <id>`.

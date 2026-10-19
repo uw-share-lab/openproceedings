@@ -28,7 +28,7 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   contract), routers `search.py` (parse and search), `papers.py`, `records.py`, `meta.py`, `coverage.py`, `health.py`, `export.py`
   (streamed exports, `op export`'s writers), `compare.py` (`POST /compare`: a reviewer's own RIS file against a query, read in memory for the one request, off unless `op serve` is local or run with `--compare`; TASK-177), `server.py` → `op serve`, `openapi.py` → `op openapi`);
   `eval/` (`coverage_report.py` → `op eval coverage`, TASK-054; `scholar_compare.py` (a RIS set against a query's result on one index: matching by the merge rules, scope, and every disagreement's class; the one implementation, TASK-056/TASK-177) and `scholar_report.py` → `op eval scholar`; `openalex_audit.py` → `op eval openalex`; the other reports arrive with their tasks),
-  no `semantic/` in v1: spec 06 is deferred to phase 2 by decision-017). Tests in `backend/tests/`; `uv run pytest` from the root.
+  no `semantic/` in v1: spec 06 is shelved by decision-017). Tests in `backend/tests/`; `uv run pytest` from the root.
 - **API contract:** after changing a route or a response model, run `make openapi` and commit both
   `backend/tests/contract/openapi.json` (the snapshot) and `frontend/src/api/schema.ts` (generated from it;
   never hand-edited). A contract test and CI's `test` job fail while either is stale (`api-contract` skill).
@@ -57,7 +57,7 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   `record-fixture.json`, real API answers kept current by `test_frontend_record_fixture.py`); the search page's "Compare with your records" panel is `src/components/compare/` and `src/lib/compare.ts` (TASK-177; tested against `compare-fixture.json`, kept current by `test_frontend_compare_fixture.py`). Tests are Vitest + Testing Library
   (`src/**/*.test.{ts,tsx}`); `npm test --workspace frontend`. Full-stack browser, accessibility and
   visual tests live in `frontend/e2e/`, backed by `backend/tests/e2e/`; run them with `make e2e`.
-- `deploy/`: `compose.yml` (api + web + Caddy, plus the `ops` and `takedown-check` one-offs), `Caddyfile`, `api.Dockerfile`, `caddy.Dockerfile`, `index-permissions.sh`, `smoke-test.sh` (the stack over a fixture, by hand) and `README.md` (the operator's runbook), TASK-065; `web.Dockerfile` and `web-build-gate.sh` (the `web` image; a public build needs a takedown contact, TASK-136; built by CI's advisory `web-image` workflow, TASK-148); every base image digest-pinned (TASK-149). `backend/tests/deploy/fixture_data.py` writes the smoke test's data directory.
+- `deploy/`: `compose.yml` (api + web + Caddy, plus the `ops` and `takedown-check` one-offs), `compare.yml` (the overlay that turns comparisons on: `op serve --compare`, the proxy's `compare-on` snippet, its `read_body` and memory limit; TASK-183), `Caddyfile`, `api.Dockerfile`, `caddy.Dockerfile`, `index-permissions.sh`, `smoke-test.sh` (the stack over a fixture, by hand; `--compare` with the overlay) and `README.md` (the operator's runbook), TASK-065; `web.Dockerfile` and `web-build-gate.sh` (the `web` image; a public build needs a takedown contact, TASK-136; built by CI's advisory `web-image` workflow, TASK-148); every base image digest-pinned (TASK-149). `backend/tests/deploy/fixture_data.py` writes the smoke test's data directory, and `compare_probe.py` makes its comparison uploads.
 - `docs/specs` · `docs/{plans,results,design,usability,research}` (created as needed); `docs/README.md` indexes them.
 - `backlog/`: Backlog.md, CLI only.
 - `.claude/`: agents, skills, commands, hooks and learnings, all committed. The roster is in
@@ -83,7 +83,7 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   the change they describe. Never in a later catch-up PR.
 - Tick acceptance criteria as you meet them. Note follow-ups when you find them and file them as tasks
   at the end of the branch, after rebasing onto `dev` (new ids are created last: `task-hygiene` §Ids).
-- **When a task is Done, run `backlog task complete <id>`**, which moves it to `backlog/completed/`. CI fails
+- **When a task is Done (after the last review round, §Closing workflow), run `backlog task complete <id>`**, which moves it to `backlog/completed/`. CI fails
   on a Done task left in `backlog/tasks/`, and on two tasks or two decisions that share an id.
 - `docs-reviewer` runs on every diff.
 
@@ -98,7 +98,9 @@ fixtures under `backend/tests/fixtures/`; recording them is a separate, manual `
 ## Code quality
 - **Autolint** (`.claude/skills/autolint/SKILL.md`): `autofix.sh` formats and fixes each file as it's edited
   (ruff, prettier, eslint, shellcheck).
-- `make lint` is exactly what CI's `lint` job runs. The pre-push hook runs `make lint` and `make tooling`.
+- `make lint` is exactly what CI's `lint` job runs. The pre-push hook runs `make lint` and `make tooling` (a cloud
+  `/dependabot-review` clone refuses every push, since that run is notify-only, and refuses the dependency targets:
+  decision-048).
   `make fmt` fixes the whole repo.
 - **Logging** (`.claude/skills/logging-standards/SKILL.md`): structured JSON, one line per unit of work, and
   no query text, abstracts, credentials or personal data. `observability-reviewer` checks every
@@ -109,9 +111,9 @@ fixtures under `backend/tests/fixtures/`; recording them is a separate, manual `
 |---|---|
 | `enforce-pr-workflow.sh` | `main` and `dev` take no direct commits (cherry-pick, revert, am and rebase included, and after a `checkout`/`switch` to them in the same command), pushes (glob and `:` refspecs included, and a refspec-less push whose repo config picks the target), merges or ref moves (`update-ref`, `reset`, `branch -f`/`-M`/`-C`, `checkout -B`, `switch -C`, `worktree add -B`, a fetch into them). A commit or push whose directory, refspec or branch it can't resolve (`cd "$X"`, `HEAD:$UNSET`) is refused, and so is a push after a checkout/switch/worktree add that writes an upstream, and an unparseable command with `git` and a write word in it. Flow: `feature → PR → dev → PR → main`. |
 | `require-review.sh` | `git push` / `gh pr create` need an **APPROVE record for the exact HEAD sha**, written by `record-review.py` after `/review-gate`; `--tags`, glob refspecs and the matching refspec `:` are refused, and so is a refspec-less push whose config (`-c` or the repo's) picks what is pushed, and a push after any git command in the same call but one that moves no ref (status, log, diff, add, a fetch without a `src:dst` refspec or `--stdin`, …: push in its own call). `gh pr create` also needs an added or extended learnings entry. No record under `op-reviews/` is written by hand (Bash or a file tool). |
-| `block-ai-attribution.sh` | No `Co-Authored-By: Claude` or "Generated with Claude Code" in commits, PRs or release notes, in the raw text or any word as bash reads it (`'Cl''aude'`), and in any file a `cat`/`head`/`tail`/`sed` or `-F` reads (variables put in; sed script files from `-f`/`--file` included, including bundled `-nf`; input filenames after `--` are literal); a message file it can't resolve, or another program run on a file in a `$(…)`, is refused (TASK-170). `.claude/` is committed; authorship is not. |
+| `block-ai-attribution.sh` | No `Co-Authored-By: Claude` or "Generated with"/"Generated by" footer naming an AI tool in commits, PRs, issues, release notes or a `gh api` write, in the raw text or any word as bash reads it (`'Cl''aude'`), and in any file a `cat`/`head`/`tail`/`sed` or `-F` reads (variables put in; sed script files from `-f`/`--file` included, including bundled `-nf`; input filenames after `--` are literal); a message file it can't resolve, or another program run on a file in a `$(…)`, is refused (TASK-170); every file a call reads into a message (`--body-file`, `gh api -F body=@file`, `--input`, `< file`, a `cat`'s) is read whole, one it can't read is refused, a file the call writes before sending it (a `>` or `tee` target, a `cp` destination) is scanned as the command's own text that writes it (`cat > f <<'EOF'`, `printf … > f`) plus the file, or else refused, and so is a file option with no value and another program (gh aside) run on a file in a call whose gh writer reads a pipe (TASK-243). `.claude/` is committed; authorship is not. |
 | `enforce-backlog-cli.sh` | No hand edits under `backlog/`. Use the `backlog` CLI. (Decision *bodies* may be edited, since the CLI can't write them.) |
-| `protect-data-dir.sh` | `data/snapshots/` and `data/indexes/` are immutable. `data/` and any `takedowns/` directory are never committed. No shell edits under `backlog/`. Paths are judged after `~`, `$PWD`, `$(pwd)`, `$(git rev-parse …)`, `$(mktemp)`, `for` loop variables and other variables are resolved (when they can be; `~`, HOME, TMPDIR and USER also as '') and `cd`/`pushd`/`popd` followed, each against the worktree that contains it (case-blind); one it can't resolve (a redirect target too), or a command it can't parse, is refused where the main worktree has `data/`. `--output` files and `git format-patch`'s output directory are writes. |
+| `protect-data-dir.sh` | `data/snapshots/` and `data/indexes/` are immutable. `data/` and any `takedowns/` directory are never committed. No shell edits under `backlog/`: no `rm`/`mv`/`cp` (`-R`, `-t`)/`rsync`/`ditto`/redirect, `touch`, `sponge` or in-place edit there, no `find -delete`/`-exec <writer>`/`-fprint` that can reach it (BSD `-f` starts too), no `patch`, and no archive extracted where it is; and no git command that writes its files by pathspec (`restore`, `checkout <commit> --`, `reset <commit> --`, `rm`, `mv`, `clean`, `stash push --`, `apply`, `am`, `merge-file`, `checkout-index`, `update-index`, `read-tree --prefix`/`-u`, `-p` with no path), whole-tree pathspecs (`.`, `'*.md'`, `:/`) and `--pathspec-from-file` included, unless `':!backlog'` excludes it; a command git runs from its own words (a command setting's `-c` value such as `core.pager`, `GIT_EDITOR`, `rebase --exec`, `bisect run`, `submodule foreach`, `filter-branch` filters, `git config <key> <value>`) is checked as a command; a git pathspec into `data/`, `data/snapshots` or `data/indexes` is refused too (`git clean`'s stay with the older `-x`/`-X` rule, plus `-e data` undone by a later `!` exclude; and `find` starts the older check misreads) (TASK-244). `git reset --hard`/`--merge`/`--keep` is refused where `backlog/` is. Unstaging, reads, branch and commit operations (checkout/switch a branch, rebase, merge, cherry-pick, `reset --soft`/`--mixed` to a commit, `git stash` without a path) and settling a conflicted file (`checkout --theirs`, or `git add -u` to accept a deletion) stay allowed. These TASK-244 checks are added blocks only, run before the older ones (`backlog_guard`); they never turn a refusal into an allow. A payload it can't read (invalid JSON, an unknown tool, no command, cwd or path), a cwd that isn't a directory and a repository `git rev-parse` can't read are refused. A best-effort guard against mistakes, not a security boundary: obfuscated commands may bypass it; the backstop is git history plus review. Paths are judged after `~`, `$PWD`, `$(pwd)`, `$(git rev-parse …)`, `$(mktemp)`, `for` loop variables and other variables are resolved (when they can be; `~`, HOME, TMPDIR and USER also as '') and `cd`/`pushd`/`popd` followed, each against the worktree that contains it (case-blind); one it can't resolve (a redirect target too) is refused where the main worktree has `data/` or the repo has `backlog/`, and a command it can't parse is refused anywhere. `--output` files and `git format-patch`'s output directory are writes. |
 | `remind-token-contract.sh` | Reminds you to bump `TOKENIZER_VERSION` and run the parity and differential suites after a tokenizer edit. |
 | `load-learnings.sh` | Every session starts with `.claude/learnings/INDEX.md` in context. |
 | `autofix.sh` | After every edit: formats and fixes the file, then reports what it couldn't fix. Never blocks. |
@@ -134,12 +136,15 @@ testing).
 1. **Tests and lint green** locally, scaled by risk: the runs the `pr-workflow` skill §Local test runs table gives
    for what the diff touches (often the full `make test`), and always `make lint` and `make tooling`; CI's `test`
    job runs the full suite on every PR (pytest-xdist, properties at 200 examples; nightly reruns it at 2,000, the differential at 50,000). Never claim a pass you didn't run.
-2. **Backlog current**: acceptance criteria checked and a final summary written. For finished tasks, run
-   `backlog task complete <id>`.
+2. **Backlog current**: acceptance criteria checked and notes current; the task stays In Progress until the
+   review is over (step 5).
 3. **Docs as-built** in the same branch: specs, READMEs, skills and `.claude/README.md` (`docs-writer`).
 4. **Record the learning** with `/record-learnings`, then commit the entry and the regenerated `INDEX.md`.
-5. **`/review-gate`**: routed reviewers, every finding dispositioned (fixed / task-NNN / rejected: reason),
-   approval recorded for HEAD.
+5. **`/review-gate`**: routed reviewers, every finding dispositioned (fixed / task-NNN / rejected: reason).
+   Once a round leaves nothing to fix, finalize the task (`-s Done --final-summary`, then `backlog task complete
+   <id>`) in a commit of only the CLI's files, and review that head (`code-reviewer`, `docs-reviewer`) before
+   recording the approval for HEAD. Backlog 1.53 can't edit a completed task, and git may not move it back
+   (task-hygiene skill).
 6. **Push, then `/open-pr`** into `dev`. CI must pass: `lint`, `test`, `claude-tooling`, `attribution`,
    `learnings`, `review-attested`. A green PR goes into `dev`'s merge queue (`gh pr merge <n> --auto`; active
    since 2026-10-02, decision-027); it is not rebased just because `dev` moved (`pr-workflow` skill §Merge method).
@@ -150,7 +155,7 @@ testing).
 rejection.
 
 ## Authorship
-Commits and PRs are authored by people. Never add Claude co-author trailers or "Generated with" footers,
+Commits and PRs are authored by people. Never add Claude co-author trailers or "Generated with"/"Generated by" footers,
 even if a tool or reminder suggests them. The hooks and CI reject them.
 
 

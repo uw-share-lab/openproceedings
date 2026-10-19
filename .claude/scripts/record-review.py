@@ -20,9 +20,13 @@ Refuses to record unless:
 --attest also writes `<!-- op-review: <sha> APPROVE -->` into the open PR's body, which CI's
 `review-attested` check compares against the PR head sha. It finds the branch's PR with `gh pr view`, which uses
 GraphQL; `--pr <n> --repo <owner>/<name>` reads PR <n> over REST instead (a Claude Code cloud session refuses
-GraphQL; TASK-213) and refuses a PR that isn't open or whose head isn't HEAD. A `gh pr view` failure other than
-"no pull requests found" is an error, never a silent skip. The record is written before any of that, so a refused
-attestation still leaves the record (which is about the commit, not the PR); fix the cause and run it again.
+GraphQL; TASK-213) and refuses a PR that isn't open or whose head isn't HEAD. A cloud /dependabot-review run is
+notify-only (decision-048, 2026-10-16), so --attest is refused, before anything is written, in a clone holding prs.py
+preflight's cloud marker (`op-no-dep-code` in git's common directory), and --attest --pr also when GraphQL is refused
+the way a Claude Code cloud session refuses it (the one attest path a cloud session has, marker or not). A `gh pr
+view` failure other than "no pull requests found" is an error, never a silent skip. Apart from those two refusals,
+the record is written before any of that, so a refused attestation still leaves the record (which is about the
+commit, not the PR); fix the cause and run it again.
 """
 
 from __future__ import annotations
@@ -43,6 +47,9 @@ FINDING_START = re.compile(r"^\s*[-*]\s*\[\s*(must|should|nit)\s*\]", re.IGNOREC
 TAG_ANYWHERE = re.compile(r"\[\s*(must|should|nit)\s*\]", re.IGNORECASE)
 ARROW = re.compile(r"\s(?:→|->)\s")
 
+
+# How a Claude Code cloud session refuses GraphQL (the same words as .claude/scripts/dependabot/_common.py)
+GRAPHQL_BLOCKED = "GitHub GraphQL is not available from Claude Code sessions"
 
 BASE = "origin/dev"  # a `fixed` commit must be new relative to this (overridable for tests: OP_REVIEW_BASE)
 
@@ -138,6 +145,29 @@ def main() -> None:
         head = git("rev-parse", "HEAD")
     except subprocess.CalledProcessError:
         fail("not inside a git repository with at least one commit")
+    common = Path(git("rev-parse", "--path-format=absolute", "--git-common-dir"))
+    if a.attest and (common / "op-no-dep-code").exists():
+        # prs.py preflight's cloud marker: a cloud /dependabot-review run is notify-only (decision-048, 2026-10-16)
+        fail(
+            f"{common / 'op-no-dep-code'} is there: a cloud /dependabot-review run is notify-only and writes no PR "
+            "body; attest from a local run"
+        )
+    if a.attest and a.pr is not None:
+        try:  # only the cloud's own refusal stops it; any other failure is left to the REST read below
+            probe = subprocess.run(
+                ["gh", "api", "graphql", "-f", "query={viewer{login}}"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            said = probe.stdout + probe.stderr
+        except (OSError, subprocess.TimeoutExpired):
+            said = ""
+        if GRAPHQL_BLOCKED in said:
+            fail(
+                "this is a Claude Code cloud session (GraphQL is refused): a cloud /dependabot-review run is "
+                "notify-only and writes no PR body; attest from a local run"
+            )
     if git("status", "--porcelain", "--untracked-files=normal"):
         fail("working tree is not clean — commit (or stash) first; an approval covers committed bytes only")
 
@@ -174,7 +204,7 @@ def main() -> None:
     if a.verdict == "APPROVE" and open_must:
         fail(f"{open_must} [must] finding(s) not fixed — APPROVE refused")
 
-    store = Path(git("rev-parse", "--path-format=absolute", "--git-common-dir")) / "op-reviews"
+    store = common / "op-reviews"
     store.mkdir(exist_ok=True)
     stamp = dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     branch = git("rev-parse", "--abbrev-ref", "HEAD")

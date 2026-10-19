@@ -3,6 +3,7 @@
 # partition the selected mutants (disjoint, complete, the same split every run) and a bad i/n is refused with a
 # clear error. Every row runs `--list`, which prints the selected labels and runs nothing, so the table takes a
 # second. Mutants in .claude/scripts/mutants/mutate.json. Usage: ./test-mutate-shard.sh
+# mutate-scope: .claude/scripts/mutate.py
 set -u
 # Never inherit a repo from the caller (git exports GIT_DIR etc. to hooks such as pre-push).
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX
@@ -77,7 +78,7 @@ check "--list: exit 0"                         "$rc" "0"
 got=$(cat "$TMP/all")
 want=$(cat "$TMP/ref")
 check "--list: every mutant, in sorted-file order" "$got" "$want"
-for n in 3 8 12; do
+for n in 3 8 12 16; do
   : > "$TMP/union"; bad=0
   for i in $(seq 1 "$n"); do python3 "$REAL" --list --shard "$i/$n" >> "$TMP/union" || bad=1; done
   check "$n shards: every one exits 0"           "$bad" "0"
@@ -86,7 +87,7 @@ for n in 3 8 12; do
   want=$(sort "$TMP/ref")
   check "$n shards: complete and disjoint" "$got" "$want"
 done
-for n in 8 12; do
+for n in 8 12 16; do
   got=$(for i in $(seq 1 "$n"); do python3 "$REAL" --list --shard "$i/$n" | grep -c .; done | sort -n | sed -n '1p;$p' \
        | paste -sd' ' - | awk '{print ($2 - $1 <= 1) ? "yes" : "no"}')
   check "$n shards: sizes differ by at most 1" "$got" "yes"

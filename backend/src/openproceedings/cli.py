@@ -59,7 +59,7 @@ log = logging.getLogger(__name__)
 # subcommand -> (help text, the Backlog task that implements it)
 PLANNED: dict[str, tuple[str, str]] = {
     "embed": (
-        "build SPECTER2 embeddings for the current index (spec 06; deferred to phase 2, decision-017)",
+        "build SPECTER2 embeddings for the current index (spec 06; shelved, decision-017)",
         "task-058",
     ),
 }
@@ -71,8 +71,8 @@ PLANNED_EVALS: dict[str, str] = {"audit": "task-055", "near-miss": "task-061"}
 EXIT_MISMATCH = 3
 # `op ingest <source>` sources still to come -> the task that implements them
 PLANNED_SOURCES: dict[str, str] = {}  # none left: ris, openreview, neurips and pmlr are all implemented
-# tasks deferred to phase 2 with the semantic layer (spec 06, decision-017): their stubs say so
-DEFERRED_TASKS: frozenset[str] = frozenset({"task-058", "task-061"})
+# tasks shelved with the semantic layer (spec 06, decision-017): their stubs say so
+SHELVED_TASKS: frozenset[str] = frozenset({"task-058", "task-061"})
 MIN_DELAY = 0.5  # seconds between requests to a proceedings host: never faster (politeness)
 
 
@@ -88,8 +88,15 @@ def default_data_dir() -> Path:
 
 
 def _stub_status(task: str) -> str:
-    """How a stub names its task: planned, or deferred to phase 2 with the semantic layer (decision-017)."""
-    return "deferred to phase 2 (decision-017)" if task in DEFERRED_TASKS else f"planned in {task}"
+    """How a stub names its task: planned, or shelved with the semantic layer (decision-017)."""
+    return "shelved (decision-017)" if task in SHELVED_TASKS else f"planned in {task}"
+
+
+def _stub_pointer(task: str) -> str:
+    """Where a stub sends the reader: the task, or spec 06 for a shelved one (its task is archived)."""
+    if task in SHELVED_TASKS:
+        return f"see docs/specs/06-semantic-layer.md (archived {task})"
+    return f"see `backlog task view {task}`"
 
 
 def _stub(p: argparse.ArgumentParser, name: str, task: str) -> None:
@@ -1281,6 +1288,7 @@ def _eval_openalex(ns: argparse.Namespace) -> int:
     with storage.exclusive(cache / openalex.CACHE_DIR):
         result = oa.audit(picked, fetcher)
         result.title = oa.title_check(records, fetcher, seed=ns.seed, size=ns.title_sample)
+        result.library = oa.library_check(records, fetcher)
     meta = oa.Meta(snapshot=snapshot.name, commit=_commit(), seed=ns.seed, aaai_sample=ns.aaai_sample, day=day,
                    aaai_pool=oa.aaai_pool(records), title_sample=ns.title_sample,
                    ruling=" ".join(ns.ruling.split()) if ns.ruling else None)  # fmt: skip
@@ -1292,6 +1300,7 @@ def _eval_openalex(ns: argparse.Namespace) -> int:
         "snapshot": snapshot.name, "sampled": len(picked), "differs": len(result.differs),
         "title_attached": title.attached if title else 0,
         "title_wrong": sum(a.verdict == "wrong" for a in title.sampled) if title else 0,
+        "library_compared": result.library.compared if result.library else 0,
         "requests": fetcher.stats.network, "cached": fetcher.stats.cached, "replaced": replaced,
         "ms": elapsed_ms(started),
     })  # fmt: skip
@@ -2282,7 +2291,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if hasattr(ns, "stub"):
         name, task = ns.stub
         print(
-            f"op {name}: not implemented yet — {_stub_status(task)}; see `backlog task view {task}`",
+            f"op {name}: not implemented yet — {_stub_status(task)}; {_stub_pointer(task)}",
             file=sys.stderr,
         )
         return 2

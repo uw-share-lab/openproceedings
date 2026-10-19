@@ -100,3 +100,119 @@ with no context and no access to the owner's machine can run it, and script its 
   step 3, README §Tests and checks, `.claude/skills/pr-workflow/SKILL.md`, `.claude/agents/ci-engineer.md`; rows in
   `.claude/scripts/tests/test-tooling-scripts.sh` and `dependabot_cases.py`; mutants in
   `.claude/scripts/mutants/dependabot.json`.
+
+## Addendum — 2026-10-11
+
+- **Dependabot's docker `cooldown` holds only on Docker Hub.** dependabot-core's docker update checker
+  (`registry_tag_release_date`) dates a tag from Docker Hub's API alone; for any other registry it logs "No
+  verified registry publication date source", skips the cooldown, and the PR body says "Cooldown could not be
+  applied". PR #132 (`ghcr.io/astral-sh/uv` 0.13.0, published 2026-10-09T19:49Z) arrived about 20 hours later
+  despite `cooldown: { default-days: 7 }`, and the procedure's "for docker the hold is the `cooldown` alone" was
+  wrong for it. Both #132 reviewers raised the age as a Must. `docker_digest.py` now dates a ghcr.io image by
+  the earliest verified (Rekor or TSA) timestamp in `gh attestation verify --format json` and stops one under 7 days
+  (evidence: run against #132's head it prints `PROBLEM … first attested 2.2 days ago`), and stops an image on
+  any registry nothing dates. The attestation time is a verified lower bound on the image's age; an image
+  config's `created` can be set to anything (reproducible builds set it to 1970), so it would fail open.
+- **A config option that silently degrades is a check to script.** "Cooldown could not be applied" is a
+  per-PR notice nobody reads; the hold had been assumed for every docker image since TASK-149. A Docker Hub
+  lookup that fails (timeout, 429, 403) skips the cooldown with the same notice, so `prs.py check` now stops any PR
+  whose body carries it (docs review). Dependabot gives no date for any ghcr.io update, so every
+  `ghcr.io/astral-sh/uv` PR (patches and digest bumps too) now goes to the owner, with `docker_digest.py`'s
+  attestation age as the evidence (docs review, round 2: a doc that called that age "the hold" overclaimed).
+- **An attestation dates an image only if it is the right publisher's.** `--owner astral-sh` accepts an
+  attestation from any repository and workflow of the org (a PR preview build included), so the earliest
+  timestamp of *any* attestation could make a new image look old (security review). The age now comes only from
+  attestations whose source repository and signing workflow (its `@ref` aside) match the previous pin's, and a new
+  publisher, or an unattested previous pin, is a PROBLEM.
+- **Compare timestamps as times.** `min()` over ISO strings with different UTC offsets picks the wrong one;
+  a row with `-04:00` and `Z` stamps whose text order differs from their time order kills that mutant.
+- **A 0.x minor of uv is a breaking release** (0.13.0 had a "Breaking changes" section), but `is_major` only
+  compares the first number, so the checkers passed it. `.github/dependabot.yml` now ignores `astral-sh/uv`
+  `version-update:semver-minor`, and `docker_digest.py` stops a 0.x minor of any image too, so the hold doesn't
+  rest on the ignore rule matching (code review). `is_major` itself is unchanged: uv and npm 0.x packages
+  (ruff and others) still pass as minors there, an owner's call.
+- **Docker images get no Dependabot alert or security update** (the Advisory Database has no docker ecosystem),
+  so a uv minor ignored by config surfaces nowhere unless the routine looks: it now compares the pinned uv minor
+  with the latest release and checks uv's advisories every run.
+- Propagated to: `.github/dependabot.yml`, spec 08 §CI "Dependabot", `.claude/commands/dependabot-review.md`
+  (hard stops, steps 1 and 2), `.claude/agents/ci-engineer.md`, decision-048 (amended), the `docker_digest.py` and
+  `prs.py` docstrings; rows in `dependabot_cases.py` (and the fake `gh` in `dependabot_fake.py`), mutants in
+  `.claude/scripts/mutants/dependabot.json`.
+
+## Addendum — 2026-10-13 (TASK-242: a red test on a stale base)
+
+- **A Dependabot head is tested against the `dev` it was opened on, but the queue merges it into today's.** PR
+  #143's head failed `width_is_free` (a wall-time check, 946.9 ms against about 643 ms allowed on a loaded
+  machine). PR #144 had fixed that check on `dev` after #143's base. Step 5 said "anything else is a hard stop",
+  so the reviewer's correct call (queue it) wasn't the procedure's. The evidence that settles it is the tree the
+  queue builds: `dev` with the PR's files, which equals the merge only while `dev` hasn't touched those files
+  since the base (`git diff --quiet <base> origin/dev -- <files>`). Run `make test` on that tree in a detached
+  worktree, then name the fix commit with `git merge-base --is-ancestor` both ways (on `dev`, not in the head).
+  Evidence: on #143's head `1382677`, the base `d57c6c5` is behind `4d7ca732` (exit 1), `dev` left `uv.lock`
+  alone (exit 0), and `7df168d3` (#144) is on `dev` and not in the head.
+- **An exception to a hard stop needs a positive identification, not only a pass.** "Passes on the merged
+  tree" alone would also waive a flaky test, which a rerun could pass by luck. The rule also requires a named
+  fix on `dev` that changes the failing test or the code it checks, so a failure nobody has fixed still goes to
+  the owner.
+- **Probe the commands a procedure prescribes before committing them.** `worktree add --detach`, `git -C …
+  checkout <sha> -- <files>`, `worktree remove --force` and `make -C` were fed to `enforce-pr-workflow.sh`,
+  `protect-data-dir.sh` and `require-review.sh` with `probe_hook.py --command`. All were allowed, so the routine
+  won't be blocked partway through a run.
+- Docs only: no checker encodes local test results (the routine judges them, like a red check), so there are no
+  case rows or mutants.
+- Propagated to: `.claude/commands/dependabot-review.md` (hard stops, the checkers' list, step 5, steps 8, 10 and
+  11), spec 08 §CI "Dependabot", decision-048 (addendum).
+- **The first cloud runs (2026-10-13, TASK-213 closed) found three things no local run could.**
+  - Cloud writes reach GitHub as the Claude GitHub App. Every write answered 403 "Resource not accessible by
+    integration" until the owner installed the App on `uw-share-lab`; the next run's comment carries
+    `performed_via_github_app: claude`.
+  - `gh attestation verify` can't start a Sigstore verifier in the cloud. `docker_digest.py` failed closed, as
+    designed.
+  - The posted comment gained a "Generated by Claude Code" footer that the routine didn't write and that the shared
+    attribution pattern (`generated with \[?claude`) wouldn't match. Fixes: `.claude/settings.json` sets
+    `attribution` empty, and the routine reads back every comment and PR body it writes (§Where it runs). The
+    lesson: read back what a write left, not what you sent.
+- **The credential's bound moved without anyone choosing it.** Decision-048 bounded the routine by a
+  fine-grained token (this repository; no `workflows`). In the cloud the writes come from the Claude GitHub
+  App's installation. Read with `gh api orgs/uw-share-lab/installations` (an org admin's call), it covered all
+  the org's repositories, with `workflows` and contents write (TASK-243). When a run's identity changes, read
+  the new credential's actual scope, not the one the record assumes.
+- **The review gate found what the first draft of the waiver missed** (code, security, docs and methodology
+  review):
+  - Written against step 1's `<sha>`, it ignored fixes the run had already committed in steps 3 and 4. It now
+    uses `HEAD` and is checked again after any fix.
+  - "Its message says it fixes the failure" can't be checked: `7df168d3` never says "fixes". It now asks that
+    the commit or its PR name the test, and that a person opened that PR.
+  - Condition 6 had no command and no rule for a pending check.
+  - The read-back covered only one kind of comment, and the PR body was excused because CI reads it, although
+    CI's pattern misses "Generated by".
+  - Round 2: a read-back that allows "only the marker" never passes, because `record-review.py --attest` adds
+    a blank line before it; compare with the marker removed (`grep -v -x -F … | diff -B`). And a "must" the
+    run can't check is no rule: step 0 now checks the App installation's reach
+    (`gh api user/installations/<id>/repositories`) and stops otherwise; the session's token acts as a user,
+    so an installation-token call alone would always fail there.
+- Propagated to (cloud runs): `.claude/settings.json`, `.claude/skills/no-ai-attribution/SKILL.md`, spec 08 §CI
+  "Dependabot" and §Hooks, the command's §Where it runs, step 0 (installation check), step 8 (body
+  read-back) and step 10, decision-048 (second 2026-10-13 addendum).
+
+## Addendum — 2026-10-16 (uv image pin: the uv 0.13 hand upgrade, after PR #132)
+
+**Key lesson:** the image's uv pin is the only uv the 7-day hold governs; CI's `setup-uv` (no `version:`) already
+runs the newest uv, so a uv minor reaches CI on release day and the image only when it is pinned by hand.
+
+- On PR #132 the owner chose to take uv 0.13 (2026-10-11: the 0.x-minor stop waived for that PR only, the 7-day rule
+  kept). Dependabot closed #132 itself ("astral-sh/uv is no longer being updated by Dependabot") once the uv-minor
+  ignore landed, so 0.13.0 came by hand, the route spec 08 prescribes for a uv 0.x minor. It was pinned at 19:51Z on
+  2026-10-16 (published 2026-10-09T19:49:55Z); 0.13.1 (2026-10-14) was too young. Dev's `docker_digest.py --head
+  HEAD` gave the evidence locally: the registry resolves the tag to the pinned index digest, the attestation verifies
+  for astral-sh, first attested 7.0 days ago. Its two PROBLEMs are expected on a hand PR: the 0.x minor (the rule
+  stops Dependabot's minors; a hand upgrade is the documented path) and a comment line outside the pins.
+- CI was already on uv 0.13.1 before this PR (a `test` job's log: "Downloading uv … 0.13.1"), and the owner's
+  machine on 0.13.0 (Homebrew): `uv sync --locked` passed under both, so `uv.lock` needed no change, and the
+  "0.12.22 or later" minimums stay true.
+- 0.13.0's breaking changes that could reach this repo were checked, not assumed: the default Python moved to 3.15
+  (`.python-version` pins 3.12.15, and the image sets `UV_PYTHON_DOWNLOADS=never`), `tar-codec` became the default tar
+  backend (the image build and `make test` both installed the lock), and `uv_build` bounds (the backend builds with
+  hatchling).
+- Propagated to: spec 08 §CI "Dependabot" (the hand upgrade), `deploy/api.Dockerfile`'s header comment. Whether CI
+  should pin `setup-uv`'s `version:` to the image's uv is the owner's call (reported, not changed).

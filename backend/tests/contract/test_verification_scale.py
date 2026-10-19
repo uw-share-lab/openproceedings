@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import os
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -29,6 +31,7 @@ from openproceedings.query.parser import parse
 from tests.contract.conftest import Store, build, make_app
 from tests.fixtures.corpus.synthetic_5k import records
 from tests.golden.test_trust_evals import STRINGS
+from tests.timing import Measure, collector_paused, growth
 
 SEARCH = "/api/v1/search"
 DEFAULT_CEILING = ApiConfig(data_dir=Path("x")).max_verification_candidates
@@ -40,31 +43,65 @@ EXPLOIT_16 = " OR ".join(f"({w} NEAR/{k} {w})" for w in ("a", "the", "model", "4
 # review queries whose position checks read far less (one verified clause each, or none)
 NORMAL = ("trust NEAR/5 model", '"trust calibrat*"', "trust NEAR/5 model*", '"large language model*"')
 
+type Logs = Callable[[], list[dict[str, Any]]]  # the `logs` fixture: every log line so far, parsed
+
 
 def wide(width: int, stem: str) -> str:
     return '"' + " ".join([stem] * width) + '"'
 
 
-def cold_ms(c: TestClient, q: str) -> float:
-    """A served query's cold verification time, from its access line's `verify_ms` (the slot time)."""
+def cold(c: TestClient, q: str) -> None:
+    """`q` served cold: the verification caches cleared, so its position checks run again."""
     engine = c.app.state.index.engine  # type: ignore[attr-defined]
     engine.verified.clear()
     engine.compiled.clear()
     engine.faceted.clear()
-    started = time.perf_counter()
     r = c.get(SEARCH, params={"q": q})
     assert r.status_code == 200, r.text[:300]
-    return (time.perf_counter() - started) * 1000
 
 
-def width_is_free(c: TestClient, stem: str, widths: tuple[int, ...]) -> dict[int, float]:
-    """Round 4: a wildcard phrase's cold time doesn't grow with its width (its candidates don't, and the
-    token sets are built once per clause); each width is admitted and served. Before, a 300-item `rel*`
-    phrase took 84 s at 80k against 3.8 s for 2 items, all admitted as one clause."""
-    times = {w: cold_ms(c, wide(w, stem)) for w in widths}
-    narrow = times[widths[0]]
-    assert all(t < 2 * narrow + 500 for t in times.values()), times
-    return times
+def verify_cpu(logs: Logs) -> Measure:
+    """`timing.growth`'s measure for a call that serves one request: the CPU seconds the server's verifying
+    thread spent in its verification slot, as the request's access line reports them (`verify_cpu_ms`, what
+    the rate limit debits), averaged over `calls` calls, with the cyclic collector paused (the process's, so
+    the server thread's too). The request runs on TestClient's server thread, where this thread's CPU clock
+    sees nothing; the server's own figure is that thread's CPU time, so time spent preempted on a busy runner
+    doesn't count, and it holds only the request's position checks, not the facet and group-count workers,
+    whose CPU time could still be running once the response is sent."""
+
+    def requests() -> list[dict[str, Any]]:
+        return [x for x in logs() if x["event"] == "request"]
+
+    def measure(f: Callable[[], object], calls: int) -> float:
+        spent = 0.0
+        for _ in range(calls):
+            before = len(requests())
+            with collector_paused():
+                f()
+            [line] = requests()[before:]  # the call's own access line, written before TestClient returns
+            assert "verify_cpu_ms" in line, line  # absent if the request verified nothing (no slot held)
+            spent += line["verify_cpu_ms"] / 1000
+        return spent / calls
+
+    return measure
+
+
+def width_is_free(c: TestClient, logs: Logs, stem: str, widths: tuple[int, ...]) -> None:
+    """Round 4: a wildcard phrase's position checks don't cost more with its width (its candidates don't grow,
+    and its allowed-token sets are built once per clause); each width is admitted and served. Before, a
+    300-item `rel*` phrase took 84 s at 80k against 3.8 s for 2 items, all admitted as one clause: every
+    candidate rebuilt every item's set. Measured as the verifying thread's CPU time (`verify_cpu`), the widest
+    phrase against the narrowest in `timing.growth`'s paired rounds, under 2x: width-free is ~1x, and the old
+    per-candidate rebuild is far past it (testing-standards §CPU growth checks). Never wall time, which a busy
+    runner stretches (nightly 37943547380 timed a 17 ms parse at 1.9 s)."""
+    for w in widths:
+        cold(c, wide(w, stem))
+    narrow, widest = wide(widths[0], stem), wide(widths[-1], stem)
+    ratio, pairs = growth(lambda: cold(c, narrow), lambda: cold(c, widest), measure=verify_cpu(logs))
+    assert ratio < 2, (widths, ratio, pairs)
+    # both sides under `growth`'s 2 ms floor would read as 1.0 whatever the growth: the narrow side must be
+    # measured
+    assert min(a for a, _ in pairs) > 0.01, pairs
 
 
 def refused_fast(c: TestClient, q: str, clauses: int) -> None:
@@ -104,14 +141,16 @@ def every_trust_evals_string_is_served(c: TestClient) -> None:
     assert served >= len([q for q in STRINGS.values() if q.strip()])  # at least one mode of each
 
 
-def test_the_exploit_is_refused_and_every_review_query_served_at_the_scaled_ceiling(store: Store) -> None:
+def test_the_exploit_is_refused_and_every_review_query_served_at_the_scaled_ceiling(
+    store: Store, logs: Logs
+) -> None:
     with TestClient(make_app(store.indexes.parent, max_verification_candidates=SCALED)) as c:
         refused_fast(c, EXPLOIT, 8)
         refused_fast(c, EXPLOIT_16, 16)
         for q in NORMAL:
             assert c.get(SEARCH, params={"q": q}).status_code == 200, q
         every_trust_evals_string_is_served(c)
-        width_is_free(c, "tru*", (2, 20, 100, 300))
+        width_is_free(c, logs, "tru*", (2, 20, 100, 300))
 
 
 def test_main_2_pop_needs_more_than_the_old_cap_of_8() -> None:
@@ -122,7 +161,7 @@ def test_main_2_pop_needs_more_than_the_old_cap_of_8() -> None:
 
 
 @pytest.mark.skipif(os.environ.get("OP_BENCH_80K") != "1", reason="builds an 80k index: set OP_BENCH_80K=1")
-def test_the_exploit_is_refused_and_every_review_query_served_at_80k(tmp_path: Path) -> None:
+def test_the_exploit_is_refused_and_every_review_query_served_at_80k(tmp_path: Path, logs: Logs) -> None:
     version = build(list(records(80_000, (120, 250))), tmp_path / "snapshots", "big", tmp_path / "indexes")
     (tmp_path / "indexes" / "current").symlink_to(version)
     config = ApiConfig(data_dir=tmp_path)
@@ -133,4 +172,4 @@ def test_the_exploit_is_refused_and_every_review_query_served_at_80k(tmp_path: P
         for q in NORMAL:
             assert c.get(SEARCH, params={"q": q}).status_code == 200, q
         every_trust_evals_string_is_served(c)
-        width_is_free(c, "rel*", (2, 20, 100, 200, 300))
+        width_is_free(c, logs, "rel*", (2, 20, 100, 200, 300))

@@ -9,8 +9,8 @@ Extra reviewers requested: $ARGUMENTS
 
 1. **Preconditions.** Working tree clean (commit first). The local tests the diff calls for green
    (the `.claude/skills/pr-workflow/SKILL.md` §Local test runs table), plus `make lint` and `make tooling`.
-   Tasks, docs, specs and READMEs updated in the same branch, and Done tasks moved with
-   `backlog task complete <id>` (`.claude/skills/task-hygiene/SKILL.md`). The branch has its learnings entry
+   Tasks (ACs ticked, notes current, still In Progress), docs, specs and READMEs updated in the same branch
+   (`.claude/skills/task-hygiene/SKILL.md`). The branch has its learnings entry
    (new, or an existing entry extended with a dated addendum) committed (`/record-learnings`) unless it will
    use `--label no-learning`. `git fetch origin dev`.
 2. **Route.** `git diff --name-only origin/dev...HEAD` → apply the routing table. Always include
@@ -25,6 +25,11 @@ Extra reviewers requested: $ARGUMENTS
 5. **Fix and re-review.** Fix **every Must and every Should** in this round (Nits too when cheap). Only work
    that genuinely can't be done yet becomes a `task-NNN`, with the reason stated. Commit, and re-run **only
    the reviewers whose paths the fixes touched** plus `code-reviewer` and `docs-reviewer`. Repeat until no Must or Should is open.
+   Then finalize the branch's task (`backlog task edit <id> -s Done --final-summary "…"`, `backlog task complete
+   <id>`) in a commit of only the CLI's files, and run `code-reviewer` and `docs-reviewer` on that head. If that
+   round finds a Must or Should, fix it in a new commit and re-review; never edit or reopen the completed task
+   (the CLI can't, and git may not move it back): record the change in the PR body and the learnings entry, and
+   file a follow-up task only for work that can't be done yet.
 6. **Disposition everything.** Write the dispositions file (outside the repo, e.g. the scratchpad):
    every finding → `fixed <sha>` | `task-NNN` (create with `backlog task create` after rebasing onto `dev`, in
    its own commit: task-hygiene §Ids) | `rejected: <reason>`.

@@ -1,0 +1,40 @@
+# Turns on comparisons with a reviewer's own RIS file (`POST /api/v1/compare`; decision-035, TASK-183) on top of
+# compose.yml. An operator's choice, off unless this file is named (deploy/README.md §Comparisons says what it
+# costs):
+#
+#   docker compose -f deploy/compose.yml -f deploy/compare.yml up -d
+#
+# Every `docker compose` command for the stack then names both files, or the next `up` turns comparisons off.
+# It changes three things, and nothing else:
+#   api    `op serve --compare`. Compose replaces a list, so this is compose.yml's command with `--compare`
+#          added; deploy/smoke-test.sh --compare checks the two stay that way;
+#   caddy  OP_COMPARE=on (deploy/Caddyfile: the 64KiB body cap kept off /api/v1/compare, which gets 16MiB,
+#          buffers the whole file before the API is asked and wants a Content-Length; no HTTP/3), a longer
+#          read_body for the whole server, and a memory limit, since the proxy holds every upload in flight in
+#          memory (about 50 MiB each) however many arrive at once. compose.yml still publishes 443/udp, which
+#          nothing then listens on (an overlay can add ports, not remove them).
+#
+# Settings (environment, or deploy/.env):
+#   OP_READ_BODY          the proxy's read_body timeout, for every request (default here 60s: a 16 MiB file
+#                         needs more than 2.24 Mbit/s; the default without this file is 10s)
+#   OP_CADDY_MEM_LIMIT    the caddy container's memory limit (default 1g; deploy/README.md §Comparisons)
+#   OP_CADDY_GOMEMLIMIT   the Go runtime's soft limit inside it, below the hard one (default 800MiB)
+services:
+  api:
+    command:
+      - serve
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --trusted-proxy
+      - ${OP_PROXY_ADDRESS:-172.30.80.2}
+      - --compare
+
+  caddy:
+    environment:
+      OP_COMPARE: "on"
+      OP_READ_BODY: ${OP_READ_BODY:-60s}
+      GOMEMLIMIT: ${OP_CADDY_GOMEMLIMIT:-800MiB}
+    mem_limit: ${OP_CADDY_MEM_LIMIT:-1g}
+    memswap_limit: ${OP_CADDY_MEM_LIMIT:-1g} # no swap on top: the limit is the memory it can hold

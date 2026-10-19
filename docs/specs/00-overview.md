@@ -55,7 +55,7 @@ venues.
 - Any matching that goes beyond the literal query: stemming, synonyms, or embeddings deciding what
   matches.
 - The semantic layer ([06](06-semantic-layer.md): embedding re-sort and the near-miss panel). v1 is
-  Boolean search only; 06 is deferred to phase 2 (decision-017).
+  Boolean search only; 06 is shelved (decision-017).
 
 ## Guarantees (the invariants every part must uphold)
 
@@ -90,7 +90,7 @@ venues.
                     canonicalize                  matcher (test oracle)
                                    │
                                    ▼
-                          backend API (04)  ◄──── semantic layer (06, deferred: phase 2)
+                          backend API (04)  ◄──── semantic layer (06, shelved)
                           FastAPI: search · parse · export ·        re-sort + near-miss panel
                           search records · coverage
                                    │
@@ -108,7 +108,7 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
 | Ingestion, query, index, API | **Python 3.12**, `uv`, FastAPI, pydantic v2 | Matches the lab's tools. The lab's own PyPI packages are pinned dependencies rather than copied code: `scholarmend` (RIS parsing, OpenReview venueid parsing and client, cache, claim ledger) for ingestion, and `refaudit` (BibTeX parser) for export tests. |
 | Index | **Tantivy** via `tantivy-py` | Rust speed, positional index, phrase/slop/regex queries, BM25, and custom tokenizers with no stemmer. |
 | Frontend | **Next.js (App Router) + TypeScript** | The lab already has Next.js experience. Hosting doesn't depend on Vercel. |
-| Semantic (deferred: phase 2, decision-017) | SPECTER2 + a flat in-memory vector index | Built for scientific papers. About 80k vectors fit in RAM, so no vector database is needed. Not in v1. |
+| Semantic (shelved, decision-017) | SPECTER2 + a flat in-memory vector index | Built for scientific papers. About 80k vectors fit in RAM, so no vector database is needed. Not in v1. |
 | Packaging | Docker Compose (`api`, `web`, `caddy` for TLS; one-off `ops` and `takedown-check`): data read-only but for the search records and the index lock files (`deploy/`, spec 08 §Deploy) | Hosting location is undecided. The index is read-only files, so it can run anywhere. |
 
 ## Parts and specs
@@ -120,7 +120,7 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
 | 03 | [Search engine](03-search-engine.md) | Tokenizer, index schema, AST→Tantivy compilation, ranking, reference matcher, versioning |
 | 04 | [Backend API](04-backend-api.md) | HTTP contract, exports, search records, coverage |
 | 05 | [Frontend](05-frontend.md) | Pages, query editor, query builder, filters, results, export |
-| 06 | [Semantic layer](06-semantic-layer.md) | Embeddings, semantic re-sort, near-miss panel (deferred: phase 2, decision-017) |
+| 06 | [Semantic layer](06-semantic-layer.md) | Embeddings, semantic re-sort, near-miss panel (shelved, decision-017) |
 | 07 | [Evaluation](07-evaluation.md) | Exactness fixtures, differential tests, Scholar comparison, coverage and performance |
 | 08 | [Ops and tooling](08-ops-and-tooling.md) | Repo layout, CLI, CI, Docker, branch/PR rules, `.claude/` agents and skills roster |
 
@@ -133,7 +133,7 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
 | M2 | Index + CLI search over the Trust-Evals corpus (RIS import) (01 §RIS, 03) | `op search "<Most Updated string>"` runs. Differential tests against the oracle are green. |
 | M3 | API + frontend MVP (04, 05) | The team can run the review's queries in a browser and export RIS into Covidence. |
 | M4 | Full crawl of OpenReview and proceedings (01) | Every main-track and D&B cell with an official accepted count is within ±1%, or an owner-accepted exception (07 §C). |
-| M5 | Semantic layer (06): **deferred** to phase 2 (decision-017); not on the v1 path | When resumed: near-miss panel live, and the invariant test proves membership never changes. |
+| M5 | Semantic layer (06): **shelved** (decision-017; tasks archived 2026-10-16); not planned | If ever resumed: near-miss panel live, and the invariant test proves membership never changes. |
 | M6 | Hosting + public release | Licensing question resolved, repo made public, instance deployed. |
 
 ## Open questions (decide before the milestone named)
@@ -143,8 +143,9 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
    takedown contact (private, local and development deployments may omit it). For the 2024+ conferences
    OpenReview's terms dedicate the abstracts under CC0; PMLR grants CC BY 4.0, known from ICML 2017 (v70);
    the years with no licence found (NeurIPS before 2021, ICML 2013–2016, earlier OpenReview years) rest on
-   Canadian fair dealing alone. Consulting the University of Waterloo copyright office before launch is
-   recommended (TASK-135), not a gate: the owner's decision is to show the abstracts whatever the answer.
+   Canadian fair dealing alone. Consulting the University of Waterloo copyright office (TASK-135) is
+   a launch gate since 2026-10-16 (decision-018 addendum), and TASK-069 waits on its outcome; the owner's
+   decision is still to show decision-018's abstracts whatever the answer, unless that answer leads to a new decision.
    Not legal advice. The code is MIT either way. The corpus is never committed to git.
 2. ~~**Rejected and withdrawn ICLR submissions (M4).**~~ **Closed 2026-09-27 (decision-012):** every
    public rejected, withdrawn and desk-rejected submission is indexed with `status:rejected`,

@@ -50,8 +50,8 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    test and release evidence; retain the strict all-files check and run the full suite again.
 3. **Code and data ship separately**, except a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or
    Tantivy: it deploys together with an index its own code built.
-4. **Index promotion (runbook, spec 08 §Deploy).** Offline: `op snapshot build`, `op snapshot diff <old>
-   <new>`, `op index build --snapshot <new>` → `data/indexes/<index_version>/`. Verify on that version:
+4. **Index promotion (runbook, spec 08 §Deploy).** Offline: `op snapshot build`, `op snapshot diff <old snapshot dir>
+   <new snapshot dir>`, `op index build --snapshot <new>` → `data/indexes/<index_version>/`. Verify on that version:
    golden + contract suites, tokenizer parity (`op index parity --index <index_version>`), `op eval coverage --index <index_version> --check` (the M4 gate as its exit status), and replay of a sample of stored search
    records. Then, under compose, give the API read access (`deploy/index-permissions.sh`, or the reload fails
    `index_load_failed`), atomically repoint `data/indexes/current` (`ln -sfn` to a temp link + `mv -T`; a

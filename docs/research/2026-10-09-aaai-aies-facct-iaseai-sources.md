@@ -61,8 +61,8 @@ Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 
 - AAAI's `ListSets` is paginated (99 sets on its first page). It lists 386 sets, but only 383 distinct specs (see
   quirk 2).
 - **Pre-2010** is not on OJS. The aaai.org library pages redirect to WordPress pages with no abstracts, and
-  aaai.org's robots.txt (https://www.aaai.org/robots.txt, read during this research in 2026-10; the exact date was
-  not recorded) sets `Crawl-delay: 43200`. Milestone B takes AAAI 1980–2008 from the pinned dblp release:
+  aaai.org's robots.txt (https://www.aaai.org/robots.txt, which redirects to https://aaai.org/robots.txt; re-read
+  2026-10-16, TASK-236) sets `Crawl-delay: 43200` for `User-agent: *`. Milestone B takes AAAI 1980–2008 from the pinned dblp release:
   `conf/aaai/<year>` 1980–2026, with no AAAI in 1981, 1985, 1989, 1995, 2001, 2003 or 2009 (1995 was found by the
   2026-10-10 census; see §AAAI 1980–2008 (dblp)). Its main keys total 28,802,
   and its workshop keys (`2015ethics`, `2017w`, `2021safeai`, …) total 2,368. From 2014 dblp matches OJS closely:
@@ -80,7 +80,8 @@ Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 
 - From 2024 AIES is on OJS:
   - Vol. 7 (2024, 2 issues): 171 = 150 full archival papers + 20 student abstracts + 1 front matter.
   - Vol. 8 (2025, 4 issues): 279 = 238 main-track papers + 41 student abstracts.
-  - AIES 2026 (Malmö, 12–14 Oct 2026) is not yet published.
+  - AIES 2026 (Malmö, 12–14 Oct 2026) was not yet published on 2026-10-09; Vol. 9 (4 issues) appeared by
+    2026-10-16: see §AIES 2026 below.
 - **The AIES OAI list is 5 pages of 100, not one response.** An earlier note said "450 records in one response, no
   resumption token"; the live chain on 2026-10-09 had 5 pages.
 - Sets: `FUL`, `STU`, `FMT`, `A25-1/2/3`, `A25-SA`, `A25-SA-2`, plus `2025-11` and `ART`, which hold no records.
@@ -118,8 +119,37 @@ Every count below was read live on 2026-10-09 (UTC; the late fetches, the 39173 
     .3278727, .3278746; 2019 3306618.3314227, .3314274; 2020 3375627.3375805, .3375809, .3375816, .3375818,
     .3375819, .3375821, .3375824, .3375853, .3375861, .3375867, .3375869; 2021 3461702.3462520, .3462534,
     .3462537, .3462577, .3462613; 2022 3514094.3534125, .3534151, .3534194.
-  Student abstracts from 2024 on are OJS's `student` track (`STU`, `A25-SA`). The table gained a `[[section]]`
+  Student abstracts from 2024 on are OJS's `student` track (`STU`, `A25-SA`, `A25-SA-2`, `A26-SA`). The table gained a `[[section]]`
   table (venue, year, page range, track, label, check date, source) for the same track here (TASK-224).
+
+### AIES 2026 (Vol. 9; census of 2026-10-16, TASK-217)
+
+- `scripts/ojs_section_census.py AIES --refresh` on 2026-10-16: complete, 18 pages, `completeListSize` 716 = 715
+  live + 1 deleted header; no unavailable article, no fallback set, nothing recovered by `GetRecord`, no
+  duplicates. Vol. 7 (171) and Vol. 8 (279) are unchanged.
+- Vol. 9: 265 live = `A26-1` Main Track I 67, `A26-2` Main Track II 60, `A26-3` Main Track III 57, `A26-4` Main
+  Track IV 59 (243 `main`) + `A26-SA` Student Abstracts 22 (`student_abstract`); the one deleted header is in
+  `A26-SA`. No front matter is listed. The issue pages (`issue/view/743`–`746`, the last "Main Track IV &
+  Student Abstracts"; read 2026-10-16) show the same section titles, and issue 746 the same 59 and 22.
+- **The official count (2026-10-16).** The AIES-26 program PDF
+  (https://www.aies-conference.com/2026/wp-content/uploads/2026/10/AIES-26-Program_v7.pdf, SHA-1
+  519552b4439d3ddec45ccb9085e2d9660072ed6a), in the program co-chairs' welcome: "we sent 1,001 papers out for review
+  and accepted 249", and "oral presentations or discussions of 44 papers and three poster sessions of 205 papers"
+  (44 + 205 = 249). Separately: "25 students participating in the discussion panels and presenting their posters".
+- **The program's own lists**, matched to the OJS titles (exact normalized title prefixes, every entry checked):
+  - the paper, discussion and poster sessions list 244 distinct papers (28 + 16 = 44 in the paper and discussion
+    sessions, the welcome's 44; 200 in the poster sessions, against its 205): all 243 OJS main-track records and one
+    that is not on OJS, #1030 "Knowable Errors: Architectural Foreseeability and the Case for AI Recklessness in
+    Safety-Critical Deployment";
+  - the Student Panel Discussions list 25 entries (the welcome's 25 students): all 22 OJS student abstracts and 3
+    that are not on OJS (#39 "Toward Responsible and Sustainable AI Training Data Pipelines", #85, #105).
+- **Reading.** The 249 is read as the main track only: the welcome counts the 25 students apart, and the sessions' 244
+  hold no student abstract. It is still 5 more than the program lists, all 5 in the poster count, and those 5 are not
+  named in the program or the proceedings, so it is not a count of what the index can hold. AIES 2026 main is
+  therefore ungated with a cited note (the owner, 2026-10-16, TASK-217), as IASEAI 2026 is. `student_abstract` is not
+  gated, so the 25 against 22 needs nothing.
+- No code changed: the year comes from the journal's offset (9 + 2017) and the tracks from the five new `[[section]]`
+  rows, as the design expected (a new venue-year at an existing source needs a table row).
 
 ### IASEAI
 
@@ -459,22 +489,38 @@ ran 2026-10-10 21:09–21:16 UTC (387 s, of which about 290 s is the offline rep
 - A key, when there is one, goes as `Authorization: Bearer <key>` (`crawl.openalex_fetcher`), never in a URL. The
   answers' `access-control-allow-headers` list `Authorization`.
 
-**Licence (read by the controller, 2026-10-10; not re-opened in review, which had no network).** The API itself
-states none: its root answer is `{"version", "documentation_url", "msg"}`, and a work answer carries only each paper's
-own `license` field, which is not a data licence. The two statements that matter are in OpenAlex's help pages:
-- OpenAlex's Pricing page on https://help.openalex.org/ (the page's exact URL was not recorded): the data is released
-  under CC0, with no "personal use only" carve-out. A pricing page is an odd home for a data licence; OpenAlex's own
-  terms or data-licence page, if it has one, was not read, and should be cited here when it is (TASK-236).
-- The work-object documentation (https://help.openalex.org/api-entities/works/work-object): OpenAlex does not ship
-  abstracts as plain text, "for legal reasons", and gives the inverted index to rebuild them from. Only "for legal
-  reasons" is quoted; the rest is paraphrased, since the wording held earlier read as a paraphrase in quote marks.
+**Licence (read by the controller, 2026-10-10; each page re-read and its URL recorded 2026-10-16, TASK-236).** The
+API itself states none: its root answer is `{"version", "documentation_url", "msg"}`, and a work answer carries only
+each paper's own `license` field, which is not a data licence. The statements that matter are on three pages:
+- OpenAlex's Pricing page, https://help.openalex.org/access/pricing/ (read 2026-10-16 through its Markdown sibling,
+  https://help.openalex.org/access/pricing.md, which the help site's index names as each page's raw source; the
+  rendered page was not compared): the data is released under "a CC0 public-domain license", with no
+  personal-use carve-out and no permission needed.
+- The work-object documentation, now https://help.openalex.org/data/works/attributes/ (the old
+  https://help.openalex.org/api-entities/works/work-object redirects there; read 2026-10-16): OpenAlex does not ship
+  abstracts as plain text, "for legal reasons", and gives the inverted index to rebuild them from.
+- OpenAlex's terms page, https://openalex.org/terms (read 2026-10-16), names its PDFs as "the canonical versions".
+  The terms of service, https://openalex.org/OpenAlex_termsofservice.pdf ("Last Revised: October 2, 2026"; sha256
+  `58dacd4243971000748a2a1a232299328ef75c3723bd1df351ad7dbac5c89197`, read 2026-10-16), apply to the API and the
+  snapshot by name. They grant a "freely revocable, limited license" to use the free features, and forbid
+  republishing the Data without Impactstory's "prior written consent". **This contradicts the Pricing page's CC0
+  statement.** No separate data-licence page was found: help.openalex.org's page index
+  (https://help.openalex.org/llms.txt, read 2026-10-16) lists none, and its "Licenses" page
+  (https://help.openalex.org/data/licenses/) covers the licences of the works OpenAlex indexes, not OpenAlex's own.
+  The two conflict, and an owner decision is pending: since 2026-10-16 TASK-135 (the copyright-office consultation,
+  a launch gate) covers it, and OpenAlex stays the decision-049 fallback, unchanged, until it is answered.
 
-So the data is CC0, but the abstract text is deliberately not shipped: the `abstract_inverted_index` is the form
-OpenAlex releases, and `openalex.rebuild` turns it back into text. The consequence for this project is that serving a
-rebuilt OpenAlex abstract carries **the same copyright posture as serving a publisher's abstract**, not a CC0 one.
-It rests on decision-018 (README §Abstracts on a public instance), the takedown list (a listed paper's abstract is
-withheld whatever its source, so an OpenAlex abstract too) and the pending copyright-office consultation (TASK-135).
-The `abstract_kind` label and filter let a review see and exclude these abstracts.
+So the Pricing page calls the data CC0, though the terms of service (read 2026-10-16) restrict republication. Either
+way the abstract text is deliberately not shipped: the `abstract_inverted_index` is the form OpenAlex releases, and
+`openalex.rebuild` turns it back into text. The consequence for this project is that serving a rebuilt OpenAlex
+abstract carries **the same copyright posture as serving a publisher's abstract**, not a CC0 one. It rests on
+decision-018 (README §Abstracts on a public instance), the takedown list (a listed paper's abstract is withheld
+whatever its source, so an OpenAlex abstract too) and the pending copyright-office consultation (TASK-135). The
+`abstract_kind` label and filter let a review see and exclude these abstracts. The terms add a second, contractual
+question that this posture doesn't answer: fair dealing (decision-018) is a copyright defence, not a licence to
+breach a contract term. The terms were revised on 2026-10-02, before the 2026-10-10 crawl, so the extract was
+taken under them, and serving rebuilt abstracts on a public instance is the kind of republication they cover. That
+question is TASK-135's (item 1 of §Fixtures and what the census leaves for the owner).
 
 ### The DOI route (AIES 2018–2023, FAccT, two AAAI 2020 records)
 
@@ -609,8 +655,10 @@ DOI, 1,150 by title) and leaves 3,560 at `none` (§TASK-231 below). These are th
     index of the real 1984 page reads as a dense one in the fixture.
   - `test_openalex_recorded.py` pins them to the parser, the rebuild and the shipped table.
 - **For the owner:**
-  1. The OpenAlex licence is settled (§OpenAlex, Licence): CC0 data, abstracts rebuilt from the index under
-     the publisher-abstract posture.
+  1. Open (2026-10-16): the Pricing page says CC0, but OpenAlex's terms of service (revised 2026-10-02) restrict
+     republishing its data without written consent (§OpenAlex, Licence). The owner folded the question into TASK-135
+     (2026-10-16), a launch gate; OpenAlex stays the fallback, unchanged, until it is answered. Abstracts rebuilt from
+     the index are served on the publisher-abstract posture either way.
   2. Decided (TASK-231, 2026-10-10): a key holding CR/LF is read as its words joined by one space, at its one
      position (§TASK-231 below). The extract keeps the raw index, so no refetch was needed.
   3. Note that the `works` counts are a live total. If OpenAlex adds or merges a work under S4306420577 for a
@@ -681,7 +729,7 @@ project's position is decision-018 (README §Abstracts on a public instance).
 | Crossref (FAccT 2019–2026, AIES 2018–2023) | not read: milestone B takes titles, authors and DOIs from it and no abstract (it holds none for these DOIs) | not checked (2026-10-10, no network in the review) |
 | PMLR v81 (FAccT 2018) | PMLR's CC BY 4.0, as README states for its volumes (known from ICML 2017, v70); v81's own page not read for it | 2026-10-10 *(v81 unverified)* |
 | the pinned dblp release | CC0, as spec 01 records for the Dagstuhl DROPS release (titles, no abstracts; decision-047, and AAAI 1980–2008 in milestone B) | spec 01's record of the release page; not re-read 2026-10-10 |
-| OpenAlex (milestone C fallback) | CC0 for the data, "with no 'personal use only' carve-out and no permission to ask" (help.openalex.org, Pricing); abstracts are not shipped as text "for legal reasons" and are rebuilt from the inverted index (the work-object docs). A rebuilt abstract is served on the publisher-abstract posture: decision-018, the takedown list and TASK-135 | 2026-10-10: controller read both help pages |
+| OpenAlex (milestone C fallback) | the Pricing page (https://help.openalex.org/access/pricing/) says "a CC0 public-domain license"; the terms of service (https://openalex.org/OpenAlex_termsofservice.pdf, revised 2026-10-02) grant a "freely revocable, limited license" and forbid republishing the Data without "prior written consent", which contradicts it (§OpenAlex, Licence); abstracts are not shipped as text "for legal reasons" and are rebuilt from the inverted index (https://help.openalex.org/data/works/attributes/). A rebuilt abstract is served on the publisher-abstract posture: decision-018, the takedown list and TASK-135 | 2026-10-10: controller read both help pages; 2026-10-16: all three pages re-read, URLs recorded (TASK-236) |
 
 **Index versus fixtures.** The live index stores and shows an OJS abstract with its attribution ("AAAI Digital
 Library") and a link to the paper's own page on ojs.aaai.org, never the full text, on decision-018's fair-dealing
@@ -842,6 +890,7 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
 |---|---|---|---|---|---|
 | AIES 2024 | 150 | archival full papers accepted (468 reviewed); student abstracts separate | https://ojs.aaai.org/index.php/AIES/article/view/31763 (chairs' front matter); the table in https://www.aies-conference.com/2025/wp-content/doc/AIES-2025-Program-10.20.pdf | 150 | gateable (row) |
 | AIES 2025 | 238 | archival full papers accepted (748 reviewed); student abstracts separate | https://www.aies-conference.com/2025/wp-content/doc/AIES-2025-Program-10.20.pdf | 238 | gateable (row) |
+| AIES 2026 | 249 | papers accepted (1,001 reviewed; 44 orals or discussions, 205 posters); the program's sessions list 244, 243 of them in the OJS proceedings (§AIES 2026) | https://www.aies-conference.com/2026/wp-content/uploads/2026/10/AIES-26-Program_v7.pdf (SHA-1 519552b4439d3ddec45ccb9085e2d9660072ed6a, read 2026-10-16) | 243 | definition mismatch: recorded, not gated (the owner, 2026-10-16, TASK-217) |
 | AAAI 2013 | 203 | technical program incl. the four special tracks (AI and the Web, Cognitive Systems, Computational Sustainability, AI and Robotics); late-breaking and spotlights excluded | https://ojs.aaai.org/index.php/AAAI/article/view/8512 (AAAI-13 preface) | 202 | gateable (row) once "Robotics Program" is `main` (it was a mismatch at 191) |
 | AAAI 2015 | 539 | papers "selected … and presented" from the main technical and topical tracks (AI Magazine report) | https://ojs.aaai.org/index.php/aimagazine/article/view/2606/2500 | 538 | gateable (row; the weakest wording) |
 | AAAI 2018 | 938 | original research publications in the proceedings (3,800 submissions) | https://ojs.aaai.org/index.php/AAAI/issue/view/301 | 937 | gateable (row) |
@@ -853,13 +902,14 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
 | AAAI 2016 | 548 | AAAI's list, "ordered … in each proceedings category", matching the OJS sections exactly (submissions 2,132) | aaai.org list; issue page 303 | 548 | not gated: the list appears derived from the proceedings (note) |
 | AAAI 2017 | 637 | counted on AAAI's own list: 599 main technical + 38 in three special tracks (submissions 2,571) | https://aaai.org/wp-content/uploads/2023/01/aaai17accepted-papers.pdf | 639 | gateable (row, list count, 2026-10-10) |
 | AAAI 2020 | 1,614 | counted on AAAI's own pre-camera-ready lists: 1,589 main technical + 25 AI for Social Impact | https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-Paper-List.pdf and https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-AISI-Papers.pdf | 1,610 | gateable (row, list count, 2026-10-10) |
-| AAAI 2021 | 1,696 | counted on AAAI's own list: 1,656 main technical + 40 AI for Social Impact | https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf | 1,694 | gateable (row, list count, 2026-10-10) |
+| AAAI 2021 | 1,697 | counted on AAAI's own list as archived 2020-12-30, before the conference: 1,657 main technical + 40 AI for Social Impact, both from the one PDF (the 40 its last section, pp. 121–124); the later copy has 1,656 + the same 40 | https://web.archive.org/web/20201230042125id_/https://aaai.org/Conferences/AAAI-21/wp-content/uploads/2020/12/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf; later copy https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf | 1,694 | gateable (row, list count, 2026-10-10; re-checked and re-counted from the pre-conference copy 2026-10-16, owner's choice) |
 | AAAI 2022–2026 | none | chairs' notification emails quoted on third-party sites and aggregator figures only (1,349; 1,721; 2,342; 3,032; 4,167), apparently the main technical track alone | none official | see the per-year table | not found (note) |
 | IASEAI 2026 | 92 | accepted research papers, 35 of them non-archival and unpublished on OJS | https://ojs.aaai.org/index.php/IASEAI/issue/view/741 | 57 | definition mismatch: recorded, not gated |
 
 - **AIES.** The chairs' statements are not the OJS issue listing (whose totals this note once called circular);
   the 2025 program is on the conference's own site. Whether "accepted" is before or after withdrawals is not
-  stated; the exact match with the listing suggests none.
+  stated; for 2024 and 2025 the exact match with the listing suggests none. AIES 2026's 249 is more than the 244 papers
+  its own program lists, and 243 of those are published, so that cell is ungated (§AIES 2026; TASK-217).
 - **AAAI 2018, 2019.** "Original research publications" is read as the technical program, special tracks
   included; the front matter does not itemise.
 - **AAAI list counts (2026-10-10; one independence rule since gate C round 1, 2026-10-11).** For 2010, 2012, 2014,
@@ -868,21 +918,44 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
   pages archived by the Wayback Machine). Each row's description says "counted" and names the list, and its
   definition must equal our `main` cell within 1%. The review found the independence test applied unevenly: 2016 was
   refused because its list matched the proceedings exactly, while 2010 and 2014 matched exactly too, and 2014's only
-  copy was captured a year after publication. The controller's rulings (gate C rounds 1 and 2) are one rule: A list counts as independent of the proceedings when it either states that it is pre-camera-ready, or visibly differs from the proceedings in content (a different count or membership); either shows it was not derived from them. Per row:
+  copy was captured a year after publication. The controller's rulings (gate C rounds 1 and 2) are one rule: A list counts as independent of the proceedings when it states that it is pre-camera-ready, visibly differs from the proceedings in content (a different count or membership), or survives in a dated copy archived before the proceedings (the owner, 2026-10-16, TASK-234); each shows it was not derived from them. Per row:
   - 2010 (262 = 262), 2014 (398 = 398) and 2016: each matches the proceedings exactly, and nothing on it says it was
     made before them (2010's and 2014's only archived copies were captured on 2010-08-30 and 2015-09-06, after
     publication). Each is an ungated cell with a note.
   - 2012, 2017, 2020 and 2021: the PDFs sit under `wp-content/uploads/2023/01/`, the date of AAAI's site migration,
     not of the lists, so their upload dates say nothing. All four are gated, each row naming its ground: the 2020
-    lists say they were made before camera-ready; 2012, 2017 and 2021 differ from the proceedings the crawl reads in
-    count (deltas +2, +2 and −2 on the snapshot below; 2020's is −4).
-  - 2021: the row cites only the "Main Technical Track" PDF, but counts 1,656 main technical papers plus 40 AI for
-    Social Impact. Where the 40 were counted was not recorded, so the row is re-checked against AAAI's own AI for
-    Social Impact list (TASK-234).
+    lists say they were made before camera-ready; 2012 and 2017 differ from the proceedings the crawl reads in count
+    (deltas +2 and +2 on the snapshot below; 2020's is −4); and 2021's is counted from a copy archived before the
+    conference (next bullet; Δ −3).
+  - 2021 (re-checked 2026-10-16, TASK-234): the 40 AI for Social Impact papers are in the list PDF itself. Its
+    first page says the special track's list "appears at the end of this document", and its last section,
+    "Special Track on AI for Social Impact" (pp. 121–124), has 40 numbered entries; the 1,656 main technical are
+    the entries before it in the copy aaai.org serves now (counted 2026-10-16 by the AI assistant session working
+    for the owner, from the 2023-09-29 capture
+    `https://web.archive.org/web/20230929155523id_/https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf`).
+    No separate AI for Social Impact list was found under either path the Internet Archive holds:
+    `https://web.archive.org/cdx/search/cdx?url=aaai.org/Conferences/AAAI-21/*&collapse=urlkey` lists 887 URLs, none
+    another accepted list, and `https://web.archive.org/cdx/search/cdx?url=aaai.org/wp-content/uploads/2023/01/AAAI-21*&collapse=urlkey`
+    lists four files, this PDF, the program committee, the schedule overview and the poster schedule (both queried
+    2026-10-16; AAAI-20's separate AISI list sits under the 2023/01 path, AAAI-21's doesn't). The PDF doesn't say it
+    predates the proceedings, and the later copy (SHA-1 base32 `SOFX7UV3F7DWXILKLOLHRV5OKIO76JPZ`, embedded creation
+    date 2021-01-29) was first captured on 2021-11-10, at the old path
+    `aaai.org/Conferences/AAAI-21/wp-content/uploads/2020/12/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf`.
+    An earlier copy at that path, captured on 2020-12-30 and 2021-01-26 (`DZJNTKYZTPBVFWBS5AXMQIUBXI457YSX`,
+    embedded creation date 2020-12-23), was made before the conference (2021-02-02 to 02-09) and so before the
+    proceedings. Its entries were counted 2026-10-16 by the AI assistant session working for the owner, from
+    `https://web.archive.org/web/20201230042125id_/https://aaai.org/Conferences/AAAI-21/wp-content/uploads/2020/12/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf`
+    (the downloaded file's SHA-1 matches the CDX digest `DZJN…`). It lists the same 40 AI for Social Impact papers and 1,657 main technical: paper 7140 ("Fused
+    Sequential and Hierarchical Representation Model for Aspect Term Extraction") is on it and not on the later copy,
+    and is not in the index (snapshot `2026-10-11-93c2937e2f29`), so the later copy was edited toward the
+    proceedings. **The owner chose the earlier copy (2026-10-16)**, since official counts come from a list made
+    before the proceedings: the row counts it, 1,697 (Δ −3, 0.18% on snapshot `2026-10-11-93c2937e2f29`; the gate
+    passes), and names the later copy (1,696) too.
 
   The deltas are those of snapshot `2026-10-10-9efa49481112` and are unchanged on the final snapshot
-  `2026-10-11-93c2937e2f29` (`docs/results/2026-10-11-coverage.md`), where the gate passes at 81 of 82 cells.
-- **Ungated-cell notes (TASK-222).** AAAI 2010, 2011, 2014, 2016 and 2022–2026 main and IASEAI 2026 main each carry a
+  `2026-10-11-93c2937e2f29` (`docs/results/2026-10-11-coverage.md`), where the gate passes at 81 of 82 cells; with
+  2021 re-counted at 1,697 its delta is −3 (`docs/results/2026-10-16-coverage.md`), and the gate still passes.
+- **Ungated-cell notes (TASK-222).** AAAI 2010, 2011, 2014, 2016 and 2022–2026 main, AIES 2026 main (TASK-217) and IASEAI 2026 main each carry a
   cited note
   saying why they are not gated (`official_counts.UNGATED_NOTES`, `coverage-sources.md` §Ungated cells with a note),
   served on `/coverage` and listed in the coverage report.
@@ -919,9 +992,17 @@ exist for some years; they are never a row). "Ours" is the `main` cell after the
   2025-06 and 2026-06 (2,704; 3,776; 5,141; 4,389), to size the windows
 - https://proceedings.mlr.press/v81/ and https://proceedings.mlr.press/ (2026-10-10)
 - api.openalex.org (2026-10-10, keyless; §OpenAlex lists every query)
-- https://www.aaai.org/robots.txt (`Crawl-delay: 43200`; read during this research in 2026-10, the exact date not
-  recorded) and web.archive.org's CDX index and `id_` captures of `www.aaai.org/Library/` (2026-10-10, TASK-232)
-- help.openalex.org: the Pricing page and the work-object documentation (read by the controller, 2026-10-10)
+- https://www.aaai.org/robots.txt, which redirects to https://aaai.org/robots.txt (`Crawl-delay: 43200`; read
+  during this research in 2026-10 and re-read 2026-10-16, TASK-236), and web.archive.org's CDX index and `id_`
+  captures of `www.aaai.org/Library/` (2026-10-10, TASK-232)
+- OpenAlex's Pricing page, https://help.openalex.org/access/pricing/, and its work-object documentation, now
+  https://help.openalex.org/data/works/attributes/ (both read by the controller 2026-10-10, re-read 2026-10-16);
+  its terms page, https://openalex.org/terms, and terms of service, https://openalex.org/OpenAlex_termsofservice.pdf
+  (2026-10-16); help.openalex.org's page index, https://help.openalex.org/llms.txt (2026-10-16), for a data-licence
+  page (none)
+- AAAI-21's accepted-paper list, https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf,
+  and its earlier copies under `aaai.org/Conferences/AAAI-21/wp-content/uploads/2020/12/` in the Internet Archive
+  (CDX and `id_` captures of 2020-12-30 and 2023-09-29; read 2026-10-16, TASK-234)
 - the pinned dblp release `dblp-2026-10-03.xml.gz`
 
 ## AAAI 1993–2008 sections (TASK-224/225/226, decision-050, 2026-10-10)

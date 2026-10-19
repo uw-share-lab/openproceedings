@@ -1,8 +1,10 @@
 version: 2
 # Every ecosystem: minor and patch updates arrive as one grouped PR per ecosystem, and semver-major updates
 # are ignored, so a major upgrade is a deliberate, hand-made change (spec 08 §CI, "Dependabot"). A version update
-# waits 7 days after its release (`cooldown`; security updates don't): a compromised release is most often pulled
-# within days, and the weekly /dependabot-review routine leaves a younger one for the owner (decision-048).
+# waits 7 days after its release (`cooldown`; security updates don't; for docker only where Dependabot finds a
+# publication date, Docker Hub alone: a ghcr.io PR says "Cooldown could not be applied", and the routine leaves
+# it for the owner with its attestation's age): a compromised release is most often pulled within days, and the
+# weekly /dependabot-review routine leaves a younger one for the owner (decision-048).
 updates:
   - package-ecosystem: github-actions
     directory: /
@@ -45,11 +47,11 @@ updates:
   # deploy/*.Dockerfile base images, pinned name:tag@sha256:<index digest> (TASK-149): Dependabot bumps the
   # digest when the tag moves (a digest bump is not a major). A new Node major (22-… → 24-…) moves with
   # .nvmrc and CI, so it is done by hand.
-  # The group is for symmetry: a major-only tag like 22-bookworm-slim moves only by a major (ignored), so the
-  # updates expected here are digest bumps, each its own PR. The api image's `python:3.12.N-slim-bookworm` tag
-  # names the patch .python-version pins (TASK-208): a patch bump arrives here, and its PR fails CI's
-  # test_python_pin.py until .python-version moves with it; a new minor (3.12 → 3.13) is done by hand, with
-  # .python-version, requires-python and the ruff/mypy targets.
+  # A major-only tag like 22-bookworm-slim moves only by a major (ignored), so the updates here are digest bumps
+  # (each its own PR) and patch bumps of the `python` and `astral-sh/uv` tags (grouped). The api image's
+  # `python:3.12.N-slim-bookworm` tag names the patch .python-version pins (TASK-208): a patch bump arrives here,
+  # and its PR fails CI's test_python_pin.py until .python-version moves with it; a new minor (3.12 → 3.13) is done
+  # by hand, with .python-version, requires-python and the ruff/mypy targets.
   - package-ecosystem: docker
     directories: ["/deploy", "/deploy/**"]
     schedule: { interval: weekly }
@@ -62,4 +64,10 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
       - dependency-name: python
+        update-types: ["version-update:semver-minor"]
+      # ghcr.io/astral-sh/uv (the api image's uv stage): while uv is 0.x a minor is a breaking release (0.13.0
+      # shipped "Breaking changes"), so it is upgraded by hand like a major; its patches and digests still come
+      # here. Drop this rule once uv reaches 1.0 (the "*" major rule then covers it). Every CI setup-uv step pins
+      # this image's uv (TASK-252): a PR moving the tag fails make tooling until the workflows move with it.
+      - dependency-name: astral-sh/uv
         update-types: ["version-update:semver-minor"]

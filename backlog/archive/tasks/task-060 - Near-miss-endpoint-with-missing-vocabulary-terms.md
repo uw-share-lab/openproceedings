@@ -1,29 +1,30 @@
 ---
-id: TASK-059
-title: sort=semantic within the matched set
+id: TASK-060
+title: Near-miss endpoint with missing-vocabulary terms
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-29 23:58'
+updated_date: '2026-10-16 15:34'
 labels:
   - semantic
+  - api
   - deferred
 milestone: m-5
 dependencies:
-  - TASK-058
-ordinal: 58000
+  - TASK-035
+ordinal: 59000
 ---
 
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Spec 06 §Features 1.
+Spec 06 §Features 2.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Order by cosine to the top-20 BM25 centroid; ties by BM25 then id
-- [ ] #2 Membership identical to sort=relevance
+- [ ] #1 Separate resource; never merged into /search
+- [ ] #2 Per-concept-group failure reasons; tf-idf missing terms
 <!-- AC:END -->
 
 ## Implementation Notes

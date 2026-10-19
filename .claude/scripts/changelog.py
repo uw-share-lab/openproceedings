@@ -65,7 +65,7 @@ TYPES = {
 }
 # The shared no-AI-attribution pattern (block-ai-attribution.sh, .githooks/commit-msg, pr-gates.yml).
 ATTRIBUTION = re.compile(
-    r"co-authored-by[:=][^\n]*(claude|anthropic)|generated with \[?claude|🤖 generated|noreply@anthropic\.com",
+    r"co-authored-by[:=].*(claude|anthropic)|generated[ -](with|by):? +[`*_[]*((an?|the) +)?((github|microsoft|google) +)?(claude|(anthropic|openai|(chat)?gpt(-?[0-9][0-9a-z.]*)?|copilot|gemini|bard|codex|llm|ai)([^a-zA-Z0-9]|$))|🤖 generated|noreply@anthropic\.com",
     re.IGNORECASE,
 )
 # Release notes name roles, not people, and link only PRs, so a title or note is refused for: a GitHub

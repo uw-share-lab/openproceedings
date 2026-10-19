@@ -282,6 +282,104 @@ def test_parse_authors_refuses_an_answer_that_is_not_a_work_list() -> None:
     assert oa.parse_authors(json.dumps({"meta": {"count": 0}, "results": []})) == {}
 
 
+# --- AAAI 1980-2008: OpenAlex against AAAI's archived pages (aaai_library) ------------------------------------
+
+LIBRARY_TABLE = openalex_table.load("""
+[[listing]]
+venue = "AAAI"
+year = 1990
+source_ids = ["S77"]
+works = 5
+verified = 2026-10-16
+source = "test"
+""")
+
+
+def _library(key: str, title: str, abstract: str | None) -> object:
+    official = "aaai_library" if abstract else "dblp"
+    return audit_fixture.build(f"op:aaai:1990:dblp-{key}", "AAAI", 1990, title=title, doi=None, abstract=abstract,
+                               source="dblp", official=official, authors=("A Person",))  # fmt: skip
+
+
+def _library_corpus() -> list:
+    return [_library("SameA90", "Same Text", "An archived abstract, word for word."),
+            _library("CaseB90", "Other Case", "An archived abstract in its own case."),
+            _library("DiffC90", "Wholly Different", "An archived abstract about planning."),
+            _library("NoneD90", "No OpenAlex Text", "An archived abstract OpenAlex lacks."),
+            _library("LostE90", "Not In The Listing", "An archived abstract with no work."),
+            _library("FillF90", "Filled By OpenAlex", None),
+            _library("GoneG90", "Nobody Lists This Either", None)]  # refused in both runs: subtracted  # fmt: skip
+
+
+def _seed_library(t: FakeTransport) -> None:
+    _script(t, openalex.listing_url(LIBRARY_TABLE.listings[("AAAI", 1990)]),
+            api.work("W61", None, title="Same Text", year=1990, text="An archived abstract,  word for word."),
+            api.work("W62", None, title="Other Case", year=1990, text="AN ARCHIVED ABSTRACT IN ITS OWN CASE"),
+            api.work("W63", None, title="Wholly Different", year=1990, text="Search trees and their uses."),
+            api.work("W64", None, title="No OpenAlex Text", year=1990, text=None),
+            api.work("W65", None, title="Filled By OpenAlex", year=1990, text="OpenAlex's own abstract."))  # fmt: skip
+
+
+def test_the_library_check_compares_openalex_with_aaai_librarys_abstracts(tmp_path: Path) -> None:
+    t = FakeTransport({})
+    _seed_library(t)
+    check = oa.library_check(_library_corpus(), _fetcher(tmp_path, t), table=LIBRARY_TABLE)
+    assert check is not None
+    assert check.library == 5  # the record with no aaai_library abstract is not one of them
+    assert check.rows == {("AAAI", 1990): {"exact": 1, "near_exact": 1, "differs": 1}}
+    assert check.no_abstract == 1 and check.refused == {"title_unmatched": 1}
+    assert check.differs == ("op:aaai:1990:dblp-DiffC90",)
+    assert check.compared == 3
+    assert check.library == check.compared + check.no_abstract + sum(check.refused.values())
+
+
+def test_the_library_check_leaves_out_a_record_with_a_doi(tmp_path: Path) -> None:
+    t = FakeTransport({})
+    _seed_library(t)
+    with_doi = audit_fixture.build("op:aaai:1990:dblp-DoiH90", "AAAI", 1990, title="Same Text", doi="10.1/x",
+                                   abstract="An archived abstract.", source="dblp", official="aaai_library")  # fmt: skip
+    check = oa.library_check([*_library_corpus(), with_doi], _fetcher(tmp_path, t), table=LIBRARY_TABLE)
+    assert check is not None and check.library == 5
+
+
+def test_the_library_check_is_none_without_listing_rows(tmp_path: Path) -> None:
+    assert (
+        oa.library_check(_library_corpus(), _fetcher(tmp_path, None), table=openalex_table.load("")) is None
+    )
+
+
+def test_the_library_section_reports_the_exact_near_exact_and_differs_rates(tmp_path: Path) -> None:
+    t = FakeTransport({})
+    _seed_library(t)
+    corpus = _library_corpus()
+    check = oa.library_check(corpus, _fetcher(tmp_path, t), table=LIBRARY_TABLE)
+    text = oa.render(oa.AuditResult(rows={}, library=check), oa.Meta(snapshot="s", commit="c", seed=49,
+                                                                   aaai_sample=0))  # fmt: skip
+    assert "## AAAI 1980–2008: OpenAlex against AAAI's archived pages (`aaai_library`)" in text
+    assert "| AAAI | 1990 | 3 | 1 (33.3%) | 1 (33.3%) | 0 (0.0%) | 0 (0.0%) | 1 (33.3%) |" in text
+    assert ("Of the 3 records with both an `aaai_library` abstract and an OpenAlex text, OpenAlex's is exact for 1 "
+            "(33.3%), near-exact for 1 (33.3%), truncated for 0 (0.0%), similar for 0 (0.0%) and differs for 1 "
+            "(33.3%): together 2 (66.7%) would match every search exactly as AAAI's text does.") in text  # fmt: skip
+    assert "nothing attached, by reason: `title_unmatched` 1." in text
+    assert (
+        "a `differs` can also be another paper" in text
+        and "The DOI route covers AIES" in text
+        and "`op:aaai:1990:dblp-DiffC90`" in text
+    )
+    assert "OpenAlex's fidelity for AAAI before 2010 is unmeasured" not in text
+    assert all(r.abstract is None or r.abstract not in text for r in corpus)
+    assert "Search trees" not in text
+
+
+def test_an_offline_rerun_reproduces_the_library_check_without_a_request(tmp_path: Path) -> None:
+    t = FakeTransport({})
+    _seed_library(t)
+    live = oa.library_check(_library_corpus(), _fetcher(tmp_path, t), table=LIBRARY_TABLE)
+    offline = _fetcher(tmp_path, None)
+    assert oa.library_check(_library_corpus(), offline, table=LIBRARY_TABLE) == live
+    assert offline.stats.network == 0
+
+
 # --- the command --------------------------------------------------------------------------------------------
 
 
@@ -303,3 +401,21 @@ def test_op_eval_openalex_offline_writes_the_report_from_the_cache(tmp_path: Pat
     text = (out / "2026-10-10-openalex-audit.md").read_text()
     assert "| FAccT | 2025 | 2 | 2 (100.0%)" in text
     assert "op eval openalex --offline --snapshot 2026-10-10-abc --seed 49 --aaai-sample 3" in text
+
+
+def test_op_eval_openalex_reports_the_library_check_from_the_cache(tmp_path: Path, monkeypatch) -> None:
+    from tests.unit.engine.test_index import snapshot_of
+
+    records = _library_corpus()
+    data = tmp_path / "data"
+    snap = snapshot_of(records, data / "snapshots" / "2026-10-16-abc")
+    monkeypatch.setattr(openalex_table, "TABLE", LIBRARY_TABLE)
+    t = FakeTransport({})
+    _seed_library(t)
+    oa.library_check(records, _fetcher(data / "cache", t), table=LIBRARY_TABLE)  # a live run's cache
+    out = tmp_path / "results"
+    code = cli.main(["--data-dir", str(data), "eval", "openalex", "--snapshot", snap.name, "--aaai-sample", "0",
+                     "--title-sample", "0", "--offline", "--out", str(out), "--date", "2026-10-16"])  # fmt: skip
+    assert code == 0
+    text = (out / "2026-10-16-openalex-audit.md").read_text()
+    assert "together 2 (66.7%) would match every search" in text

@@ -505,7 +505,7 @@ def resolved(argv, directory, env_empty=False):
 
 def git_calls(argv, directory):
     """The git commands `argv` runs: itself (aliases already expanded by the walk), or, for any other command, a
-    `git`/`git-<sub>` word inside it read as git from there on (`caffeinate -i git-push …`, behind a wrapper the
+    `git`/`git-<sub>` word inside it read as git from there on (`unknown-wrapper -i git-push …`, behind a wrapper the
     walk doesn't know; `echo git commit` is read as git too: over-blocking a lookalike is the safe side)."""
     if argv[0] == "git":
         return [(argv, directory)]

@@ -2,7 +2,7 @@ import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { query } from "./index";
 import goldenV2 from "./lexer-v2-golden.json";
-import { TreeFragment, type Tree } from "@lezer/common";
+import { Tree, TreeFragment } from "@lezer/common";
 import { buildParserFile } from "@lezer/generator";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -114,7 +114,64 @@ describe("incremental reparsing after an edit gives the same tokens as a fresh p
     ]);
     expect(tokens(parser.parse(after, fragments))).toEqual(tokens(parser.parse(after)));
   });
+
+  // A long query (every golden input, about 12k characters) under random edits, each parse reusing the last
+  // one's fragments as the editor does: a tree this size is where Lezer reuses whole subtrees, which @lezer/lr
+  // 1.4.11 changed (TASK-264). A fixed seed keeps it deterministic, and a failure names the step to replay.
+  it("holds over a long query under 200 seeded random edits", { timeout: 60_000 }, () => {
+    const random = mulberry32(264);
+    const pick = <T>(xs: readonly T[]): T => xs[Math.floor(random() * xs.length)] as T;
+    // the characters and words a lexeme depends on, so edits make and break operators, fields, phrases and math
+    const inserts = [" ", "  ", "-", "(", ")", '"', "$", ":", "*", "/", "|", "OR", "AND", "NOT", "NEAR/3",
+      "title:", "year:2020..2021", "trust", "x", "𝐱", "é", ""] as const; // prettier-ignore
+    let doc = golden.cases.map((c) => c.q).join(" ");
+    let tree = parser.parse(doc);
+    let fragments = TreeFragment.addTree(tree);
+    let reused = 0;
+    for (let step = 0; step < 200; step++) {
+      // never inside a surrogate pair: an edit there would make a lone surrogate, not a query anyone types
+      const at = (n: number): number => (n > 0 && /[\uDC00-\uDFFF]/.test(doc[n] ?? "") ? n - 1 : n);
+      const from = at(Math.floor(random() * (doc.length + 1)));
+      const to = at(Math.min(doc.length, from + Math.floor(random() * 4)));
+      const insert = pick(inserts);
+      const label = `step ${step}: replace [${from}, ${to}) with ${JSON.stringify(insert)}`;
+      doc = doc.slice(0, from) + insert + doc.slice(to);
+      fragments = TreeFragment.applyChanges(fragments, [
+        { fromA: from, toA: to, fromB: from, toB: from + insert.length },
+      ]);
+      const before = subtrees(tree);
+      tree = parser.parse(doc, fragments);
+      if ([...subtrees(tree)].some((t) => before.has(t))) reused += 1;
+      const [got, want] = [tokens(tree), tokens(parser.parse(doc))];
+      // a cheap compare first; toEqual runs only to show a difference, with the step in the message
+      if (JSON.stringify(got) !== JSON.stringify(want)) expect(got, label).toEqual(want);
+      fragments = TreeFragment.addTree(tree, fragments);
+    }
+    expect(doc.length).toBeGreaterThan(10_000);
+    expect(reused).toBeGreaterThan(150); // most steps kept an old subtree: the incremental path really ran
+  });
 });
+
+/** Every child node object under `tree`, to see which ones an incremental parse kept from the old tree. */
+function subtrees(tree: Tree, out = new Set<object>()): Set<object> {
+  for (const child of tree.children) {
+    out.add(child);
+    if (child instanceof Tree) subtrees(child, out);
+  }
+  return out;
+}
+
+/** A small seeded PRNG (mulberry32): the same seed gives the same edits on every run and machine. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 describe("the tokenizer 2 Lezer language has the server's token spans", () => {
   it.each(goldenV2.cases.map((c) => [JSON.stringify(c.q).slice(0, 80), c] as const))("%s", (_name, c) => {

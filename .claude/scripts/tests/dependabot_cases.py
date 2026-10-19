@@ -29,11 +29,18 @@ from typing import Any, cast
 HERE = Path(__file__).resolve().parent
 SCRIPTS = HERE.parent / "dependabot"
 FAKE = HERE / "dependabot_fake.py"
+# the cloud proxy's two 403 messages, as the fake gh answers them (dependabot_fake.py; the 2026-10-13 probe)
+SESSION_BOUND_403 = ("This GitHub API path is not available: sessions are bound to their configured repositories. Use "
+                     "repository-scoped endpoints (repos/{owner}/{repo}/...)")  # fmt: skip
+NOT_ENABLED_403 = (
+    "GitHub access to this repository is not enabled for this session. Use add_repo to request access"
+)
 ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 TOKEN_VARS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
 ROWS: list[tuple[str, Callable[[Case], None]]] = []
 
 OK, PROBLEM, ERROR, FIX = 0, 1, 2, 3
+WAIT = 4  # prs.py ci: a check still running at its timeout
 
 
 def row(label: str) -> Callable[[Callable[[Case], None]], Callable[[Case], None]]:
@@ -85,7 +92,7 @@ class Case:
         self.git("commit", "-q", "--allow-empty", "-m", "c", env=who)
         return self.git("rev-parse", "HEAD")
 
-    def run(self, script: str, *args: str) -> tuple[int, str]:
+    def run(self, script: str, *args: str, cwd: Path | None = None) -> tuple[int, str]:
         for name, data in (("curl.json", self.curl), ("npm.json", self.npm), ("gh.json", self.gh)):
             (self.fix / name).write_text(json.dumps(data))
         env = {k: v for k, v in ENV.items() if k not in TOKEN_VARS} | self.env
@@ -94,7 +101,7 @@ class Case:
         env.setdefault("OP_DEPENDABOT_SETTLE", "0")
         r = subprocess.run(
             [sys.executable, str(SCRIPTS / script), *args],
-            cwd=self.repo, capture_output=True, text=True, env=env, timeout=120,
+            cwd=cwd or self.repo, capture_output=True, text=True, env=env, timeout=120,
         )  # fmt: skip
         return r.returncode, r.stdout + r.stderr
 
@@ -619,6 +626,77 @@ def _(c: Case) -> None:
     c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM node_modules/x 1\.0\.0: added")
 
 
+# npm_lock.OWNER_ACCEPTED's seed: 6.0.0, PR #165's owner comment (TASK-262)
+ACCEPTED = "@codemirror/streamparser"
+
+
+def npm_added(
+    c: Case, pkg: str, v: str, *, key: str | None = None, shown: dict[str, Any] | None = None, **extra: Any
+) -> list[str]:
+    """A lock that adds `pkg` at `v` (under `key` as an alias, `"name": pkg`, when given); `shown` goes to the registry's manifest."""
+    view(c, "next", "16.3.8")
+    view(c, pkg, v, **(shown or {}))
+    new = {
+        "next": entry("next", "16.3.8"),
+        key or pkg: entry(pkg, v, **extra) | ({"name": pkg} if key else {}),
+    }
+    return npm_case(c, {"next": entry("next", "16.3.8")}, new)
+
+
+@row("npm: a new package the owner accepted, at that version")
+def _(c: Case) -> None:
+    args = npm_added(c, ACCEPTED, "6.0.0")
+    c.expect("npm_lock.py", args, OK, r"^ok +node_modules/@codemirror/streamparser 6\.0\.0: added to the lock, a new "
+             r"package the owner accepted \(https://github\.com/uw-share-lab/openproceedings/pull/165"
+             r"#issuecomment-6245774665\)$")  # fmt: skip
+    c.expect("npm_lock.py", args, OK, r"^ok +@codemirror/streamparser 6\.0\.0: matches the registry "
+             r"\(publisher 'alice', provenance none\)$")  # fmt: skip
+
+
+@row("npm: an owner-accepted package's ok line names its provenance")
+def _(c: Case) -> None:
+    args = npm_added(c, ACCEPTED, "6.0.0", shown={"attest": "https://github.com/codemirror/stream-parser"})
+    c.expect("npm_lock.py", args, OK, r"^ok +@codemirror/streamparser 6\.0\.0: matches the registry "
+             r"\(publisher 'alice', provenance https://github\.com/codemirror/stream-parser\)$")  # fmt: skip
+
+
+@row("npm: an owner-accepted package at another version is a new package")
+def _(c: Case) -> None:
+    args = npm_added(c, ACCEPTED, "6.0.1")
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM node_modules/@codemirror/streamparser 6\.0\.1: added")
+
+
+@row("npm: an owner-accepted package installed under an alias is a new package")
+def _(c: Case) -> None:
+    args = npm_added(c, ACCEPTED, "6.0.0", key="streamparser")
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM node_modules/streamparser 6\.0\.0: added")
+
+
+@row("npm: an owner-accepted package is still checked against the registry")
+def _(c: Case) -> None:
+    args = npm_added(c, ACCEPTED, "6.0.0", integrity="sha512-x")
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM @codemirror/streamparser 6\.0\.0: integrity differs")
+
+
+@row("npm: an owner-accepted package is still under the cooldown")
+def _(c: Case) -> None:
+    args = npm_added(c, ACCEPTED, "6.0.0", shown={"released": NOW})
+    c.expect(
+        "npm_lock.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM @codemirror/streamparser 6\.0\.0: published 0\.\d days ago \(under 7",
+    )
+
+
+@row("npm: an owner-accepted package with an install script")
+def _(c: Case) -> None:
+    shown = {"scripts": {"postinstall": "node x.js"}}
+    args = npm_added(c, ACCEPTED, "6.0.0", shown=shown, hasInstallScript=True)
+    c.expect("npm_lock.py", args, PROBLEM,
+             r"^PROBLEM @codemirror/streamparser 6\.0\.0: install script\(s\) postinstall: never owner-accepted")  # fmt: skip
+
+
 @row("npm: a removed package")
 def _(c: Case) -> None:
     args = npm_case(
@@ -1060,6 +1138,7 @@ def _(c: Case) -> None:
         }
     ]
     c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{new} astral-sh"] = 0
+    c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{digest('uv-old')} astral-sh"] = 0
     text = (
         "FROM python:3.12.15-slim-bookworm@{}\nCOPY --from=ghcr.io/astral-sh/uv:{}@{} /uv /usr/local/bin/uv\n"
     )
@@ -1104,9 +1183,10 @@ def _(c: Case) -> None:
     )
 
 
-def uv_image_case(c: Case, attested: bool) -> list[str]:
+def uv_image_case(c: Case, attested: bool, stamps: list[str] | None = None, *, tag: str = "0.12.24",
+                  old_attested: bool = True) -> list[str]:  # fmt: skip
     new = digest("uv-new")
-    c.curl["https://ghcr.io/v2/astral-sh/uv/manifests/0.12.24"] = [
+    c.curl[f"https://ghcr.io/v2/astral-sh/uv/manifests/{tag}"] = [
         {
             "if": {"Accept": INDEX},
             "status": 200,
@@ -1114,9 +1194,12 @@ def uv_image_case(c: Case, attested: bool) -> list[str]:
         }
     ]
     if attested:
-        c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{new} astral-sh"] = 0
+        ans = 0 if stamps is None else {"timestamps": stamps}
+        c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{new} astral-sh"] = ans
+    if old_attested:
+        c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{digest('uv-old')} astral-sh"] = 0
     return docker_case(
-        c, f"ghcr.io/astral-sh/uv:0.12.23@{digest('uv-old')}", f"ghcr.io/astral-sh/uv:0.12.24@{new}",
+        c, f"ghcr.io/astral-sh/uv:0.12.23@{digest('uv-old')}", f"ghcr.io/astral-sh/uv:{tag}@{new}",
         path="deploy/api.Dockerfile",
     )  # fmt: skip
 
@@ -1130,12 +1213,180 @@ def _(c: Case) -> None:
 
 @row("docker: a ghcr.io image whose attestation fails")
 def _(c: Case) -> None:
+    args = uv_image_case(c, False)  # no graphql fixture: the mode can't be told, so the line stays as it was
+    got, out = c.run("docker_digest.py", *args)
+    assert got == PROBLEM and re.search(r"^PROBLEM .*gh attestation verify --owner astral-sh", out, re.M), out
+    assert "cloud" not in out, out
+
+
+@row("docker: a failed attestation locally says nothing of the cloud")
+def _(c: Case) -> None:
+    args = uv_image_case(c, False)
+    c.gh["graphql"] = {"data": {"viewer": {"login": "maintainer"}}}
+    got, out = c.run("docker_digest.py", *args)
+    assert (
+        got == PROBLEM and "gh attestation verify --owner astral-sh failed" in out and "cloud" not in out
+    ), out
+
+
+@row("docker: in the cloud a ghcr.io image is the owner's, and the line says Sigstore can't run there")
+def _(c: Case) -> None:
+    args = uv_image_case(
+        c, True
+    )  # fixtures say verified; behind the proxy gh attestation verify fails anyway
+    c.gh["cloud"] = True
+    c.expect("docker_digest.py", args, PROBLEM,
+             r"^PROBLEM .*uv:0\.12\.24.*failed: Error: error creating Sigstore verifier.*; in a Claude Code cloud "
+             r"session Sigstore can't run: the proxy blocks tuf-repo-cdn\.sigstore\.dev and tuf-repo\.github\.com, and "
+             r"refuses another organisation's attestation API .*every ghcr\.io PR is the owner's in the cloud")  # fmt: skip
+
+
+@row("docker: in the cloud a Docker Hub image still passes on its digest")
+def _(c: Case) -> None:
+    args = node_case(c)
+    c.gh["cloud"] = True
+    c.expect("docker_digest.py", args, OK, r"^ok .*registry-1\.docker\.io publishes no GitHub attestations")
+
+
+@row("docker: a ghcr.io image attested under 7 days ago is left for the owner")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True, ["2026-10-05T12:00:00Z"])
+    c.expect(
+        "docker_digest.py", args, PROBLEM, r"^PROBLEM .*uv:0\.12\.24.*first attested 2\.0 days ago \(under 7"
+    )
+
+
+@row("docker: a ghcr.io image attested just under 7 days ago is left for the owner")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True, ["2026-09-30T14:24:00Z"])
+    c.expect("docker_digest.py", args, PROBLEM, r"^PROBLEM .*first attested 6\.9 days ago \(under 7")
+
+
+@row("docker: every attestation of the publisher is read, not only the first")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True)
+    c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{digest('uv-new')} astral-sh"] = {"attestations": [
+        {"timestamps": ["2026-10-06T12:00:00Z"]},
+        {"timestamps": ["2026-09-01T00:00:00Z"]},
+    ]}  # fmt: skip
+    c.expect("docker_digest.py", args, OK, r"^ok .*first attested 36\.5 days ago")
+
+
+@row("docker: a ghcr.io image attested exactly 7 days ago passes")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True, ["2026-09-30T12:00:00Z"])
+    c.expect("docker_digest.py", args, OK, r"^ok .*first attested 7\.0 days ago, 7 days or more")
+
+
+@row("docker: a ghcr.io image's age is its earliest attestation, compared as times across offsets")
+def _(c: Case) -> None:
+    # as text, 2026-09-01T23:00-04:00 sorts first, but it is 2026-09-02T03:00Z, two hours after the earliest
+    stamps = ["2026-10-06T12:00:00Z", "2026-09-01T23:00:00-04:00", "2026-09-02T01:00:00Z"]
+    c.expect("docker_digest.py", uv_image_case(c, True, stamps), OK, r"^ok .*first attested 35\.5 days ago")
+
+
+@row("docker: a ghcr.io attestation with no verified timestamp is left for the owner")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True, [])
+    c.expect(
+        "docker_digest.py", args, PROBLEM, r"^PROBLEM .*no verified timestamp, so nothing dates the image"
+    )
+
+
+@row("docker: attestation output that isn't an attestation list is an error, not a pass")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True)
+    c.gh[next(k for k in c.gh if k.startswith("attestation "))] = {"stdout": '{"verificationResult": {}}'}
+    c.expect("docker_digest.py", args, ERROR, r"^ERROR .*printed no attestation list")
+
+
+@row("docker: an attestation timestamp that isn't a time is an error, not a pass")
+def _(c: Case) -> None:
     c.expect(
         "docker_digest.py",
-        uv_image_case(c, False),
-        PROBLEM,
-        r"^PROBLEM .*gh attestation verify --owner astral-sh",
+        uv_image_case(c, True, ["yesterday"]),
+        ERROR,
+        r"^ERROR .*a timestamp that isn't ISO 8601: 'yesterday'",
     )
+
+
+@row("docker: an old attestation by another workflow of the org doesn't date the image")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True)
+    c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{digest('uv-new')} astral-sh"] = {"attestations": [
+        {"signer": "https://github.com/astral-sh/uv/.github/workflows/pr-preview.yml@refs/pull/9/merge", "timestamps": ["2026-09-01T00:00:00Z"]},
+        {"timestamps": ["2026-10-05T12:00:00Z"]},
+    ]}  # fmt: skip
+    c.expect("docker_digest.py", args, PROBLEM, r"^PROBLEM .*first attested 2\.0 days ago")
+
+
+@row("docker: a ghcr.io image attested only by a new publisher is left for the owner")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True)
+    c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{digest('uv-new')} astral-sh"] = {"attestations": [
+        {"repo": "https://github.com/astral-sh/other", "timestamps": ["2026-09-01T00:00:00Z"]},
+    ]}  # fmt: skip
+    c.expect(
+        "docker_digest.py", args, PROBLEM, r"^PROBLEM .*attested only by .*astral-sh/other.*a new publisher"
+    )
+    _, out = c.run("docker_digest.py", *args)
+    assert "no verified timestamp" not in out and "docker pins: 1 problem" in out, out
+
+
+@row("docker: the publisher's workflow run from another ref is the same publisher")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True)
+    c.gh[f"attestation oci://ghcr.io/astral-sh/uv@{digest('uv-new')} astral-sh"] = {"attestations": [
+        {"signer": "https://github.com/astral-sh/uv/.github/workflows/publish-docker-image.yml@refs/tags/0.12.24", "timestamps": ["2026-09-01T00:00:00Z"]},
+    ]}  # fmt: skip
+    c.expect("docker_digest.py", args, OK, r"^ok .*first attested 36\.5 days ago")
+
+
+@row("docker: a ghcr.io image whose previous pin has no attestation is left for the owner")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True, old_attested=False)
+    c.expect(
+        "docker_digest.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM .*previous pin has no verified attestation.*\(gh: fake gh: attestation verification failed\)",
+    )
+
+
+@row("docker: a 0.x minor is hand-only")
+def _(c: Case) -> None:
+    args = uv_image_case(c, True, tag="0.13.0")
+    c.expect(
+        "docker_digest.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM .*uv:0\.13\.0.*a 0\.x minor from 0\.12\.23 is a breaking release",
+    )
+
+
+@row("docker: a minor of a 1.x or later image is not a 0.x minor")
+def _(c: Case) -> None:
+    new = digest("caddy212")
+    registry(c, "registry-1.docker.io", "library/caddy", "2.12.0-alpine", new)
+    args = docker_case(c, f"caddy:2.11.4-alpine@{digest('c')}", f"caddy:2.12.0-alpine@{new}")
+    c.expect("docker_digest.py", args, OK, r"^docker pins: 0 problems")
+
+
+@row("docker: a 0.x patch passes")
+def _(c: Case) -> None:
+    c.expect("docker_digest.py", uv_image_case(c, True, tag="0.12.24"), OK, r"^docker pins: 0 problems")
+
+
+@row("docker: an image on a registry nothing dates is left for the owner")
+def _(c: Case) -> None:
+    new = digest("prom-new")
+    registry(c, "quay.io", "prometheus/prometheus", "v3.0.1", new)
+    args = docker_case(
+        c,
+        f"quay.io/prometheus/prometheus:v3.0.0@{digest('p')}",
+        f"quay.io/prometheus/prometheus:v3.0.1@{new}",
+    )
+    c.expect("docker_digest.py", args, PROBLEM, r"^PROBLEM .*nothing dates an image on quay\.io")
 
 
 @row("docker: an image that wasn't pinned before")
@@ -1250,6 +1501,45 @@ def _(c: Case) -> None:
     c.gh[f"api repos/actions/checkout/git/tags/{sha('t')}"] = {"object": {"type": "commit", "sha": sha("b")}}
     args = actions_case(c, f"actions/checkout@{sha('a')} # v7.0.1", f"actions/checkout@{sha('b')} # v7.0.2")
     c.expect("actions_pins.py", args, OK, r"^ok .*tag v7\.0\.2 is the pinned commit")
+
+
+@row("actions: in the cloud a new pin's tag can't be resolved, and the line says why")
+def _(c: Case) -> None:
+    c.gh["cloud"] = (
+        True  # the fake proxy refuses actions/checkout with its "not enabled for this session" 403
+    )
+    args = actions_case(c, f"actions/checkout@{sha('a')} # v7.0.1", f"actions/checkout@{sha('b')} # v7.0.2")
+    c.expect("actions_pins.py", args, PROBLEM,
+             r"^PROBLEM .*tag v7\.0\.2 can't be resolved here: this Claude Code cloud session's proxy refuses "
+             r"actions/checkout \('GitHub access to this repository is not enabled for this session', HTTP 403\)")  # fmt: skip
+
+
+@row("actions: another 403 is an error, not the cloud refusal")
+def _(c: Case) -> None:
+    c.gh["api repos/actions/checkout/git/ref/tags/v7.0.2"] = {
+        "__status": 403,
+        "body": {"message": "Forbidden"},
+    }
+    args = actions_case(c, f"actions/checkout@{sha('a')} # v7.0.1", f"actions/checkout@{sha('b')} # v7.0.2")
+    got, out = c.run("actions_pins.py", *args)
+    assert (
+        got == ERROR
+        and "cloud" not in out
+        and re.search(r"^ERROR .*git/ref/tags/v7\.0\.2 exited 1", out, re.M)
+    ), out
+
+
+@row("actions: a tag ref answer that isn't an object is an error, not a crash")
+def _(c: Case) -> None:
+    # the fake prints the body as JSON, so this is a JSON string: valid JSON, but not an object
+    c.gh["api repos/actions/checkout/git/ref/tags/v7.0.2"] = {"__status": 200, "body": "<html>"}
+    args = actions_case(c, f"actions/checkout@{sha('a')} # v7.0.1", f"actions/checkout@{sha('b')} # v7.0.2")
+    c.expect(
+        "actions_pins.py",
+        args,
+        ERROR,
+        r"^ERROR +gh api repos/actions/checkout/git/ref/tags/v7\.0\.2 returned no sha",
+    )
 
 
 @row("actions: a name that is only a branch, not a tag, is an error")
@@ -1423,10 +1713,10 @@ def page1(path: str) -> str:
 
 def rest_pr(sha_: str, head: str = "dependabot/uv/g", *, state: str = "open", base: str = "dev",
             login: str = "dependabot[bot]", title: str = "deps: bump x", auto: bool = False,
-            merged: bool = False) -> dict[str, Any]:  # fmt: skip
+            merged: bool = False, body: str | None = "Bumps x.") -> dict[str, Any]:  # fmt: skip
     return {"number": 7, "state": state, "merged": merged, "merged_at": "2026-10-07T11:00:00Z" if merged else None,
             "user": {"login": login}, "base": {"ref": base}, "head": {"ref": head, "sha": sha_}, "title": title,
-            "auto_merge": {"merge_method": "merge"} if auto else None}  # fmt: skip
+            "body": body, "auto_merge": {"merge_method": "merge"} if auto else None}  # fmt: skip
 
 
 def gh_commit(sha_: str, *, verified: bool = True, login: str = "dependabot[bot]") -> dict[str, Any]:
@@ -1626,6 +1916,19 @@ def _(c: Case) -> None:
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM the title names a hand-only dependency")
 
 
+@row("prs check: Dependabot's notice that it skipped the cooldown")
+def _(c: Case) -> None:
+    body = "> [!WARNING]\n> Cooldown could not be applied because no publication date was available from the registry.\n"
+    args = check_case(c, "dependabot/docker/g", {"deploy/api.Dockerfile": "FROM x\n"}, body=body)
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM Dependabot says its cooldown could not be applied")
+
+
+@row("prs check: a PR with no body passes")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/docker/g", {"deploy/api.Dockerfile": "FROM x\n"}, body=None)
+    c.expect("prs.py", args, OK, r"^ok +docker: 1 file")
+
+
 def listed(n: int, login: str = "dependabot[bot]", head: str = "dependabot/uv/g") -> dict[str, Any]:
     return {"number": n, "title": "deps: bump x", "head": {"ref": head}, "user": {"login": login}}
 
@@ -1664,12 +1967,27 @@ def _(c: Case) -> None:
 # preflight
 
 
+INSTALLATIONS = "api orgs/uw-share-lab/installations?per_page=100"
+
+
+def installation(selection: str = "selected", slug: str = "claude", ident: int = 171042656) -> dict[str, Any]:
+    return {"id": ident, "app_slug": slug, "repository_selection": selection,
+            "permissions": {"contents": "write", "workflows": "write"}}  # fmt: skip
+
+
+def installs(*items: dict[str, Any], total: int | None = None) -> dict[str, Any]:
+    return {"total_count": len(items) if total is None else total, "installations": list(items)}
+
+
 def preflight_case(c: Case, *, cloud: bool = True, stored: bool = False) -> None:
-    c.gh["api user"] = {"login": "maintainer"}
+    # the repository call answers in both modes; in the cloud the fake proxy refuses every other repository and every
+    # path outside repos/ exactly as the 2026-10-13 probe saw (dependabot_fake.py), so the cloud needs no fixture more
+    c.gh[f"api {R}"] = {"full_name": "uw-share-lab/openproceedings"}
     if cloud:
         c.gh["cloud"] = True
     else:
         c.gh["graphql"] = {"data": {"viewer": {"login": "maintainer"}}}
+        c.gh[INSTALLATIONS] = installs(installation(slug="vercel", ident=1), installation())
     if stored:
         c.gh["stored login"] = REAL_LOOKING
 
@@ -1724,40 +2042,517 @@ def _(c: Case) -> None:
 
 @row("prs preflight: GraphQL failing some other way stops the run")
 def _(c: Case) -> None:
-    c.gh["api user"] = {"login": "maintainer"}  # no graphql fixture: a 404 without the session's message
+    c.gh[f"api {R}"] = {
+        "full_name": "uw-share-lab/openproceedings"
+    }  # no graphql: a 404 without the session's message
     c.expect("prs.py", ["preflight"], ERROR, r"^ERROR .*not as a Claude Code session refuses it")
 
 
 @row("prs preflight: GraphQL answering an empty login stops the run")
 def _(c: Case) -> None:
-    c.gh["api user"] = {"login": "maintainer"}
+    c.gh[f"api {R}"] = {"full_name": "uw-share-lab/openproceedings"}
     c.gh["graphql"] = {"data": {"viewer": {"login": ""}}}
     c.expect("prs.py", ["preflight"], ERROR, r"^ERROR +GraphQL answered an empty login")
 
 
-@row("prs preflight: gh api user failing stops the run")
+@row("prs preflight: the repository call failing stops the run")
 def _(c: Case) -> None:
+    c.gh["cloud"] = True  # no fixture for repos/uw-share-lab/openproceedings: a 404
+    c.expect("prs.py", ["preflight"], ERROR, r"^ERROR .*gh api repos/uw-share-lab/openproceedings")
+
+
+@row("prs preflight: the cloud never calls gh api user, which its proxy refuses")
+def _(c: Case) -> None:
+    preflight_case(c)
+    got, out = c.run("prs.py", "preflight")
+    calls = (c.fix / "calls.log").read_text()
+    assert got == OK and '"api", "user"' not in calls, out + calls
+
+
+# The cloud session binding (TASK-243 AC6): both refusals must be the proxy's own 403s, word for word.
+
+
+@row("prs preflight: cloud passes when the proxy refuses both binding calls with its own 403s")
+def _(c: Case) -> None:
+    preflight_case(c)
+    got, out = c.run("prs.py", "preflight")
+    assert got == OK, out
+    assert re.search(
+        r"^ok +session binding: gh api user/installations \(outside repos/\.\.\.\) refused: 'This GitHub"
+        r" API path is not available: sessions are bound to their configured repositories'$",
+        out,
+        re.M,
+    ), out
+    assert re.search(r"^ok +session binding: gh api repos/astral-sh/uv \(another repository\) refused: 'GitHub access"
+                     r" to this repository is not enabled for this session'$", out, re.M), out  # fmt: skip
+
+
+@row("prs preflight: cloud stops when the installations call answers")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["api user/installations"] = {"total_count": 1, "installations": [installation()]}
+    c.expect("prs.py", ["preflight"], PROBLEM,
+             r"^PROBLEM session binding: gh api user/installations .*was not refused .*it answered \(HTTP 2xx\)")  # fmt: skip
+
+
+@row("prs preflight: cloud stops when another repository answers")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["api repos/astral-sh/uv"] = {"full_name": "astral-sh/uv"}
+    c.expect("prs.py", ["preflight"], PROBLEM,
+             r"^PROBLEM session binding: gh api repos/astral-sh/uv .*it answered \(HTTP 2xx\); the session's credential")  # fmt: skip
+
+
+@row("prs preflight: cloud stops when the installations call gets the other repository message")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["api user/installations"] = {"__status": 403, "body": {"message": NOT_ENABLED_403}}
+    c.expect(
+        "prs.py", ["preflight"], PROBLEM, r"^PROBLEM session binding: gh api user/installations .*not enabled"
+    )
+
+
+@row("prs preflight: cloud stops when another repository gets the path message")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["api repos/astral-sh/uv"] = {"__status": 403, "body": {"message": SESSION_BOUND_403}}
+    c.expect(
+        "prs.py",
+        ["preflight"],
+        PROBLEM,
+        r"^PROBLEM session binding: gh api repos/astral-sh/uv .*sessions are bound",
+    )
+
+
+@row("prs preflight: cloud stops on the right words with another status")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["api user/installations"] = {"__status": 404, "body": {"message": SESSION_BOUND_403}}
+    c.expect(
+        "prs.py", ["preflight"], PROBLEM, r"^PROBLEM session binding: gh api user/installations .*HTTP 404"
+    )
+
+
+@row("prs preflight: cloud stops on a 403 without the proxy's words")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["api repos/astral-sh/uv"] = {
+        "__status": 403,
+        "body": {"message": "Resource not accessible by integration"},
+    }
+    c.expect(
+        "prs.py",
+        ["preflight"],
+        PROBLEM,
+        r"^PROBLEM session binding: gh api repos/astral-sh/uv .*not accessible",
+    )
+
+
+@row("prs preflight: cloud stops when a binding call can't connect")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.gh["api user/installations"] = {"__conn": True}
+    c.expect(
+        "prs.py", ["preflight"], PROBLEM, r"^PROBLEM session binding: .*error connecting to api\.github\.com"
+    )
+
+
+@row("prs preflight: the binding check runs only in the cloud")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    got, out = c.run("prs.py", "preflight")
+    calls = (c.fix / "calls.log").read_text()
+    assert got == OK and "session binding" not in out and "user/installations" not in calls, out
+
+
+# Local: the Claude App installation's repository selection (an org owner's call).
+
+
+@row("prs preflight: local prints the Claude installation's selection and permissions")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.expect("prs.py", ["preflight"], OK, r"^ok +installation: Claude App 171042656 on uw-share-lab, repository_selection"
+             r" selected; contents write, workflows write$")  # fmt: skip
+
+
+@row("prs preflight: local stops an installation on all the org's repositories")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.gh[INSTALLATIONS] = installs(installation("all"))
+    c.expect(
+        "prs.py",
+        ["preflight"],
+        PROBLEM,
+        r"^PROBLEM installation: the Claude App installation 171042656 covers all",
+    )
+
+
+@row("prs preflight: local reads every installation, not only the first")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.gh[INSTALLATIONS] = installs(installation(ident=5), installation("all", ident=6))
+    c.expect(
+        "prs.py", ["preflight"], PROBLEM, r"^PROBLEM installation: the Claude App installation 6 covers all"
+    )
+
+
+@row("prs preflight: local ignores another app's installation on all repositories")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.gh[INSTALLATIONS] = installs(installation("all", slug="vercel", ident=1), installation())
+    c.expect("prs.py", ["preflight"], OK, r"^ok +installation: Claude App 171042656")
+
+
+@row("prs preflight: local with no Claude installation stops, naming the apps it saw")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.gh[INSTALLATIONS] = installs(installation(slug="vercel"), installation(slug="claude-code", ident=2))
+    c.expect("prs.py", ["preflight"], PROBLEM,
+             r"^PROBLEM installation: no 'claude' App installation on uw-share-lab \(apps installed: claude-code, vercel\)")  # fmt: skip
+
+
+@row("prs preflight: local with no installation at all says none were seen")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.gh[INSTALLATIONS] = installs()
+    c.expect(
+        "prs.py",
+        ["preflight"],
+        PROBLEM,
+        r"^PROBLEM installation: no 'claude' App installation .*\(apps installed: none\)",
+    )
+
+
+@row("prs preflight: local stops when the installation list is cut short")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.gh[INSTALLATIONS] = installs(installation(slug="vercel"), installation(), total=3)
+    c.expect("prs.py", ["preflight"], ERROR, r"^ERROR .*listed 2 of 3 installations")
+
+
+@row("prs preflight: local stops when the installations call fails (not an org owner)")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    c.gh[INSTALLATIONS] = {"__status": 403, "body": {"message": "Must be an organization owner"}}
+    c.expect("prs.py", ["preflight"], ERROR, r"^ERROR .*orgs/uw-share-lab/installations.*organization owner")
+
+
+def marker(c: Case) -> Path:
+    return c.repo / ".git" / "op-no-dep-code"
+
+
+@row("prs preflight: cloud writes the no-dependency-code marker")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.expect("prs.py", ["preflight"], OK, r"^ok +no dependency code: .*op-no-dep-code written; make sync")
+    assert marker(c).is_file(), "no marker"
+
+
+@row("prs preflight: cloud writes the marker even when the credential check stops the run")
+def _(c: Case) -> None:
+    preflight_case(c, stored=True)
+    c.expect("prs.py", ["preflight"], PROBLEM, r"^PROBLEM gh has a stored login")
+    assert marker(c).is_file(), "no marker"
+
+
+@row("prs preflight: from a linked worktree, the marker goes in the common git directory")
+def _(c: Case) -> None:
+    preflight_case(c)
+    c.commit({"a": "1\n"})
+    wt = c.repo.parent / "wt"
+    c.git("worktree", "add", "-q", "--detach", str(wt))
+    got, out = c.run("prs.py", "preflight", cwd=wt)
+    assert got == OK and marker(c).is_file(), out
+
+
+@row("prs preflight: local removes a marker it finds, and writes none")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    marker(c).write_text("stale\n")
+    c.expect("prs.py", ["preflight"], OK, r"^ok +removed .*op-no-dep-code: a local clone runs")
+    assert not marker(c).exists(), "the marker is still there"
+
+
+@row("prs preflight: local with no marker says nothing of one")
+def _(c: Case) -> None:
+    preflight_case(c, cloud=False, stored=True)
+    c.env = {}
+    got, out = c.run("prs.py", "preflight")
+    assert got == OK and "op-no-dep-code" not in out and not marker(c).exists(), out
+
+
+GUARDED_FILES: dict[str, str | None] = {"Makefile": "x: dep-code-allowed\n", ".githooks/pre-push": "op-no-dep-code\n",
+                 "scripts/setup-dev.sh": "op-no-dep-code\n"}  # fmt: skip
+
+
+def guarded_checkout(c: Case) -> None:
+    """Check out a side commit whose tree has the guard (as the clone's checkout of dev does in step 1), so a check
+    that read HEAD or the working tree instead of the PR head would pass."""
+    c.git("checkout", "-q", "-b", "side", "refs/remotes/origin/dev")
+    c.commit(GUARDED_FILES)
+
+
+@row("prs check: in a cloud clone, a head whose tree predates the guard is a stop (rebase)")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"})
+    guarded_checkout(c)
+    marker(c).write_text("cloud\n")
+    got, out = c.run("prs.py", *args)
+    want = r"^PROBLEM the head's Makefile, \.githooks/pre-push, scripts/setup-dev\.sh predate.*rebase needed"
+    assert got == PROBLEM and re.search(want, out, re.MULTILINE), out
+    assert "comment" not in out, out  # a cloud run posts nothing (notify-only, decision-048 2026-10-16)
+
+
+@row("prs check: in a cloud clone, a head missing only the pre-push guard is a stop")
+def _(c: Case) -> None:
+    c.commit({**GUARDED_FILES, ".githooks/pre-push": "make lint\n"})
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"})
+    guarded_checkout(c)
+    marker(c).write_text("cloud\n")
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM the head's \.githooks/pre-push predate")
+
+
+@row("prs check: in a cloud clone, a head whose tree has the guard passes")
+def _(c: Case) -> None:
+    c.commit(GUARDED_FILES)
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"})
+    marker(c).write_text("cloud\n")
+    c.expect("prs.py", args, OK, r"^ok +uv: ")
+
+
+@row("prs check: without the marker (local), an older tree is no stop")
+def _(c: Case) -> None:
+    args = check_case(c, "dependabot/uv/g", {"uv.lock": "b\n"})
+    c.expect("prs.py", args, OK, r"^ok +uv: ")
+
+
+# ci
+
+CI_NAMES = ("lint", "test", "claude-tooling", "playwright", "bench")
+
+
+def check_run(name: str, conclusion: str | None = "success", *, id_: int = 1, app: str = "github-actions",
+              status: str = "completed") -> dict[str, Any]:  # fmt: skip
+    return {"id": id_, "name": name, "status": status, "conclusion": conclusion, "app": {"slug": app}}
+
+
+def ci_case(c: Case, runs: list[dict[str, Any]] | dict[str, Any] | None = None, *,
+            files: tuple[str, ...] = ("uv.lock",), head: str = "dependabot/uv/g",
+            gh_head: str | None = None) -> list[str]:  # fmt: skip
+    sha_ = c.commit({"uv.lock": "b\n"}, who=BOT)
     c.gh["cloud"] = True
-    c.expect("prs.py", ["preflight"], ERROR, r"^ERROR .*gh api user")
+    c.gh[f"api {R}/pulls/7"] = rest_pr(gh_head or sha_, head)
+    c.gh[page1(f"{R}/pulls/7/files")] = [{"filename": f} for f in files]
+    if runs is None:
+        runs = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1)]
+    page = runs if isinstance(runs, dict) else {"total_count": len(runs), "check_runs": runs}
+    c.gh[page1(f"{R}/commits/{sha_}/check-runs")] = page
+    return ["ci", "7", "--head", sha_, "--interval", "0", "--timeout", "0"]
+
+
+@row("prs ci: every CI check green on the head is exit 0, REST only")
+def _(c: Case) -> None:
+    args = ci_case(c)
+    c.expect("prs.py", args, OK, r"^ok +bench: success at [0-9a-f]{12}\n(?s:.*)^CI #7: 0 problems")
+    assert not called(c, "graphql") and not called(c, "PUT"), calls(c)
+
+
+@row("prs ci: a red check is a stop, with its conclusion")
+def _(c: Case) -> None:
+    runs = [check_run(n, "failure" if n == "test" else "success", id_=i) for i, n in enumerate(CI_NAMES, 1)]
+    c.expect(
+        "prs.py", ci_case(c, runs), PROBLEM, r"^PROBLEM test: failure at [0-9a-f]{12}: CI's result stands"
+    )
+
+
+@row("prs ci: a skipped or neutral check is not green")
+def _(c: Case) -> None:
+    runs = [check_run(n, "skipped" if n == "bench" else "success", id_=i) for i, n in enumerate(CI_NAMES, 1)]
+    c.expect("prs.py", ci_case(c, runs), PROBLEM, r"^PROBLEM bench: skipped at")
+
+
+@row("prs ci: a check never listed is a stop at the timeout")
+def _(c: Case) -> None:
+    runs = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1) if n != "playwright"]
+    c.expect(
+        "prs.py", ci_case(c, runs), WAIT, r"^CI #7: still waiting for playwright after 0 min: run this again"
+    )
+
+
+@row("prs ci: a check still running at the timeout is exit 4: read again")
+def _(c: Case) -> None:
+    runs = [check_run(n, None if n == "lint" else "success", id_=i, status="in_progress" if n == "lint" else "completed")
+            for i, n in enumerate(CI_NAMES, 1)]  # fmt: skip
+    got, out = c.run("prs.py", *ci_case(c, runs))
+    assert (
+        got == WAIT
+        and re.search(r"^waiting lint: pending at [0-9a-f]{12}$", out, re.M)
+        and "PROBLEM" not in out
+    ), out
+
+
+@row("prs ci: waits while a check runs, then passes once it is green")
+def _(c: Case) -> None:
+    green = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1)]
+    running = [*green[:-1], check_run("bench", None, id_=5, status="queued")]
+    args = ci_case(
+        c, {"__seq": [{"total_count": 5, "check_runs": running}, {"total_count": 5, "check_runs": green}]}
+    )
+    args[-1] = "1"  # a minute's wait; the second read answers green
+    c.expect("prs.py", args, OK, r"^waiting for bench at [0-9a-f]{12}\n(?s:.*)^CI #7: 0 problems")
+
+
+@row("prs ci: a red check ends the wait at once")
+def _(c: Case) -> None:
+    runs = [check_run("test", "failure", id_=2), check_run("lint", None, id_=1, status="in_progress")]
+    args = ci_case(c, runs)
+    args[-1] = "60"  # would hang the row if a red check didn't stop the wait
+    c.expect(
+        "prs.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM lint: pending at [0-9a-f]{12} \(not waited for: another check is red\)",
+    )
+
+
+@row("prs ci: the latest run of a check counts, not an older green one")
+def _(c: Case) -> None:
+    runs = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1)] + [check_run("test", "failure", id_=99)]
+    c.expect("prs.py", ci_case(c, runs), PROBLEM, r"^PROBLEM test: failure at")
+
+
+@row("prs ci: an older red run superseded by a green rerun passes")
+def _(c: Case) -> None:
+    runs = [check_run("test", "failure", id_=0), *(check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1))]
+    c.expect("prs.py", ci_case(c, runs), OK, r"^ok +test: success at")
+
+
+@row("prs ci: a check another app wrote under a CI name doesn't count")
+def _(c: Case) -> None:
+    runs = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1) if n != "test"]
+    runs.append(check_run("test", id_=50, app="claude"))  # the session's App can write checks
+    c.expect("prs.py", ci_case(c, runs), WAIT, r"^waiting test: missing at")
+
+
+@row("prs ci: an npm PR needs web-image too")
+def _(c: Case) -> None:
+    args = ci_case(c, files=("package-lock.json",), head="dependabot/npm_and_yarn/g")
+    c.expect("prs.py", args, WAIT, r"^waiting web-image: missing at")
+
+
+for _path in (
+    "frontend/a.ts",
+    "package.json",
+    ".dockerignore",
+    ".github/workflows/web-image.yml",
+    "deploy/x",
+):
+
+    @row(f"prs ci: a PR touching {_path} needs web-image")
+    def _(c: Case, path: str = _path) -> None:
+        c.expect("prs.py", ci_case(c, files=(path,)), WAIT, r"^waiting web-image: missing at")
+
+
+for _path in ("backend/package.json", "docs/frontend/x.md", "docs/deploy/x", "xpackage.json"):
+
+    @row(f"prs ci: a PR touching only {_path} doesn't need web-image")
+    def _(c: Case, path: str = _path) -> None:
+        got, out = c.run("prs.py", *ci_case(c, files=(path,)))
+        assert got == OK and "web-image" not in out, out
+
+
+@row("prs ci: a file renamed away from a web-image path still needs web-image")
+def _(c: Case) -> None:
+    args = ci_case(c)
+    c.gh[page1(f"{R}/pulls/7/files")] = [{"filename": "docs/x.ts", "previous_filename": "frontend/x.ts"}]
+    c.expect("prs.py", args, WAIT, r"^waiting web-image: missing at")
+
+
+@row("prs ci: a red check's line names its run URL")
+def _(c: Case) -> None:
+    runs = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1) if n != "test"]
+    runs.append({**check_run("test", "failure", id_=9), "html_url": "https://github.com/x/runs/9"})
+    c.expect(
+        "prs.py",
+        ci_case(c, runs),
+        PROBLEM,
+        r"^PROBLEM test: failure at [0-9a-f]{12} \(https://github\.com/x/runs/9\)",
+    )
+
+
+@row("prs ci: --timeout is in minutes, not seconds")
+def _(c: Case) -> None:
+    green = [check_run(n, id_=i) for i, n in enumerate(CI_NAMES, 1)]
+    running = [*green[:-1], check_run("bench", None, id_=5, status="queued")]
+    args = ci_case(
+        c, {"__seq": [{"total_count": 5, "check_runs": running}, {"total_count": 5, "check_runs": green}]}
+    )
+    args[-3:] = ["0.1", "--timeout", "0.005"]  # 0.3 s: a second read only if the timeout is read as minutes
+    c.expect("prs.py", args, OK, r"^CI #7: 0 problems")
+
+
+@row("prs ci: a docker PR passes with web-image green")
+def _(c: Case) -> None:
+    runs = [check_run(n, id_=i) for i, n in enumerate((*CI_NAMES, "web-image"), 1)]
+    args = ci_case(c, runs, files=("deploy/web.Dockerfile",), head="dependabot/docker/g")
+    c.expect("prs.py", args, OK, r"^ok +web-image: success at")
+
+
+@row("prs ci: a uv PR doesn't wait for web-image, which doesn't run for it")
+def _(c: Case) -> None:
+    got, out = c.run("prs.py", *ci_case(c))
+    assert got == OK and "web-image" not in out, out
+
+
+@row("prs ci: a head that moved is a stop before any check is read")
+def _(c: Case) -> None:
+    args = ci_case(c, gh_head="f" * 40)
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub's head is ffffffffffff")
+    assert not any("check-runs" in a for call in calls(c) for a in call), calls(c)
+
+
+@row("prs ci: a PR not opened by Dependabot is a stop")
+def _(c: Case) -> None:
+    args = ci_case(c)
+    c.gh[f"api {R}/pulls/7"]["user"] = {"login": "someone"}
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR was opened by someone")
+
+
+@row("prs ci: gh failing is exit 2")
+def _(c: Case) -> None:
+    args = ci_case(c)
+    del c.gh[page1(f"{R}/commits/{args[3]}/check-runs")]
+    c.expect("prs.py", args, ERROR, r"^ERROR ")
 
 
 # queue
 
-PUT = f"api PUT {R}/pulls/7/ccr/auto_merge"
-DELETE = f"api DELETE {R}/pulls/7/ccr/auto_merge"
+AUTO_ON = "pr merge --auto"  # the fake gh's answers to `gh pr merge --auto` and `--disable-auto` (local mode)
+AUTO_OFF = "pr merge --disable-auto"
 
 
-def queue_case(c: Case, *before_after: dict[str, Any], head: str = "dependabot/uv/g", cloud: bool = True,
-               put: dict[str, Any] | None = None, delete: dict[str, Any] | None = None) -> list[str]:  # fmt: skip
+def queue_case(c: Case, *before_after: dict[str, Any], head: str = "dependabot/uv/g", cloud: bool = False,
+               on: Any = 0, off: Any = 0) -> list[str]:  # fmt: skip
+    """`on`/`off`: what `gh pr merge --auto` and `--disable-auto` answer (an exit code, {"__exit": n, "message": …}
+    or {"__conn": true}). A cloud session (`cloud`) is notify-only: queue refuses before any call."""
     sha_ = c.commit({"uv.lock": "b\n"}, who=BOT)
     reads = [rest_pr(sha_, head, **kw) for kw in before_after] or [rest_pr(sha_, head)]
     c.gh[f"api {R}/pulls/7"] = {"__seq": reads}
     if cloud:
         c.gh["cloud"] = True
-        c.gh[PUT] = put if put is not None else {"__status": 200, "body": {}}
-        c.gh[DELETE] = delete if delete is not None else {"__status": 204, "body": ""}
     else:
         c.gh["graphql"] = {"data": {"viewer": {"login": "maintainer"}}}
+    c.gh[AUTO_ON], c.gh[AUTO_OFF] = on, off
     c.gh[page1(f"{R}/issues/7/timeline")] = []  # no merge-queue event unless a row adds one
     return ["queue", "7", "--head", sha_]
 
@@ -1771,41 +2566,60 @@ def called(c: Case, *words: str) -> bool:
     return any(all(w in call for w in words) for call in calls(c))
 
 
-@row("prs queue: cloud turns auto-merge on through the CCR route, then finds the head unmoved")
+@row("prs queue: a cloud session is notify-only: refused before any read or write (decision-048, 2026-10-16)")
+def _(c: Case) -> None:
+    args = queue_case(c, {}, {"auto": True}, cloud=True)
+    c.gh[f"api PUT {R}/pulls/7/ccr/auto_merge"] = {"__status": 200, "body": {}}  # answered, yet never called
+    c.expect(
+        "prs.py", args, PROBLEM, r"^PROBLEM cloud session: a cloud /dependabot-review run is notify-only"
+    )
+    assert [x for x in calls(c) if x[1:2] != ["api"] or x[2:3] != ["graphql"]] == [], calls(c)
+
+
+@row("prs queue: a cloud session is refused even for a PR already set to merge")
+def _(c: Case) -> None:
+    args = queue_case(c, {"auto": True}, cloud=True)
+    c.expect(
+        "prs.py", args, PROBLEM, r"^PROBLEM cloud session: .*queue it from a local /dependabot-review run"
+    )
+    assert [x for x in calls(c) if x[1:2] != ["api"] or x[2:3] != ["graphql"]] == [], calls(c)
+
+
+@row("prs queue: local turns auto-merge on, then finds the head unmoved")
 def _(c: Case) -> None:
     args = queue_case(c, {}, {"auto": True})
-    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(cloud\)")
-    assert called(c, "PUT", f"{R}/pulls/7/ccr/auto_merge") and not called(c, "DELETE"), calls(c)
+    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(local\)")
+    assert called(c, "--auto") and not called(c, "--disable-auto"), calls(c)
     assert calls(c).count(["gh", "api", f"{R}/pulls/7"]) == 2, calls(c)  # the head is read before and after
 
 
-@row("prs queue: a head that moved before the PUT is never queued")
+@row("prs queue: a head that moved before the request is never queued")
 def _(c: Case) -> None:
     args = queue_case(c, {})
     c.gh[f"api {R}/pulls/7"] = rest_pr("f" * 40)
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub's head is ffffffffffff")
-    assert not called(c, "PUT") and not called(c, "graphql"), calls(c)
+    assert not called(c, "--auto") and not called(c, "--disable-auto"), calls(c)
 
 
-@row("prs queue: a head that moved after the PUT turns auto-merge off again")
+@row("prs queue: a head that moved after the request turns auto-merge off again")
 def _(c: Case) -> None:
     args = queue_case(c, {})
     first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
     c.gh[f"api {R}/pulls/7"] = {"__seq": [first, {**first, "head": {**first["head"], "sha": "f" * 40}}]}
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR changed while it was queued: open at ffffffffffff")
-    assert called(c, "PUT") and called(c, "DELETE", f"{R}/pulls/7/ccr/auto_merge"), calls(c)
+    assert called(c, "--auto") and called(c, "--disable-auto"), calls(c)
 
 
-@row("prs queue: a PR closed after the PUT is left as it is (a closed PR can't merge)")
+@row("prs queue: a PR closed after the request is left as it is (a closed PR can't merge)")
 def _(c: Case) -> None:
     args = queue_case(c, {}, {"state": "closed"})
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR changed while it was queued: closed")
-    assert called(c, "PUT") and not called(c, "DELETE"), calls(c)
+    assert called(c, "--auto") and not called(c, "--disable-auto"), calls(c)
 
 
 @row("prs queue: auto-merge that can't be turned off again is an error naming the danger")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {}, delete={"__status": 500, "body": {"message": "boom"}})
+    args = queue_case(c, {}, {}, off={"__exit": 1, "message": "boom"})
     first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
     c.gh[f"api {R}/pulls/7"] = {"__seq": [first, {**first, "head": {**first["head"], "sha": "f" * 40}}]}
     c.expect(
@@ -1816,37 +2630,35 @@ def _(c: Case) -> None:
     )
 
 
-@row("prs queue: a refused PUT leaves the PR open (no DELETE when nothing was turned on)")
+@row("prs queue: a refused request leaves the PR open (no --disable-auto when nothing was turned on)")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {}, put={"__status": 422, "body": {"message": "merge_method is required"}})
+    args = queue_case(c, {}, {}, on={"__exit": 1, "message": "merge_method is required"})
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM turning auto-merge on failed: .*merge_method is required")
-    assert not called(c, "DELETE"), calls(c)
+    assert not called(c, "--disable-auto"), calls(c)
 
 
-@row("prs queue: a refused PUT that left auto-merge on turns it off")
+@row("prs queue: a refused request that left auto-merge on turns it off")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {"auto": True}, {}, put={"__status": 502, "body": {"message": "bad gateway"}})
+    args = queue_case(c, {}, {"auto": True}, {}, on={"__exit": 1, "message": "bad gateway"})
     c.expect(
         "prs.py",
         args,
         PROBLEM,
         r"^PROBLEM turning auto-merge on failed(?s:.*)^ok +auto-merge turned off again",
     )
-    assert called(c, "DELETE"), calls(c)
+    assert called(c, "--disable-auto"), calls(c)
 
 
-@row("prs queue: a refused PUT that takes effect late is seen on the second read and undone")
+@row("prs queue: a refused request that takes effect late is seen on the second read and undone")
 def _(c: Case) -> None:
-    args = queue_case(
-        c, {}, {}, {"auto": True}, {}, put={"__status": 502, "body": {"message": "bad gateway"}}
-    )
+    args = queue_case(c, {}, {}, {"auto": True}, {}, on={"__exit": 1, "message": "bad gateway"})
     c.expect(
         "prs.py",
         args,
         PROBLEM,
         r"^PROBLEM turning auto-merge on failed(?s:.*)^ok +auto-merge turned off again",
     )
-    assert called(c, "DELETE"), calls(c)
+    assert called(c, "--disable-auto"), calls(c)
 
 
 @row("prs queue: a settle time that is not finite stops before any write")
@@ -1854,7 +2666,7 @@ def _(c: Case) -> None:
     args = queue_case(c, {})
     c.env["OP_DEPENDABOT_SETTLE"] = "nan"
     c.expect("prs.py", args, ERROR, r"^ERROR +OP_DEPENDABOT_SETTLE is 'nan', not a number of seconds")
-    assert not called(c, "PUT"), calls(c)
+    assert not called(c, "--auto"), calls(c)
 
 
 @row("prs queue: a negative settle time stops before any write")
@@ -1862,12 +2674,12 @@ def _(c: Case) -> None:
     args = queue_case(c, {})
     c.env["OP_DEPENDABOT_SETTLE"] = "-1"
     c.expect("prs.py", args, ERROR, r"^ERROR +OP_DEPENDABOT_SETTLE is '-1', not a number of seconds")
-    assert not called(c, "PUT"), calls(c)
+    assert not called(c, "--auto"), calls(c)
 
 
-@row("prs queue: a refused PUT that GitHub queued anyway is taken out again")
+@row("prs queue: a refused request that GitHub queued anyway is taken out again")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {}, put={"__status": 502, "body": {"message": "bad gateway"}})
+    args = queue_case(c, {}, {}, on={"__exit": 1, "message": "bad gateway"})
     added = {"event": "added_to_merge_queue", "created_at": CLOCK}
     c.gh[page1(f"{R}/issues/7/timeline")] = {
         "__seq": [[], [added], [added, {"event": "removed_from_merge_queue"}]]
@@ -1878,12 +2690,12 @@ def _(c: Case) -> None:
         PROBLEM,
         r"^PROBLEM turning auto-merge on failed(?s:.*)^ok +auto-merge turned off again",
     )
-    assert called(c, "DELETE"), calls(c)
+    assert called(c, "--disable-auto"), calls(c)
 
 
 @row("prs queue: a queue entry still there after turning auto-merge off is for the owner")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {}, put={"__status": 502, "body": {"message": "bad gateway"}})
+    args = queue_case(c, {}, {}, on={"__exit": 1, "message": "bad gateway"})
     added = {"event": "added_to_merge_queue", "created_at": CLOCK}
     c.gh[page1(f"{R}/issues/7/timeline")] = {"__seq": [[], [added]]}
     c.expect(
@@ -1894,50 +2706,49 @@ def _(c: Case) -> None:
     )
 
 
-@row("prs queue: a PR already set to merge is left alone (no PUT, no DELETE)")
+@row("prs queue: a PR already set to merge is left alone (no --auto, no --disable-auto)")
 def _(c: Case) -> None:
     args = queue_case(c, {"auto": True})
     c.expect("prs.py", args, OK, r"^ok +#7 is already set to merge at [0-9a-f]{12}: nothing to do")
-    assert not called(c, "PUT") and not called(c, "DELETE") and not called(c, "graphql"), calls(c)
+    assert not called(c, "--auto") and not called(c, "--disable-auto"), calls(c)
 
 
 @row("prs queue: a github-actions PR is the owner's to queue")
 def _(c: Case) -> None:
     args = queue_case(c, {}, head="dependabot/github_actions/g")
-    c.expect("prs.py", args, PROBLEM, r"^PROBLEM a github-actions PR is queued by the owner")
-    assert not called(c, "PUT"), calls(c)
+    c.expect("prs.py", args, PROBLEM, r"^PROBLEM a github-actions PR is queued by the owner by hand")
+    assert not called(c, "--auto"), calls(c)
 
 
 @row("prs queue: someone else's PR is never queued")
 def _(c: Case) -> None:
     args = queue_case(c, {"login": "mallory"})
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM the PR was opened by mallory")
-    assert not called(c, "PUT"), calls(c)
+    assert not called(c, "--auto"), calls(c)
 
 
 @row("prs queue: local uses gh pr merge --auto --match-head-commit, never the CCR route")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {"auto": True}, cloud=False)
-    c.gh["pr merge"] = 0
+    args = queue_case(c, {}, {"auto": True})
     c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(local\)")
     want = ["gh", "pr", "merge", "7", "--repo", "uw-share-lab/openproceedings", "--auto",
             "--match-head-commit", args[3]]  # fmt: skip
-    assert want in calls(c) and not called(c, "PUT"), calls(c)
+    assert want in calls(c) and not any("ccr" in w for x in calls(c) for w in x), calls(c)
 
 
 @row("prs queue: local, gh pr merge refused")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {}, cloud=False)
+    args = queue_case(c, {}, {}, on=1)
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM turning auto-merge on failed: fake gh: merge refused")
 
 
-@row("prs queue: a PUT GitHub accepted but doesn't show is undone, after one more read")
+@row("prs queue: a request GitHub accepted but doesn't show is undone, after one more read")
 def _(c: Case) -> None:
     args = queue_case(c, {}, {})
     c.expect(
         "prs.py", args, PROBLEM, r"^PROBLEM GitHub accepted the request but shows neither auto-merge nor"
     )
-    assert called(c, "DELETE") and calls(c).count(["gh", "api", f"{R}/pulls/7"]) == 4, calls(
+    assert called(c, "--disable-auto") and calls(c).count(["gh", "api", f"{R}/pulls/7"]) == 4, calls(
         c
     )  # +settle, +undo
 
@@ -1947,8 +2758,8 @@ def _(c: Case) -> None:
     args = queue_case(c, {}, {})
     added = {"event": "added_to_merge_queue", "created_at": CLOCK}
     c.gh[page1(f"{R}/issues/7/timeline")] = {"__seq": [[], [{"event": "commented"}, added]]}
-    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(cloud\)")
-    assert not called(c, "DELETE"), calls(c)
+    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(local\)")
+    assert not called(c, "--disable-auto"), calls(c)
 
 
 @row("prs queue: a queue entry from before the request doesn't count")
@@ -1969,9 +2780,9 @@ def _(c: Case) -> None:
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub accepted the request but shows neither")
 
 
-@row("prs queue: a PUT whose connection drops, though GitHub queued the PR, is undone")
+@row("prs queue: a request whose connection drops, though GitHub queued the PR, is undone")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {}, put={"__conn": True})
+    args = queue_case(c, {}, {}, on={"__conn": True})
     added = {"event": "added_to_merge_queue", "created_at": CLOCK}
     c.gh[page1(f"{R}/issues/7/timeline")] = {
         "__seq": [[], [added], [added, {"event": "removed_from_merge_queue"}]]
@@ -1982,26 +2793,26 @@ def _(c: Case) -> None:
         PROBLEM,
         r"^PROBLEM turning auto-merge on failed: error connecting(?s:.*)^ok +auto-merge turned off again",
     )
-    assert called(c, "DELETE"), calls(c)
+    assert called(c, "--disable-auto"), calls(c)
 
 
-@row("prs queue: a PUT that is cancelled (gh exits 2) is undone and is an error")
+@row("prs queue: a request that is cancelled (gh exits 2) is undone and is an error")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, {}, put={"__exit": 2})
+    args = queue_case(c, {}, {}, on={"__exit": 2})
     c.expect("prs.py", args, ERROR, r"^ERROR +queueing #7 failed partway .*auto-merge turned off again")
-    assert called(c, "DELETE"), calls(c)
+    assert called(c, "--disable-auto"), calls(c)
 
 
-@row("prs queue: the read after the PUT failing is undone and is an error")
+@row("prs queue: the read after the request failing is undone and is an error")
 def _(c: Case) -> None:
     args = queue_case(c, {})
     first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
     c.gh[f"api {R}/pulls/7"] = {"__seq": [first, {"__status": 500, "body": {"message": "boom"}}, first]}
     c.expect("prs.py", args, ERROR, r"^ERROR +queueing #7 failed partway .*auto-merge turned off again")
-    assert called(c, "DELETE"), calls(c)
+    assert called(c, "--disable-auto"), calls(c)
 
 
-@row("prs queue: a read after the PUT of the wrong shape is undone too")
+@row("prs queue: a read after the request of the wrong shape is undone too")
 def _(c: Case) -> None:
     args = queue_case(c, {})
     first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
@@ -2012,7 +2823,7 @@ def _(c: Case) -> None:
         ERROR,
         r"^ERROR +queueing #7 failed partway \(KeyError: 'head'\); auto-merge turned off again",
     )
-    assert called(c, "DELETE"), calls(c)
+    assert called(c, "--disable-auto"), calls(c)
 
 
 @row("prs queue: a settle time that isn't a number stops before any write")
@@ -2020,7 +2831,7 @@ def _(c: Case) -> None:
     args = queue_case(c, {})
     c.env["OP_DEPENDABOT_SETTLE"] = "abc"
     c.expect("prs.py", args, ERROR, r"^ERROR +OP_DEPENDABOT_SETTLE is 'abc', not a number of seconds")
-    assert not called(c, "PUT"), calls(c)
+    assert not called(c, "--auto"), calls(c)
 
 
 @row("prs queue: a queue entry 1 minute before the request counts (clock skew)")
@@ -2039,9 +2850,9 @@ def _(c: Case) -> None:
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM GitHub accepted the request but shows neither")
 
 
-@row("prs queue: a dead PUT that can't be undone says auto-merge may still be on")
+@row("prs queue: a dead request that can't be undone says auto-merge may still be on")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, put={"__exit": 2}, delete={"__status": 500, "body": {"message": "boom"}})
+    args = queue_case(c, {}, on={"__exit": 2}, off={"__exit": 1, "message": "boom"})
     c.expect("prs.py", args, ERROR, r"^ERROR +queueing #7 failed partway .*auto-merge may still be on for #7")
 
 
@@ -2049,7 +2860,7 @@ def _(c: Case) -> None:
 def _(c: Case) -> None:
     args = queue_case(c, {}, {"state": "closed", "merged": True})
     c.expect("prs.py", args, OK, r"^ok +#7 merged already, at [0-9a-f]{12}")
-    assert not called(c, "DELETE"), calls(c)
+    assert not called(c, "--disable-auto"), calls(c)
 
 
 @row("prs queue: a PR that merged at another head is the owner's")
@@ -2059,13 +2870,12 @@ def _(c: Case) -> None:
     gone = {**first, "state": "closed", "merged": True, "head": {**first["head"], "sha": "f" * 40}}
     c.gh[f"api {R}/pulls/7"] = {"__seq": [first, gone]}
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM #7 merged at ffffffffffff, not the reviewed")
-    assert not called(c, "DELETE"), calls(c)
+    assert not called(c, "--disable-auto"), calls(c)
 
 
 @row("prs queue: local, a head that moved after is turned off with --disable-auto")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, cloud=False)
-    c.gh["pr merge"] = 0
+    args = queue_case(c, {})
     first = c.gh[f"api {R}/pulls/7"]["__seq"][0]
     c.gh[f"api {R}/pulls/7"] = {"__seq": [first, {**first, "head": {**first["head"], "sha": "f" * 40}}]}
     c.expect("prs.py", args, PROBLEM, r"^ok +auto-merge turned off again")
@@ -2074,10 +2884,10 @@ def _(c: Case) -> None:
 
 @row("prs queue: a mode it can't tell stops before any write")
 def _(c: Case) -> None:
-    args = queue_case(c, {}, cloud=False)
+    args = queue_case(c, {})
     del c.gh["graphql"]
     c.expect("prs.py", args, ERROR, r"^ERROR .*not as a Claude Code session refuses it")
-    assert not called(c, "PUT") and not called(c, "pr", "merge"), calls(c)
+    assert not called(c, "--auto") and not called(c, "pr", "merge"), calls(c)
 
 
 # watch
@@ -2229,8 +3039,8 @@ def _(c: Case) -> None:
 @row("prs queue: auto-merge shown only on the settle re-read is queued")
 def _(c: Case) -> None:
     args = queue_case(c, {}, {}, {"auto": True})
-    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(cloud\)")
-    assert not called(c, "DELETE"), calls(c)
+    c.expect("prs.py", args, OK, r"^ok +auto-merge on at [0-9a-f]{12} \(local\)")
+    assert not called(c, "--disable-auto"), calls(c)
 
 
 @row("prs watch: out of the queue for exactly two polls, then merged, is still a drop")
@@ -2279,11 +3089,16 @@ def _(c: Case) -> None:
     assert got == OK and "a token in GITHUB_TOKEN" in out and "network secret" not in out, out
 
 
-@row("prs preflight: gh api user answering an empty login stops the run")
+@row("prs preflight: the repository call answering another name stops the run")
 def _(c: Case) -> None:
     preflight_case(c)
-    c.gh["api user"] = {"login": ""}
-    c.expect("prs.py", ["preflight"], ERROR, r"^ERROR +gh api user answered no login")
+    c.gh[f"api {R}"] = {"full_name": "someone/else"}
+    c.expect(
+        "prs.py",
+        ["preflight"],
+        ERROR,
+        r"^ERROR +gh api repos/uw-share-lab/openproceedings answered 'someone/else'",
+    )
 
 
 @row("prs check: a commit with no verification verdict is not verified")
@@ -2293,6 +3108,110 @@ def _(c: Case) -> None:
         {"sha": args[3], "author": {"login": "dependabot[bot]"}, "commit": {"verification": {}}}
     ]
     c.expect("prs.py", args, PROBLEM, r"^PROBLEM commit .*doesn't verify its signature")
+
+
+# prs.py uv-release (step 0): the api image's uv against uv's latest release
+
+UV_LATEST = "api repos/astral-sh/uv/releases/latest"
+
+
+def uv_release_case(c: Case, dockerfile: str | None = None) -> None:
+    pin = f"ghcr.io/astral-sh/uv:0.12.23@{digest('uv-old')}"
+    base = c.commit(
+        {"deploy/api.Dockerfile": dockerfile if dockerfile is not None else f"FROM {pin} AS uv\n"}
+    )
+    c.git("update-ref", "refs/remotes/origin/dev", base)
+
+
+@row("prs uv-release: in the cloud the refused call is for the owner to check by hand, not a stop")
+def _(c: Case) -> None:
+    uv_release_case(c)
+    c.gh["cloud"] = True  # the fake proxy refuses astral-sh/uv with its "not enabled for this session" 403
+    c.expect("prs.py", ["uv-release"], OK,
+             r"^OWNER +check uv's latest release by hand \(https://github\.com/astral-sh/uv/releases/latest; pinned "
+             r"0\.12\.23\): this cloud session isn't bound to astral-sh/uv")  # fmt: skip
+
+
+@row("prs uv-release: the same minor is ok, with no OWNER line")
+def _(c: Case) -> None:
+    uv_release_case(c)
+    c.gh[UV_LATEST] = {"tag_name": "0.12.30"}
+    got, out = c.run("prs.py", "uv-release")
+    assert got == OK and re.search(
+        r"^ok +latest: uv 0\.12\.30, no newer minor than the pinned 0\.12\.23$", out, re.M
+    ), out
+    assert "OWNER" not in out and re.search(
+        r"^ok +pinned: uv 0\.12\.23 \(deploy/api\.Dockerfile", out, re.M
+    ), out
+
+
+@row("prs uv-release: a newer minor is for the owner")
+def _(c: Case) -> None:
+    uv_release_case(c)
+    c.gh[UV_LATEST] = {"tag_name": "0.13.0"}
+    c.expect("prs.py", ["uv-release"], OK, r"^OWNER +uv 0\.13\.0 is a newer minor than the pinned 0\.12\.23")
+
+
+@row("prs uv-release: a newer major is for the owner")
+def _(c: Case) -> None:
+    uv_release_case(c)
+    c.gh[UV_LATEST] = {"tag_name": "1.0.0"}
+    c.expect("prs.py", ["uv-release"], OK, r"^OWNER +uv 1\.0\.0 is a newer minor")
+
+
+@row("prs uv-release: the proxy's other message is not the uv refusal")
+def _(c: Case) -> None:
+    uv_release_case(c)
+    c.gh[UV_LATEST] = {"__status": 403, "body": {"message": SESSION_BOUND_403}}
+    got, out = c.run("prs.py", "uv-release")
+    assert got == ERROR and "OWNER" not in out and re.search(r"^ERROR .*releases/latest failed", out, re.M), (
+        out
+    )
+
+
+@row("prs uv-release: the call failing another way stops it")
+def _(c: Case) -> None:
+    uv_release_case(c)  # no fixture, not the cloud: a 404
+    c.expect("prs.py", ["uv-release"], ERROR, r"^ERROR .*releases/latest failed: .*HTTP 404")
+
+
+@row("prs uv-release: an answer without a tag_name is an error")
+def _(c: Case) -> None:
+    uv_release_case(c)
+    c.gh[UV_LATEST] = {"name": "0.13.0"}
+    c.expect("prs.py", ["uv-release"], ERROR, r"^ERROR .*answered no tag_name")
+
+
+@row("prs uv-release: a tag with no version is an error")
+def _(c: Case) -> None:
+    uv_release_case(c)
+    c.gh[UV_LATEST] = {"tag_name": "latest"}
+    c.expect("prs.py", ["uv-release"], ERROR, r"^ERROR .*has no version in its tag 'latest'")
+
+
+@row("prs uv-release: a Dockerfile with no uv pin is an error")
+def _(c: Case) -> None:
+    uv_release_case(c, "FROM python:3.12\n")
+    c.gh[UV_LATEST] = {"tag_name": "0.12.23"}
+    c.expect("prs.py", ["uv-release"], ERROR, r"^ERROR .*pins uv 0 ways, not one")
+
+
+@row("prs uv-release: two different uv pins are an error")
+def _(c: Case) -> None:
+    uv_release_case(
+        c,
+        f"FROM ghcr.io/astral-sh/uv:0.12.23@{digest('a')}\nFROM ghcr.io/astral-sh/uv:0.11.1@{digest('b')}\n",
+    )
+    c.gh[UV_LATEST] = {"tag_name": "0.12.23"}
+    c.expect("prs.py", ["uv-release"], ERROR, r"^ERROR .*pins uv 2 ways, not one")
+
+
+@row("prs uv-release: reads origin/dev's Dockerfile, not the checkout's")
+def _(c: Case) -> None:
+    uv_release_case(c)
+    c.commit({"deploy/api.Dockerfile": f"FROM ghcr.io/astral-sh/uv:0.13.0@{digest('n')} AS uv\n"})
+    c.gh[UV_LATEST] = {"tag_name": "0.13.0"}
+    c.expect("prs.py", ["uv-release"], OK, r"^OWNER +uv 0\.13\.0 is a newer minor than the pinned 0\.12\.23")
 
 
 def one(label: str, fn: Callable[[Case], None]) -> str | None:

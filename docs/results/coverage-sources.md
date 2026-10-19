@@ -13,7 +13,7 @@ rows for 1987–2012 are each year page's own count (`N papers`), read on 2026-1
 bibliography, and no ICML statement of accepted counts was found for those years (the official pages of 2001–2012
 list papers, but not every year's full set), so those cells are reported, not gated.
 
-Since decision-049 (2026-10-09) the corpus also holds AAAI 2010–2026, AIES 2024–2025 and IASEAI 2026, from
+Since decision-049 (2026-10-09) the corpus also holds AAAI 2010–2026, AIES 2024–2026 (2026 since TASK-217, 2026-10-16) and IASEAI 2026, from
 ojs.aaai.org. Six of their `main` cells have a row, read on 2026-10-09: AAAI 2013, 2015, 2018 and 2019, and AIES 2024
 and 2025, 78 rows in all. Each is the program chairs' own statement of the papers accepted (a proceedings preface, an
 issue's front-matter description, the AI Magazine conference report, the AIES program), not a count of the OAI
@@ -23,25 +23,26 @@ program with its four special tracks, one of them AI and Robotics, which is why 
 sections map to `main`. AAAI 2015's report says 539 papers were "selected … and presented" from the main technical
 and topical tracks' submissions; the row reads that as the accepted count (the weakest of the six).
 
-Four more AAAI `main` rows, read on 2026-10-10, are **counts of AAAI's own published accepted-paper list**, not a
+Four more AAAI `main` rows, read on 2026-10-10 (2021's re-read and re-counted on 2026-10-16), are **counts of AAAI's own published accepted-paper list**, not a
 stated figure: for these years no AAAI document states an accepted count (prefaces, conference pages and press
-releases give submissions only). They are AAAI 2012 (292), 2017 (637), 2020 (1,614) and 2021 (1,696), 82 rows in
-all. Each row's "what it counts" says "counted", names the list and names its ground for independence. A list counts as independent of the proceedings when it either states that it is pre-camera-ready, or visibly differs from the proceedings in content (a different count or membership); either shows it was not derived from them. Its
+releases give submissions only). They are AAAI 2012 (292), 2017 (637), 2020 (1,614) and 2021 (1,697), 82 rows in
+all. Each row's "what it counts" says "counted", names the list and names its ground for independence. A list counts as independent of the proceedings when it states that it is pre-camera-ready, visibly differs from the proceedings in content (a different count or membership), or survives in a dated copy archived before the proceedings (the owner, 2026-10-16, TASK-234); each shows it was not derived from them. Its
 definition must also be our `main` cell (the controller's rulings for the owner, 2026-10-10, and gate C rounds 1
 and 2, 2026-10-11). Under this rule AAAI 2020's lists are independent because they say they were made before
-camera-ready, and 2012's, 2017's and 2021's because each differs from the proceedings in count. AAAI 2010's, 2014's
+camera-ready, 2021's because the copy counted was archived before the conference (the owner's choice, 2026-10-16, TASK-234), and 2012's and 2017's because each differs from the proceedings in count. AAAI 2010's, 2014's
 and 2016's lists match the proceedings exactly and are not shown to predate them (2010's and 2014's only archived
 copies were captured after publication, on 2010-08-30 and 2015-09-06), so each is an ungated cell with a note. Deltas of the four on snapshot
-`2026-10-11-93c2937e2f29` (index `b4f335e07e70`, `docs/results/2026-10-11-coverage.md`): +2 (0.68%), +2 (0.31%), −4 (0.25%)
-and −2 (0.12%), the same as on `2026-10-10-9efa49481112`: the abstract fills change no count.
+`2026-10-16-03eab0ef56c4` (index `78d2e70310f3`, `docs/results/2026-10-16-coverage.md`; the same on `2026-10-11-93c2937e2f29`, index `b4f335e07e70`, since TASK-217 added only AIES 2026): +2 (0.68%), +2 (0.31%), −4 (0.25%)
+and −3 (0.18%; −2 against the later AAAI-21 copy before the owner's choice of 2026-10-16), the same as on
+`2026-10-10-9efa49481112`: the abstract fills change no count.
 
-The other AAAI `main` cells and IASEAI 2026 are reported, not gated, each with a note in §Ungated cells with a
+The other AAAI `main` cells, AIES 2026 and IASEAI 2026 are reported, not gated, each with a note in §Ungated cells with a
 note: AAAI 2010's and 2014's lists match the proceedings and survive only as copies captured after publication;
 AAAI 2011's list leaves out the Robotics Program the cell holds (240 against 248); AAAI 2016's list matches the
 proceedings section by section and doesn't say it predates them, so it may be derived from them and would check
 nothing; AAAI 2022–2026
 have only the chairs' notification emails quoted elsewhere and aggregator figures, which are never a row and seem
-to count the main technical track alone; and IASEAI 2026 states 92 accepted papers of which only the 57 archival
+to count the main technical track alone; AIES 2026's program co-chairs state 249 accepted, but the program's sessions list 244 papers, 243 of them the proceedings' main-track papers (ungated by the owner, 2026-10-16, TASK-217); and IASEAI 2026 states 92 accepted papers of which only the 57 archival
 ones are published. The research note (`docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md` §Official
 counts) classifies every venue-year.
 
@@ -109,7 +110,7 @@ skipped NeurIPS 2021, because its D&B listing states no count, so no NeurIPS 202
 | AAAI | 2018 | main | 938 | original research publications in the proceedings, selected from 3,800 well-formed submissions (acceptance rate 24.7%); student abstracts, IAAI and EAAI excluded | https://ojs.aaai.org/index.php/AAAI/issue/view/301 | 2026-10-09 |
 | AAAI | 2019 | main | 1,147 | original research publications in the proceedings, selected from 7,095 original full paper submissions (acceptance rate 16.2%); senior member, doctoral consortium, student abstracts and demos excluded | https://ojs.aaai.org/index.php/AAAI/issue/view/246 | 2026-10-09 |
 | AAAI | 2020 | main | 1,614 | papers counted on AAAI's own accepted-paper lists (the AAAI-20 PDFs on aaai.org): 1,589 main technical plus 25 AI for Social Impact; sister conference track, student abstracts, IAAI and EAAI excluded; independent of the proceedings because the list says it was made before camera-ready | https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-Paper-List.pdf and https://aaai.org/wp-content/uploads/2023/01/AAAI-20-Accepted-AISI-Papers.pdf (linked from https://aaai.org/conference/aaai/aaai-20/) | 2026-10-10 |
-| AAAI | 2021 | main | 1,696 | papers counted on AAAI's own accepted-paper list (the AAAI-21 main technical track PDF on aaai.org): 1,656 main technical plus 40 AI for Social Impact; independent of the proceedings because it differs from them in count (−2 on snapshot 2026-10-10-9efa49481112) | https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf (linked from https://aaai.org/conference/aaai/aaai-21/) | 2026-10-10 |
+| AAAI | 2021 | main | 1,697 | papers counted on AAAI's own accepted-paper list as it stood before the proceedings (the AAAI-21 PDF headed Main Technical Track, in the copy the Internet Archive captured on 2020-12-30, before the conference): 1,657 main technical plus 40 AI for Social Impact, the 40 from the PDF's last section, Special Track on AI for Social Impact (pp. 121–124); independent of the proceedings because it was made before them; the owner chose this copy on 2026-10-16, since official counts come from a list made before the proceedings; the later copy on aaai.org has 1,656 plus the same 40, dropping one paper absent from the proceedings | https://web.archive.org/web/20201230042125id_/https://aaai.org/Conferences/AAAI-21/wp-content/uploads/2020/12/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf (SHA-1 base32 DZJNTKYZTPBVFWBS5AXMQIUBXI457YSX); the later copy: https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf (linked from https://aaai.org/conference/aaai/aaai-21/; captured https://web.archive.org/web/20230929155523id_/https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf, SOFX7UV3F7DWXILKLOLHRV5OKIO76JPZ) | 2026-10-16 |
 | AIES | 2024 | main | 150 | full archival papers accepted, per the chairs' statement ('sent 468 papers out for review and accepted 150'); student abstracts excluded | https://ojs.aaai.org/index.php/AIES/article/view/31763 (AIES 2024 front matter); same figure in the table of https://www.aies-conference.com/2025/wp-content/doc/AIES-2025-Program-10.20.pdf | 2026-10-09 |
 | AIES | 2025 | main | 238 | full archival papers accepted, per the chairs' welcome ('sent 748 papers out for review and accepted 238 of them'); student abstracts excluded | https://www.aies-conference.com/2025/wp-content/doc/AIES-2025-Program-10.20.pdf | 2026-10-09 |
 | ICLR | 2013 | main | 24 | conference-track papers on the ICLR 2013 accepted list (workshop track excluded) | https://iclr.cc/archive/2013/conference-proceedings.html | 2026-09-27 |
@@ -204,6 +205,7 @@ failing one takes its cause in `coverage-causes.toml`.
 | AAAI | 2024 | main | no official accepted count was found: the only figure, 2,342, comes from the chairs' notification email as quoted on other sites and from third-party paper trackers, and it appears to count the main technical track alone, while this main track also holds the special tracks | docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts | 2026-10-10 |
 | AAAI | 2025 | main | no official accepted count was found: the only figure, 3,032, comes from the chairs' notification email as quoted on other sites and from third-party paper trackers, and it appears to count the main technical track alone, while this main track also holds the special tracks | docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts | 2026-10-10 |
 | AAAI | 2026 | main | no official accepted count was found: the only figure, 4,167, comes from the chairs' notification email as quoted on other sites and from third-party paper trackers, and it appears to count the main technical track alone, while this main track also holds the special tracks | docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts | 2026-10-10 |
+| AIES | 2026 | main | the program co-chairs state that 1,001 papers were reviewed and 249 accepted (44 presented as orals or discussions, 205 as posters), and welcome the 25 student-panel participants separately; the program's own sessions list 244 papers (44 orals or discussions and 200 posters): the 243 main-track papers the proceedings on ojs.aaai.org publish and one (program paper #1030) they do not; the other 5, all posters, are not named in the program or the proceedings, so no official count of what the index can hold exists | https://www.aies-conference.com/2026/wp-content/uploads/2026/10/AIES-26-Program_v7.pdf (the program co-chairs' welcome; SHA-1 519552b4439d3ddec45ccb9085e2d9660072ed6a) | 2026-10-16 |
 | IASEAI | 2026 | main | 57 archival papers are published in the proceedings; the conference accepted 92, and the 35 non-archival ones have no findable listing, so no official count of what the index can hold exists | https://ojs.aaai.org/index.php/IASEAI/issue/view/741 (docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §IASEAI) | 2026-10-09 |
 
 ## Disagreements between sources
@@ -327,7 +329,7 @@ the official main-track counts above, so these cells are now ordinary ±1% gate 
 2026: NeurIPS 2026 has no row because its main conference is not public yet. The index holds its workshop
 submissions and 95 Creative_AI_Track notes (track `other`, status `unknown`), neither gated.
 
-AAAI 2010, 2011, 2014, 2016 and 2022–2026 main and IASEAI 2026 main have no row (above; each has a note in §Ungated cells with a note); AAAI's and AIES's
+AAAI 2010, 2011, 2014, 2016 and 2022–2026 main, AIES 2026 main and IASEAI 2026 main have no row (above; each has a note in §Ungated cells with a note); AAAI's and AIES's
 other tracks (`student_abstract`, `consortium`, `demo`, `iaai`, `eaai`, `other`) are not gated.
 
 Other tracks are reported on the coverage page but not gated (spec 07 §C), so they have no rows here. These

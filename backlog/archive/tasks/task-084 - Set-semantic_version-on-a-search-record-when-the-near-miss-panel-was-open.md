@@ -4,16 +4,14 @@ title: Set semantic_version on a search record when the near-miss panel was open
 status: To Do
 assignee: []
 created_date: '2026-09-27 08:44'
-updated_date: '2026-09-29 23:58'
+updated_date: '2026-10-16 15:34'
 labels:
   - api
   - records
   - semantic
   - deferred
 milestone: m-5
-dependencies:
-  - TASK-060
-  - TASK-062
+dependencies: []
 ordinal: 82000
 ---
 

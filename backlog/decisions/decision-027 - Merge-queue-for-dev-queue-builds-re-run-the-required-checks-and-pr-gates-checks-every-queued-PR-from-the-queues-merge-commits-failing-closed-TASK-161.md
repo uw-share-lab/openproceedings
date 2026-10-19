@@ -174,3 +174,71 @@ closing an interactive terminal:
 - Still unverified: `base_sha` for a second entry queued at the same time (`dev`'s tip, or the previous
   entry's queue commit). Read the log of the next build that holds two PRs.
 
+
+## Addendum (2026-10-17, TASK-251: the required checks are pinned to GitHub Actions)
+
+The owner decided on 2026-10-17 to tie each of `dev`'s six required checks to the GitHub Actions app (app_id
+15368). Until then branch protection listed them with `app_id: null`, so a check run of the same name from any app
+that can write check runs here (the Claude GitHub App's routine session can: decision-048) met the requirement.
+
+Before the change, the source of every required check was read on `dev`'s queue commit `a49a7cba` (PR #159's
+`gh-readonly-queue` build) and on #159's head `de03b796`: all six were check runs from `github-actions`
+(app 15368), and `commits/<sha>/status` held no commit status for any of them (a `claude` check suite exists on both
+commits but holds no check run). Ruleset 24351281 (`dev: merge queue`) has only its `merge_queue` rule and no
+`required_status_checks` rule, so the checks are required in one place, the classic branch protection, and that is
+where they were pinned. Nothing else in the protection changed (compared field by field before and after).
+
+```sh
+# apply (2026-10-17, about 03:25 EDT)
+jq -n '{strict: false, checks: (["lint","test","claude-tooling","attribution","learnings","review-attested"]
+  | map({context: ., app_id: 15368}))}' |
+  gh api -X PATCH repos/uw-share-lab/openproceedings/branches/dev/protection/required_status_checks --input -
+# verify: six lines, each "<context> 15368"
+gh api repos/uw-share-lab/openproceedings/branches/dev/protection/required_status_checks \
+  --jq '.checks[] | "\(.context) \(.app_id)"'
+```
+
+Rollback (any app's check run counts again). Run it at once if the queue stalls on a required check that never
+arrives, or a workflow moves to another app. GitHub's REST docs say an omitted `app_id` makes GitHub pick the app
+that recently set the check, which would pin GitHub Actions again, and `-1` allows any app, so the rollback sends
+`-1`, not `null`:
+
+```sh
+jq -n '{strict: false, checks: (["lint","test","claude-tooling","attribution","learnings","review-attested"]
+  | map({context: ., app_id: -1}))}' |
+  gh api -X PATCH repos/uw-share-lab/openproceedings/branches/dev/protection/required_status_checks --input -
+# verify: no line may read 15368 (GitHub has shown "any app" as null; the pre-change state read null)
+gh api repos/uw-share-lab/openproceedings/branches/dev/protection/required_status_checks \
+  --jq '.checks[] | "\(.context) \(.app_id)"'
+```
+
+If a line still reads 15368, fall back to the legacy form, which is how the checks were first required:
+
+```sh
+jq -n '{strict: false, contexts: ["lint","test","claude-tooling","attribution","learnings","review-attested"]}' |
+  gh api -X PATCH repos/uw-share-lab/openproceedings/branches/dev/protection/required_status_checks --input -
+```
+
+This rollback has not been run; the pre-change JSON was saved before the apply.
+
+The queue rollback above still holds: `-F strict=true` alone leaves the `checks` list, pins included, as it is.
+What the pin closes is a check run from another app; a workflow's own `GITHUB_TOKEN` writes check runs as GitHub
+Actions too, so a workflow that changes in a PR is still bounded by review, as before. The live check (TASK-251's
+second criterion) is the PR that records this, the first after the change: it is queued only once the pin is in
+place, so it merges only if its queue build's six check runs meet the pinned requirement.
+
+Verified live (TASK-251): #160 merged through the queue as `229478994213e5061d3da56e0b5109a05fc0d0ac` under the pin.
+Its `merge_group` workflow runs on that commit all succeeded, with every check run from GitHub Actions (app 15368):
+`pr-gates` 39024831422 (`attribution`, `learnings`, `review-attested`), `lint` 39024831426, `claude-tooling`
+39024831414 and `test` 39024831433. These are workflow run ids (`actions/runs/<id>`), not check run ids.
+
+### `main` (2026-10-17, TASK-258)
+
+The owner decided yes on 2026-10-17, and it was applied at about 18:50 EDT. The same PATCH, with `main` in place of
+`dev` in the API path, set `main`'s six required checks to app_id 15368 with `strict` false. Before, `main` listed
+the same six with `app_id: null` and `strict` false; the rest of its protection compared equal before and after,
+and `main` has no rulesets (`gh api repos/uw-share-lab/openproceedings/rules/branches/main` returns `[]`). The before
+and after JSON were saved on the owner's machine, outside the repo. The rollback is the one above with
+`branches/main/` in the API path (`app_id: -1`, then the verify step, then the legacy `contexts` fallback). Still
+open: a `dev → main` promotion PR passing its required checks under the pin (TASK-258's second criterion), which
+waits for the next promotion; the owner holds it until TASK-135 is settled.

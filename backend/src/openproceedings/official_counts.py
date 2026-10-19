@@ -76,10 +76,10 @@ OFFICIAL_ACCEPTED: OfficialTable = {
         date(2026, 10, 10),
     ),
     ("AAAI", 2021, "main"): OfficialCount(
-        1696,
-        "papers counted on AAAI's own accepted-paper list (the AAAI-21 main technical track PDF on aaai.org): 1,656 main technical plus 40 AI for Social Impact; independent of the proceedings because it differs from them in count (−2 on snapshot 2026-10-10-9efa49481112)",
-        "https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf (linked from https://aaai.org/conference/aaai/aaai-21/)",
-        date(2026, 10, 10),
+        1697,
+        "papers counted on AAAI's own accepted-paper list as it stood before the proceedings (the AAAI-21 PDF headed Main Technical Track, in the copy the Internet Archive captured on 2020-12-30, before the conference): 1,657 main technical plus 40 AI for Social Impact, the 40 from the PDF's last section, Special Track on AI for Social Impact (pp. 121–124); independent of the proceedings because it was made before them; the owner chose this copy on 2026-10-16, since official counts come from a list made before the proceedings; the later copy on aaai.org has 1,656 plus the same 40, dropping one paper absent from the proceedings",
+        "https://web.archive.org/web/20201230042125id_/https://aaai.org/Conferences/AAAI-21/wp-content/uploads/2020/12/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf (SHA-1 base32 DZJNTKYZTPBVFWBS5AXMQIUBXI457YSX); the later copy: https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf (linked from https://aaai.org/conference/aaai/aaai-21/; captured https://web.archive.org/web/20230929155523id_/https://aaai.org/wp-content/uploads/2023/01/AAAI-21_Accepted-Paper-List.Main_.Technical.Track_.pdf, SOFX7UV3F7DWXILKLOLHRV5OKIO76JPZ)",
+        date(2026, 10, 16),
     ),
     ("AIES", 2024, "main"): OfficialCount(
         150,
@@ -602,6 +602,18 @@ UNGATED_NOTES: dict[tuple[str, int, str], UngatedNote] = {
         _NOT_FOUND.format("4,167"),
         "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md §Official counts",
         date(2026, 10, 10),
+    ),
+    # ungated by the owner, 2026-10-16 (TASK-217); the served note leaves that out
+    # (copy deck CV-9; the lead's ruling, 2026-10-16)
+    ("AIES", 2026, "main"): UngatedNote(
+        "the program co-chairs state that 1,001 papers were reviewed and 249 accepted (44 presented as orals or "
+        "discussions, 205 as posters), and welcome the 25 student-panel participants separately; the program's "
+        "own sessions list 244 papers (44 orals or discussions and 200 posters): the 243 main-track papers the "
+        "proceedings on ojs.aaai.org publish and one (program paper #1030) they do not; the other 5, all posters,"
+        " are not named in the program or the proceedings, so no official count of what the index can hold "
+        "exists",
+        "https://www.aies-conference.com/2026/wp-content/uploads/2026/10/AIES-26-Program_v7.pdf (the program co-chairs' welcome; SHA-1 519552b4439d3ddec45ccb9085e2d9660072ed6a)",
+        date(2026, 10, 16),
     ),
     ("IASEAI", 2026, "main"): UngatedNote(
         "57 archival papers are published in the proceedings; the conference accepted 92, and the 35 non-archival "

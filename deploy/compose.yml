@@ -4,6 +4,9 @@
 #
 #   OP_DATA_HOST=/srv/openproceedings/data OP_INSTANCE=private docker compose -f deploy/compose.yml up -d --build
 #
+# Comparisons with a reviewer's own RIS file (`POST /api/v1/compare`) are off here; deploy/compare.yml is the
+# overlay that turns them on (decision-035, deploy/README.md §Comparisons).
+#
 # Settings (environment, or an `.env` file beside this one; deploy/README.md §Settings):
 #   OP_DATA_HOST          required: the host's data directory, holding indexes/ (with `current`), snapshots/,
 #                         records/ (0700, owned by OP_API_UID) and takedowns/withheld.txt (and nothing else in
@@ -12,7 +15,7 @@
 #   OP_TAKEDOWN_CONTACT   the takedown contact, compiled into the web image (required when public)
 #   OP_DOMAIN             the site's name (default localhost: Caddy's local CA; a real name: ACME)
 #   OP_HSTS               the Strict-Transport-Security value (default max-age=63072000; deploy/Caddyfile)
-#   OP_HTTP_PORT, OP_HTTPS_PORT  the host ports (default 80 and 443)
+#   OP_HTTP_PORT, OP_HTTPS_PORT  the host ports (default 80 and 443), optionally with an address (127.0.0.1:443)
 #   OP_INTERNAL_SUBNET, OP_INTERNAL_IP_RANGE, OP_PROXY_ADDRESS  the internal network, the part of it api and
 #                         web are given addresses from, and Caddy's fixed address outside that part (defaults
 #                         172.30.80.0/24, 172.30.80.128/25 and 172.30.80.2): the one address the API believes

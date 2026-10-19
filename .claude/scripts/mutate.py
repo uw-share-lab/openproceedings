@@ -7,18 +7,33 @@
     python3 .claude/scripts/mutate.py --match glob # only mutants whose label contains "glob"
     python3 .claude/scripts/mutate.py --shard 2/8  # every 8th selected mutant from the 2nd (nightly CI runs 1/12..12/12)
     python3 .claude/scripts/mutate.py --list       # print the selected mutants' labels; run nothing
+    python3 .claude/scripts/mutate.py --check      # vet the selected mutants (below); run no table (make tooling)
     python3 .claude/scripts/mutate.py --table-timeout 900  # a table past 900 s is a hang (default: 10x its baseline,
                                                            # >= 60 s; refused under 10x any table's baseline)
 
-Mutants live in .claude/scripts/mutants/*.json as {label, file, old, new[, equivalent]}: `old` is replaced
-by `new` once in `file`. A mutant marked "equivalent" is expected to survive (documented reason in the
-label). A mutant whose `old` text no longer exists fails the run — update it, so the list never rots.
+Mutants live in .claude/scripts/mutants/*.json as {label, file, old, new[, also][, equivalent]}: `old` is
+replaced by `new` once in `file`, and once in each file `also` lists (text kept identical in several files, such
+as the shared AI-attribution pattern, whose identity row would otherwise kill any one-file mutant: TASK-243).
+`--changed` selects by `file`. A mutant marked "equivalent" is expected to survive (documented reason in the
+label). A mutant whose `old` text is missing from any of its files is STALE and fails the run — update it, so the
+list never rots. One whose `old` text occurs more than once in a file is AMBIGUOUS (only the first would change,
+an accident of order that hid what the mutant meant: TASK-254), and one whose edit stops a file compiling that
+compiled is UNCOMPILABLE (any table that runs the file would "kill" it); both fail the run without running a
+table. `breaks_compile` reads a .py file, a .json file, and a shell script (`bash -n`) with each `<<'PY'`
+heredoc in it compiled as Python; other files always compile. `--check` vets every selected mutant this way and runs no
+table, in seconds (`make tooling`).
 
 A mutant is killed when any case table fails; the first failure decides it. So each mutant runs, first, the
 tables that name its file (its name, or its stem as a word, in the table or a helper beside it that the table
 names), then the rest only if those all pass, and a phase stops as soon as one table fails. The verdict is the
 same as running every table (a survivor runs them all); only the time differs: about a third of it on the
 nightly logs, where every mutant ran all 13 tables and four 12-way shards ran past 140 min (TASK-171 rerun).
+A table whose header comment (its leading `#` lines) has `# mutate-scope: <file> ...` lines (repo-relative paths,
+exactly as a mutant's `file`) exercises only those files: it runs only for a mutant that changes one of them, so a
+table that fails for another reason (one slowed by load) can never be credited with killing another file's mutant
+(TASK-238: test-mutate-run.sh, which runs only mutate.py, was credited with 15 of 17 docker_digest.py mutants on a
+loaded machine). A declared path that doesn't exist is refused (exit 2): a misspelt one would stop the table running
+for any mutant (TASK-254).
 A table that runs past its timeout under a mutant has hung (an infinite loop): it is stopped, so one hang never
 stalls a shard, and run again alone; if it hangs again the mutant is TIMEOUT, which counts as killed, as in other
 mutation tools, and if not, that run's verdict stands (a table slowed by the other jobs is not a hang). The
@@ -32,6 +47,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import functools
 import json
 import os
 import re
@@ -42,7 +58,8 @@ import sys
 import tempfile
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+import warnings
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -151,6 +168,112 @@ def table_text(t: str) -> str:
     return _TABLE_TEXT[t]
 
 
+SCOPE = re.compile(r"#\s*mutate-scope:\s*(.*)")
+
+
+@functools.cache
+def table_scope(t: str) -> frozenset[str] | None:
+    """The files table `t` declares it exercises (`# mutate-scope:` lines in its header comment, the `#` lines
+    before its first other line; a fixture a table writes later is not its header), or None: it may exercise any."""
+    files: set[str] = set()
+    for line in (ROOT / t).read_text(errors="replace").splitlines():
+        if not line.startswith("#"):
+            break
+        if m := SCOPE.match(line):
+            files.update(m.group(1).split())
+    return frozenset(files) or None
+
+
+def check_scopes() -> None:
+    """Exit 2 when a table declares a `# mutate-scope:` path that doesn't exist: it matches no mutant's `file`, so
+    the table would never run for the file it meant (TASK-254)."""
+    missing = [
+        f"{Path(t).name}: {f}"
+        for t in TABLES
+        for f in sorted(table_scope(t) or ())
+        if not (ROOT / f).is_file()
+    ]
+    if missing:
+        print(f"# mutate-scope: names a file that doesn't exist ({'; '.join(missing)})", file=sys.stderr)
+        sys.exit(2)
+
+
+PY_HEREDOC = re.compile(r"<<'PY'[^\n]*\n(.*?)\nPY\n", re.DOTALL)  # a hook's embedded Python program
+SHELL_LINE = re.compile(r"#![^\n]*\b(ba)?sh\b")
+
+
+def _python_compiles(text: str, name: str) -> bool:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # an invalid escape's SyntaxWarning is not a failure
+        try:
+            compile(text, name, "exec")
+        except (SyntaxError, ValueError):
+            return False
+    return True
+
+
+def _parts(file: str, text: str) -> list[tuple[str, str]] | None:
+    """What `breaks_compile` checks in `file`, as (kind, text) pairs, or None: nothing (a file it can't check)."""
+    if file.endswith(".py"):
+        return [("python", text)]
+    if file.endswith(".json"):
+        return [("json", text)]
+    if file.endswith(".sh") or SHELL_LINE.match(text):
+        return [("shell", PY_HEREDOC.sub("<<'PY'\nPY\n", text))] + [
+            ("python", b) for b in PY_HEREDOC.findall(text)
+        ]
+    return None
+
+
+def _part_compiles(kind: str, text: str, name: str) -> bool:
+    if kind == "python":
+        return _python_compiles(text, name)
+    if kind == "json":
+        try:
+            json.loads(text)
+        except ValueError:
+            return False
+        return True
+    return subprocess.run(["bash", "-n"], input=text, capture_output=True, text=True).returncode == 0
+
+
+# the files as they are: a few dozen texts, each compiled once
+_compiled_before = functools.lru_cache(maxsize=256)(_part_compiles)
+
+
+def breaks_compile(file: str, before: str, after: str) -> bool:
+    """Whether `after` (a mutant of `file`) fails to compile where `before` compiles. Only the parts the edit
+    changed are checked (each heredoc's program, and the shell around them), when it kept the parts' shape."""
+    old, new = _parts(file, before), _parts(file, after)
+    if old is None or new is None:
+        return False
+    if len(old) != len(new):  # the edit moved a heredoc's bounds: the whole file, both ways
+        return all(_compiled_before(*o, file) for o in old) and not all(_part_compiles(*n, file) for n in new)
+    return any(
+        _compiled_before(*o, file) and not _part_compiles(*n, file)
+        for o, n in zip(old, new, strict=False)
+        if o != n
+    )
+
+
+def vet(m: dict) -> str | None:
+    """Why mutant `m` can't be run as written (module docstring): STALE, AMBIGUOUS or UNCOMPILABLE; None if it can."""
+    for f in [m["file"], *m.get("also", [])]:
+        text = (ROOT / f).read_text()
+        n = text.count(m["old"])
+        if n != 1:
+            return "STALE" if n == 0 else "AMBIGUOUS"
+        if breaks_compile(f, text, text.replace(m["old"], m["new"], 1)):
+            return "UNCOMPILABLE"
+    return None
+
+
+def can_kill(t: str, files: list[str]) -> bool:
+    """Whether table `t` exercises any of the mutated `files` (`table_scope`)."""
+    scope = table_scope(t)
+    return scope is None or not scope.isdisjoint(files)
+
+
 def first_tables(file: str) -> list[str]:
     """The tables that name `file`: its name, or its stem as a word (`cmdparse`, imported by name). Only an
     order: a mutant these all pass still runs every other table."""
@@ -173,11 +296,13 @@ def run_phase(tree: Path, tables: list[str], timeouts: dict[str, float]) -> tupl
     return run_phase(tree, left, timeouts) if left else ([], [])
 
 
-def killing_tables(tree: Path, file: str, timeouts: dict[str, float]) -> tuple[list[str], list[str]]:
-    """The tables that fail and the tables that hang with `tree`'s mutant in `file`: those that name the file
-    first, then the rest only if none of those failed (module docstring). Both empty: it survived."""
-    first = first_tables(file)
-    rest = [t for t in TABLES if t not in first]
+def killing_tables(tree: Path, files: list[str], timeouts: dict[str, float]) -> tuple[list[str], list[str]]:
+    """The tables that fail and the tables that hang with `tree`'s mutant in `files` (its `file` first, then
+    `also`): of the tables that can kill it (`can_kill`), those that name its file first, then the rest only if
+    none of those failed (module docstring). Both empty: it survived."""
+    tables = [t for t in TABLES if can_kill(t, files)]
+    first = [t for t in first_tables(files[0]) if t in tables]
+    rest = [t for t in tables if t not in first]
     failed: list[str] = []
     hung: list[str] = []
     for phase in (first, rest):
@@ -245,12 +370,16 @@ def main() -> None:
     ap.add_argument("--shard", help="i/n: run only shard i of n of the selected mutants (1 <= i <= n)")
     ap.add_argument("--list", action="store_true", help="print the selected mutants' labels and exit")
     ap.add_argument(
+        "--check", action="store_true", help="vet the selected mutants (stale, ambiguous, uncompilable)"
+    )
+    ap.add_argument(
         "--table-timeout",
         type=float,
         help=f"seconds before a table counts as hung (default: {TIMEOUT_FACTOR}x its baseline, at least "
         f"{TIMEOUT_FLOOR:.0f} s; refused under {TIMEOUT_FACTOR}x any table's baseline)",
     )
     a = ap.parse_args()
+    check_scopes()
     mutants = [
         m
         for f in sorted((ROOT / ".claude/scripts/mutants").glob("*.json"))
@@ -278,6 +407,20 @@ def main() -> None:
         for m in mutants:
             print(m["label"])
         return
+    if a.check:
+        # compiling is CPU-bound (about 6 s of it in all), so in processes
+        with ProcessPoolExecutor(max_workers=a.jobs) as pool:
+            bad = [
+                (m, why)
+                for m, why in zip(mutants, pool.map(vet, mutants, chunksize=32), strict=True)
+                if why is not None
+            ]
+        for m, why in bad:
+            print(f"  FAIL {why:8} {m['label']}")
+        print(
+            f"{len(mutants)} mutants: {len(bad)} can't be run as written (stale, ambiguous or uncompilable)"
+        )
+        sys.exit(1 if bad else 0)
     work = Path(tempfile.mkdtemp(prefix="op-mutate-"))
     try:
         base = work / "baseline"
@@ -292,15 +435,15 @@ def main() -> None:
             i, m = item
             if STOPPING.is_set():
                 return m, "STOPPED", []
+            if (why := vet(m)) is not None:
+                return m, why, []
             tree = work / f"m{i}"
             copy_tree(tree)
-            p = tree / m["file"]
-            text = p.read_text()
-            if m["old"] not in text:
-                shutil.rmtree(tree)
-                return m, "STALE", []
-            p.write_text(text.replace(m["old"], m["new"], 1))
-            failed, hung = killing_tables(tree, m["file"], timeouts)
+            files = [m["file"], *m.get("also", [])]
+            for f in files:
+                p = tree / f
+                p.write_text(p.read_text().replace(m["old"], m["new"], 1))
+            failed, hung = killing_tables(tree, files, timeouts)
             shutil.rmtree(tree)
             status = "TIMEOUT" if hung and not failed else "KILLED" if failed else "SURVIVED"
             return m, status, failed + [f"{h} hung" for h in hung]
@@ -322,7 +465,8 @@ def main() -> None:
             raise
         ex.shutdown()
         print(
-            f"{len(mutants)} mutants: {problems} problem(s) (survivors not marked equivalent, or stale patterns)"
+            f"{len(mutants)} mutants: {problems} problem(s) (survivors not marked equivalent, or mutants that can't "
+            "be run as written)"
         )
         sys.exit(1 if problems else 0)
     finally:

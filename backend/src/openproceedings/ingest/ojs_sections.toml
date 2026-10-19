@@ -6659,6 +6659,63 @@ papers = 1
 verified = 2026-10-09
 source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
 
+# AIES 2026 (Vol. 9): from the live census of 2026-10-16 (TASK-217); no front matter is listed
+[[section]]
+journal = "AIES"
+volume = 9
+set_spec = "AIES:A26-1"
+kind = "papers"
+track = "main"
+label = "Main Track I"
+papers = 67
+verified = 2026-10-16
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AIES"
+volume = 9
+set_spec = "AIES:A26-2"
+kind = "papers"
+track = "main"
+label = "Main Track II"
+papers = 60
+verified = 2026-10-16
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AIES"
+volume = 9
+set_spec = "AIES:A26-3"
+kind = "papers"
+track = "main"
+label = "Main Track III"
+papers = 57
+verified = 2026-10-16
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+[[section]]
+journal = "AIES"
+volume = 9
+set_spec = "AIES:A26-4"
+kind = "papers"
+track = "main"
+label = "Main Track IV"
+papers = 59
+verified = 2026-10-16
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
+# one more A26-SA article is a deleted header (counted by the inventory, never a record)
+[[section]]
+journal = "AIES"
+volume = 9
+set_spec = "AIES:A26-SA"
+kind = "papers"
+track = "student_abstract"
+label = "Student Abstracts"
+papers = 22
+verified = 2026-10-16
+source = "docs/research/2026-10-09-aaai-aies-facct-iaseai-sources.md"
+
 [[section]]
 journal = "IASEAI"
 volume = 2

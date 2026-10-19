@@ -9,6 +9,7 @@ that is TASK-064's decision. The requirements behind each setting are in
 | File | What it is |
 |---|---|
 | `compose.yml` | the stack, plus two one-off services under the `ops` profile: `ops` (index retire) and `takedown-check` |
+| `compare.yml` | an overlay that turns comparisons on (`op serve --compare` and the proxy's settings for them; §Comparisons) |
 | `Caddyfile` | the proxy: site name from `OP_DOMAIN`, Caddy's local CA for `localhost`, ACME for a real name |
 | `api.Dockerfile` | the `api` image: the backend package and its locked dependencies on `python:3.12.15-slim-bookworm` (the release `.python-version` pins, TASK-208), user `op-api` (uid and gid 10001) |
 | `web.Dockerfile`, `web-build-gate.sh` | the `web` image; a public build needs a takedown contact (decision-018, TASK-136) |
@@ -29,7 +30,8 @@ alias dc='docker compose -f deploy/compose.yml'
 export OP_API_UID=10001 OP_API_GID=10001   # or your ids; keep deploy/.env the same
 ```
 Compose reads `deploy/.env`, but the shell, `sudo` and the scripts here don't: the commands pass the ids
-explicitly.
+explicitly. With comparisons on, `dc` names `deploy/compare.yml` too (§Comparisons): a `dc up` without it turns
+them off.
 
 ## Settings
 
@@ -43,10 +45,11 @@ gitignored, like every `.env`).
 | `OP_TAKEDOWN_CONTACT` | empty | the takedown contact compiled into the web image; required when `public` |
 | `OP_DOMAIN` | `localhost` | the site's name; `localhost` uses Caddy's local CA, a real name uses Let's Encrypt (DNS must point here, and ports 80 and 443 must be reachable) |
 | `OP_HSTS` | `max-age=63072000` | the `Strict-Transport-Security` value. Leave `includeSubDomains` out until TASK-064 decides the domain (`Caddyfile`) |
-| `OP_HTTP_PORT`, `OP_HTTPS_PORT` | `80`, `443` | the host ports |
+| `OP_HTTP_PORT`, `OP_HTTPS_PORT` | `80`, `443` | the host ports, optionally with an address (`127.0.0.1:443` binds loopback only) |
 | `OP_TAKEDOWN_LOG_HOST` | none | the directory that holds the takedown log, used only by `takedown-check` |
 | `OP_API_UID`, `OP_API_GID` | `10001`, `10001` | the `api` user's uid and gid, built into the image; ids no host account or group uses (§Permissions) |
 | `OP_IMAGE_TAG` | `local` | the tag of the images compose builds (`smoke-test.sh` uses its own, so it never replaces these) |
+| `OP_READ_BODY`, `OP_CADDY_MEM_LIMIT`, `OP_CADDY_GOMEMLIMIT` | `60s`, `1g`, `800MiB` | read by `compare.yml` only: the proxy's `read_body` timeout (10s without it), and the `caddy` container's memory limit and Go's soft limit inside it (§Comparisons) |
 | `OP_INTERNAL_SUBNET`, `OP_INTERNAL_IP_RANGE`, `OP_PROXY_ADDRESS` | `172.30.80.0/24`, `172.30.80.128/25`, `172.30.80.2` | the internal network, the part of it `api` and `web` get addresses from, and Caddy's fixed address outside that part: the one address `op serve --trusted-proxy` believes `X-Forwarded-For` from. Change them only if the subnet clashes with the host's |
 
 ## The host's data directory
@@ -257,9 +260,9 @@ was listed keeps it withheld until a rebuild without the id is promoted.
 
 `POST /api/v1/compare` and the search page's "Compare with your records" (spec 04 §Comparing with a RIS file)
 are off on this stack: `op serve` behind a proxy doesn't offer them unless told to. Turning them on is your
-decision as the operator (decision-035), and not before the proxy block below has been fixed and has passed
-`smoke-test.sh` on your stack (TASK-183): it is what keeps a slow upload off the API's one comparison slot, and
-**as written it cannot work** (see the note under it). What it means:
+decision as the operator (decision-035), with `deploy/compare.yml` (below), and not before
+`deploy/smoke-test.sh --compare` has passed on your host (decision-035; it passed on Docker Desktop on
+2026-10-16, TASK-183). What it means:
 
 - anyone can upload a RIS file of up to 16 MiB and 5,000 records. It is read in memory for that one request
   and dropped: never written to disk, never logged (the access line has counts only), never added to the
@@ -269,11 +272,10 @@ decision as the operator (decision-035), and not before the proxy block below ha
   records and the answer; a file of the same size with a 4-byte character on each long line peaked near
   210 MiB before matching in the release security review of 2026-10-05 (a traced 192 MiB to decode and
   parse it, plus the 16 MiB body), since Python then stores its text at 4 bytes a character, so size from the 250 MB,
-  never from either measurement). The proxy is another matter: it buffers **every** upload in flight before the API
-  can refuse it (`request_buffers`), up to 16 MiB each, with no limit on how many arrive at once (200
-  concurrent uploads ≈ 3.2 GB, and they cost no tokens). Budget 16 MiB per concurrent upload in the proxy, and
-  give the `caddy` service a memory limit (`mem_limit` in `compose.yml`, which sets none today) as part of
-  turning comparisons on;
+  never from either measurement). The proxy is another matter: it holds **every** upload in flight in memory
+  before the API is asked (`request_buffers`), with no limit on how many arrive at once, and they cost no
+  tokens. Each costs it about 50 MiB, not 16 (below), so `compare.yml` gives the `caddy` container a memory
+  limit (1 GiB by default: budget about 20 uploads at once; 24 reached the limit's edge and 32 did not fit);
 - each comparison is up to a minute of CPU in the `api` process (about 10 s per 1,000 records: the reference
   matcher decides why each paper was dropped), during which searches are slower. Its client pays for the
   time from its rate-limit bucket;
@@ -292,36 +294,100 @@ A network (IPv4 /24, IPv6 /48) runs one comparison at a time and then waits thre
 comparison held the slot, so one network holds the slot at most a quarter of the time; many networks together
 can still fill it, and comparisons are then refused while searches are not.
 
-To turn them on: add `--compare` to the `api` service's `command` in `compose.yml`, and let that one path
-through the proxy with a larger body (everything else keeps 64KB), by adding to the `Caddyfile`'s
-site block, before the general `reverse_proxy /api/*`:
+**To turn them on**, name `deploy/compare.yml` after `compose.yml` in every command, and run
+`deploy/smoke-test.sh --compare` on the host first:
 
-```
-	@compare path /api/v1/compare
-	handle @compare {
-		request_body {
-			max_size 16MB
-		}
-		reverse_proxy api:8000 {
-			request_buffers 16MB # the whole file is read here before the API sees the request
-		}
-	}
+```bash
+alias dc='docker compose -f deploy/compose.yml -f deploy/compare.yml'
+dc up -d --build   # caddy's image holds the Caddyfile: rebuild it if yours predates TASK-183
 ```
 
-**This block cannot work as written** (TASK-183 fixes it and runs it through `smoke-test.sh`): the site-wide
-`request_body { max_size 64KB }` (`Caddyfile`) wraps it first, so a file over 64 KB is refused before this
-block is reached (the 64 KB cap must be scoped to `@rest not path /api/v1/compare` instead); and Caddy's `16MB`
-is 16,000,000 bytes, under the 16,777,216 (16 MiB) the API advertises in `limits.compare`, so write `16MiB`.
-Check the edited file with `caddy validate` before reloading, and raise the server's `read_body` timeout to
-what a 16 MiB upload needs on your users' links (`read_body 60s` admits 2 Mbit/s). `read_body` is a timeout of
-the whole server, every path, not of this one: Caddy has no per-path setting for it. With `--compare` the network pause above applies (an instance on by the loopback default has none).
-`GET /api/v1/meta` then shows `limits.compare`, and the web app offers the panel; no rebuild
-of the `web` image is needed. To turn them off again, remove `--compare` and restart `api`.
+`compare.yml` changes three things and nothing else:
+
+- **`api`** runs `op serve --compare` (compose replaces a list, so it repeats `compose.yml`'s command with
+  `--compare` added; `smoke-test.sh --compare` checks they stay that way). With `--compare` the network pause
+  above applies (an instance on by the loopback default has none).
+- **`caddy`** gets `OP_COMPARE=on`. The `Caddyfile` then imports its `compare-on` snippet instead of
+  `compare-off`: the API's 64 KiB body cap stays on every other path (`request_body @rest`, `@rest` being
+  `not path /api/v1/compare`; a site-wide cap would wrap the comparison path's handle and refuse the file
+  first), and `/api/v1/compare` alone gets `request_body` and `request_buffers` of 16MiB, so the proxy reads
+  the whole file before it asks the API. The units matter: Caddy's `16MB` is 16,000,000 bytes, under the
+  16,777,216 the API advertises in `limits.compare.max_body_bytes`, and its `64KB` is 64,000, under the API's
+  own 65,536 (`64KiB` now, on every path). A `POST` there must declare a `Content-Length` (411 otherwise):
+  past `request_buffers` Caddy streams the rest of a body on to the API, so a chunked (or HTTP/2, unsized)
+  file that went over 16 MiB and then stalled reached the API and held its one slot until the API's own
+  30 s upload timeout (seen on this stack before the fix). A declared length over 16 MiB gets 413 from the
+  proxy before it reads any of the file (forwarded, the API refused it from the header and reset the
+  connection while the proxy was still sending, which reached the client as a 502 in one smoke run of five,
+  the other four getting 413); a length that isn't 1 to 18 plain digits gets 400 (over HTTP/2 Go passes it on to
+  Caddy, whose arithmetic on it would fail into a 500); browsers
+  declare a file's length (Chromium over HTTP/2 did). The server
+  also stops speaking HTTP/3 (`protocols h1 h2`): no stall over QUIC has been run against this block (TASK-257). Caddy
+  builds its HTTP/3 server with only the idle timeout, and `read_body` reaches a QUIC stream only through the
+  per-request read deadline Caddy sets since 2.11.6 (`modules/caddyhttp/server.go`); until a stall is shown
+  to be cut there, an upload stalled over QUIC might hold its buffer for as long as the client keeps the
+  connection alive. Any
+  value of `OP_COMPARE` but `on` or `off` names a snippet (or file) that doesn't exist, and Caddy refuses to
+  start.
+- **`caddy`** also gets `OP_READ_BODY` (default `60s`: a 16 MiB file then needs more than 2.24 Mbit/s), a
+  memory limit `OP_CADDY_MEM_LIMIT` (default `1g`, with no swap on top) and `GOMEMLIMIT`
+  `OP_CADDY_GOMEMLIMIT` (default `800MiB`: Go collects harder as the heap nears it, well before the kernel's
+  limit). **`read_body` is a timeout of the whole server**, every path, not of the comparison path: Caddy has
+  no per-path setting for it, so a slow client of any route is now cut after 60 s rather than 10. The other
+  API routes don't require a `Content-Length` yet (with the overlay or without it): an unsized body there that
+  reaches the 64 KiB `request_buffers` and stalls is streamed on to the API, and may hold one of its 256
+  `limit_concurrency` connections until `read_body` runs out, so about 256 such requests (some 16 MiB in all)
+  could hold every API connection, searches included (inferred from the comparison path, not measured on
+  those routes; alert on the rate of uvicorn's `Exceeded concurrency limit.` lines; open: TASK-255).
+
+What was measured on this stack with `compare.yml`'s defaults (TASK-183, 2026-10-16: Docker Desktop, engine
+24.0.7, on an 8-CPU Mac shared with other builds; caddy 2.11.7, with 2.11.4's figures close to these; the raw
+output is in
+[`docs/results/2026-10-16-compare-proxy.md`](../docs/results/2026-10-16-compare-proxy.md)). Each upload declared
+16 MiB and stopped one byte short, sent over TLS (HTTP/1.1) on loopback by
+`backend/tests/deploy/compare_probe.py stall`, which `smoke-test.sh --compare` runs with 8; memory is the caddy
+container's cgroup (`memory.current` while they were held, `memory.peak`), from a freshly started container
+each time:
+
+| Uploads held at once | Proxy memory held (peak) | Per upload (held less about 14 MiB idle) |
+|---|---|---|
+| 8 | 460 MiB (peak 464 MiB, the smoke test's 16 MiB comparison passing through as well; 412 to 472 MiB on 2.11.4) | about 56 MiB |
+| 16 | 765 MiB (peak 804 MiB; 793 MiB on 2.11.4) | about 47 MiB |
+| 24 | 883 MiB (peak 890 MiB; peaks of 914 and 998 MiB on 2.11.4) of the 1,024 MiB limit, no OOM kill: Go collecting at its 800 MiB soft limit | about 36 MiB |
+| 32 | over the limit: the kernel killed Caddy (Docker's `oom` event, exit 137) as the last bytes arrived | |
+
+An upload costs the proxy about 50 MiB, three times the file: Caddy reads it into a buffer that doubles as it
+fills (32 MiB to hold 16), and the smaller buffers it outgrew are garbage until Go collects them. Budget
+50 MiB per upload in flight on top of about 14 MiB idle, and size `OP_CADDY_MEM_LIMIT` (with
+`OP_CADDY_GOMEMLIMIT` about 80% of it) for the uploads you expect at once. **Past the limit the proxy is
+killed**: memory stays bounded, but Docker restarts the container (`restart: unless-stopped`) and every
+connection it held is dropped, searches included, for the few seconds it takes. With the 1 GiB default, 24
+uploads held at once reached its edge (peaks of 890 to 998 MiB) and 32 did not fit: somewhere between the two
+(400 to 540 MB of traffic, each upload faster than 2.24 Mbit/s to beat `read_body 60s`) is enough, from one
+address or many, and Caddy as built here limits
+neither connections nor uploads per client. That bound is not built here yet. The owner decided on 2026-10-17
+(TASK-256) where it goes: a per-source connection limit in front of Caddy at the host, for example nftables
+`connlimit` on 443, set once TASK-064 chooses the host. There will be no custom Caddy build. That caps what one
+address can hold; many addresses together can still reach the memory limit, which then restarts the proxy as now.
+Until it is set, size `OP_CADDY_MEM_LIMIT` as above and expect a restart past it.
+
+A stalled upload was cut by the proxy when `read_body` ran out (60 s after its request started, sending
+included) and never reached the API: with uploads stalled in the proxy, a whole 16 MiB comparison ran at once
+(200), and the API logged only that one. That was measured over HTTP/1.1; a stall over HTTP/2 was not
+measured. A cut upload gets `499` from Caddy 2.11.7 (2.11.4 wrote an empty `200`), and the API logged none
+of them: a client sees no comparison in it. A file one byte over 16 MiB gets 413, one with no length 411 and
+one with a length that isn't 1 to 18 plain digits 400, all from the proxy, as plain text rather than the API's JSON
+error (the smoke test checks the 413's text).
+
+`GET /api/v1/meta` then shows `limits.compare`, and the web app offers the panel; no rebuild of the `web`
+image is needed. **To turn them off again**, run `docker compose -f deploy/compose.yml up -d` (without
+`compare.yml`): `api` and `caddy` are recreated with comparisons off and the 64 KiB cap on every path.
 
 ### Tuning comparisons
 
-Each cap and cost below is an `op serve` flag (TASK-184), added to the `api` service's `command` beside
-`--compare`. A flag left out keeps its default; a value out of range, or a float that isn't finite, stops
+Each cap and cost below is an `op serve` flag (TASK-184), added to the `api` service's `command` in
+`compare.yml`, after `--compare`. A flag left out keeps its default; a value out of range, or a float that
+isn't finite, stops
 `op serve` at start with `invalid serve options: <field>: <reason>`; the bounds in brackets keep a finite but
 extreme value from overflowing the pause or the debit, or from lifting the bound the flag is (the field is the flag's name with
 underscores; the three costs are under `rate_limit.`). The caps are stated in `GET /api/v1/meta`
@@ -329,7 +395,7 @@ underscores; the three costs are under `rate_limit.`). The caps are stated in `G
 
 | Flag | Default (allowed) | What it bounds |
 |---|---|---|
-| `--compare-max-body-bytes` | 16777216, 16 MiB (1024 to 1073741824, 1 GiB) | the largest file (`max_body_bytes`; 413). The proxy's `request_body` and `request_buffers` for the path must be at least this, in the same unit (`16MiB`, not `16MB`) |
+| `--compare-max-body-bytes` | 16777216, 16 MiB (1024 to 1073741824, 1 GiB) | the largest file (`max_body_bytes`; 413). The `Caddyfile`'s `compare-on` snippet sets the proxy's `request_body` and `request_buffers` for the path to 16MiB: change them with it, in the same unit (`16MiB`, not `16MB`), and budget the proxy's memory for the new size (above) |
 | `--compare-max-records` | 5000 (1 to 1000000) | records in one file (`max_records`; 413): about 10 s of CPU per 1,000 |
 | `--compare-max-line-chars` | 32768 (64 to 16777216) | code points in one line of the file (`max_line_length`; 413) |
 | `--compare-max-results` | 5000 (1 to 1000000) | papers of the query's result that the file lacks (`max_results`; 422) |
@@ -374,8 +440,19 @@ touches a running stack or its images. It checks what this runbook claims:
 - a withheld abstract next to a served one, with `takedown-check` passing;
 - no query text in any log.
 
-It removes everything it created on exit. It needs Docker and uv, and ports 80 and 443 (or
-`OP_HTTP_PORT`/`OP_HTTPS_PORT`). Docker Desktop keeps a host file's owner on bind mounts, so there the
+`deploy/smoke-test.sh --compare` runs the same over `compose.yml` and `compare.yml`, and adds what §Comparisons
+claims: the overlay's `api` command, a 16 MiB comparison while uploads stalled in the proxy (`OP_SMOKE_STALLS`,
+default 8) neither reach the API nor outlast `read_body`, the proxy's memory peak under its limit with no OOM
+kill, the proxy's own 413 (by its text) one byte over 16 MiB, 411 for a file with no length, 400 for an HTTP/2
+`Content-Length: abc`, and the 64 KiB cap on every other path (in the proxy's adapted config, and checked
+without `--compare` too, with `/meta` offering no comparisons and HTTP/3 advertised only then). It reads the
+caddy container's cgroup v2 memory files: `memory.peak` needs Linux 5.19 or later (before that it samples
+`memory.current` while the uploads are held). It takes about a minute longer (149 to 186 s, against 87 to 128 s
+without it, on that Mac): the stalled uploads wait out `read_body`.
+
+It removes everything it created on exit. It needs Docker and uv, and ports 80 and 443 on 127.0.0.1 (or
+`OP_HTTP_PORT`/`OP_HTTPS_PORT`, such as `127.0.0.1:18443`; it binds loopback only). Docker Desktop keeps a host
+file's owner on bind mounts, so there the
 ownership steps and checks (§Permissions, and the host-side retire) are skipped and say so. They run on a
 Linux host. No CI job runs it.
 
@@ -392,3 +469,7 @@ Linux host. No CI job runs it.
 - Do the first start and its checks on the host: client addresses (First start, step 4), and the rate limit
   and CORS (TASK-067 AC #2).
 - Schedule the record-store backup (§Backups).
+- Alert on the rate of uvicorn's `Exceeded concurrency limit.` lines. With or without comparisons, an
+  unsized body that reaches 64 KiB on an API route other than `/api/v1/compare` and stalls may hold one of
+  the API's 256 connections until `read_body` (10 s, or 60 s with `compare.yml`), so about 256 such
+  requests could refuse every search for that long (inferred, not measured; open: TASK-255).

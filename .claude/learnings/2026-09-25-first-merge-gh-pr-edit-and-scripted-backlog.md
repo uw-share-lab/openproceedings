@@ -1,6 +1,6 @@
 # `gh pr edit` fails on this GitHub, so the review attestation goes through the REST API
 
-**Key lesson:** Use `gh api -X PATCH repos/{owner}/{repo}/pulls/<n>` to change a PR body, because `gh pr edit` fails on the retired Projects (classic) API. Merge PRs whose learnings or dispositions cite commit SHAs with a merge commit, not a squash. Build a large backlog from a script that checks dependency order before it creates anything. `backlog task edit --dep` replaces the whole dependency list: pass the old ids plus the new.
+**Key lesson:** Use `gh api -X PATCH repos/{owner}/{repo}/pulls/<n>` to change a PR body, because `gh pr edit` fails on the retired Projects (classic) API. Merge PRs whose learnings or dispositions cite commit SHAs with a merge commit, not a squash. Build a large backlog from a script that checks dependency order before it creates anything. `backlog task edit --dep` replaces the whole dependency list: pass the old ids plus the new, but never a completed task (the CLI then refuses the whole edit).
 
 - **Date:** 2026-09-25 · **Task:** task-008 (M0 exit) · **Area:** tooling
 - **Artifacts:** PR #1 (merged as `1377b9d`), `.claude/scripts/record-review.py` (`--attest`), backlog milestones m-0…m-6
@@ -47,3 +47,19 @@ Merge the M0 tooling PR into `dev`, close M0, and create the M0–M6 backlog.
   because the lesson was only under Dead ends, not in the Key lesson that `INDEX.md` shows every session.
 - Propagated: the Key lesson above now says it, and `.claude/skills/task-hygiene/SKILL.md` §Tasks has an
   "Adding a dependency" row.
+
+## Addendum — 2026-10-16
+- **`--dep` refuses the whole edit when any id in it is a completed task.** While refreshing the deployment
+  tasks on `chore/archive-m5-refresh-deploy` (commit `df4b763a`), re-stating a task's dependencies together with
+  a new one failed with `The following dependencies do not exist: TASK-065`: TASK-065 is in `backlog/completed/`,
+  and the CLI only resolves ids in `backlog/tasks/`. Nothing was written, not even the other fields in the same
+  edit. Because `--dep` replaces the list (above), a completed dependency can't be carried over: drop it from the
+  list or record it in the task's notes, and keep other field changes in a separate edit so a refused `--dep`
+  doesn't take them down too. (`backlog task edit --help` on the installed 1.47.0 only says "set task
+  dependencies"; it doesn't mention either behaviour.)
+- **zsh doesn't word-split an unquoted `$files`** (recurrence of the 2026-10-01 note in
+  `2026-10-01-hypothesis-too-slow-under-load-was-a-cold-unicode-cache.md`). In the same session, `for f in $files`
+  over a multi-line grep result ran once, with the whole list as one file name. Loop with
+  `while IFS= read -r f; do …; done <<< "$files"` (or `${=files}`, or Python) when editing many files.
+- Propagated: the Key lesson above now says completed ids are refused, and the "Adding a dependency" row in
+  `.claude/skills/task-hygiene/SKILL.md` §Tasks says what to do with a completed dependency.

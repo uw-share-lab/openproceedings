@@ -231,5 +231,119 @@
   "old": "        while running and not STOPPING.is_set() and not",
   "new": "        while running and not",
   "equivalent": true
+ },
+ {
+  "label": "mutate run: also files not mutated (TASK-243)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "            for f in files:",
+  "new": "            for f in files[:1]:"
+ },
+ {
+  "label": "mutate run: an also file without the text not stale (TASK-243)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        if n != 1:\n            return \"STALE\" if n == 0 else \"AMBIGUOUS\"",
+  "new": "        if n != 1 and (n or f == m[\"file\"]):\n            return \"STALE\" if n == 0 else \"AMBIGUOUS\""
+ },
+ {
+  "label": "mutate run: a table's declared scope ignored (a table flaky under load kills any mutant; TASK-238)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "    return scope is None or not scope.isdisjoint(files)",
+  "new": "    return True"
+ },
+ {
+  "label": "mutate run: scope read past the header (a fixture's declaration counts; TASK-238)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        if not line.startswith(\"#\"):\n            break\n",
+  "new": ""
+ },
+ {
+  "label": "mutate run: scope checked against the mutant's file only, not its also files (TASK-238)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "not scope.isdisjoint(files)",
+  "new": "not scope.isdisjoint(files[:1])"
+ },
+ {
+  "label": "mutate run: the first phase not limited to the tables in scope (TASK-238)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "    first = [t for t in first_tables(files[0]) if t in tables]\n",
+  "new": "    first = first_tables(files[0])\n"
+ },
+ {
+  "label": "mutate run: an explicit --table-timeout raised to the floor (review round 2; TASK-238)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        return dict.fromkeys(TABLES, explicit)",
+  "new": "        return dict.fromkeys(TABLES, max(TIMEOUT_FLOOR, explicit))"
+ },
+ {
+  "label": "mutate vet: an old text that occurs twice is run (TASK-254)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        if n != 1:\n            return \"STALE\" if n == 0 else \"AMBIGUOUS\"",
+  "new": "        if n == 0:\n            return \"STALE\" if n == 0 else \"AMBIGUOUS\""
+ },
+ {
+  "label": "mutate vet: an edit that stops a file compiling is run (TASK-254)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        if breaks_compile(f, text, text.replace(m[\"old\"], m[\"new\"], 1)):",
+  "new": "        if False and breaks_compile(f, text, text.replace(m[\"old\"], m[\"new\"], 1)):"
+ },
+ {
+  "label": "mutate vet: a .py file is not compiled (TASK-254)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "    if file.endswith(\".py\"):\n        return [(\"python\", text)]",
+  "new": "    if file.endswith(\".py\"):\n        return None"
+ },
+ {
+  "label": "mutate vet: a .json file is not parsed (TASK-254)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "    if file.endswith(\".json\"):\n        return [(\"json\", text)]",
+  "new": "    if file.endswith(\".json\"):\n        return None"
+ },
+ {
+  "label": "mutate vet: a shell script is not read with bash -n (TASK-254)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "    return subprocess.run([\"bash\", \"-n\"], input=text, capture_output=True, text=True).returncode == 0",
+  "new": "    return True"
+ },
+ {
+  "label": "mutate vet: a heredoc's Python program is not compiled (TASK-254)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        return [(\"shell\", PY_HEREDOC.sub(\"<<'PY'\\nPY\\n\", text))] + [\n            (\"python\", b) for b in PY_HEREDOC.findall(text)\n        ]\n",
+  "new": "        return [(\"shell\", PY_HEREDOC.sub(\"<<'PY'\\nPY\\n\", text))]\n"
+ },
+ {
+  "label": "mutate vet: a script known only by its #! line is not shell (TASK-254)",
+  "file": ".claude/scripts/mutate.py",
+  "old": " or SHELL_LINE.match(text)",
+  "new": ""
+ },
+ {
+  "label": "mutate vet: an edit to a file that already didn't compile is refused (TASK-254)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        _compiled_before(*o, file) and not _part_compiles(*n, file)\n        for o, n",
+  "new": "        not _part_compiles(*n, file)\n        for o, n"
+ },
+ {
+  "label": "mutate vet: an edit that adds a heredoc compares the parts pairwise (TASK-254)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "    if len(old) != len(new):  # the edit moved",
+  "new": "    if False:  # the edit moved"
+ },
+ {
+  "label": "mutate vet: the run itself doesn't vet a mutant (TASK-254)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "            if (why := vet(m)) is not None:\n                return m, why, []\n",
+  "new": ""
+ },
+ {
+  "label": "mutate vet: --check exits 0 with a mutant it refuses (TASK-254)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        sys.exit(1 if bad else 0)",
+  "new": "        sys.exit(0)"
+ },
+ {
+  "label": "mutate scope: a declared path that doesn't exist is accepted (TASK-254)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        if not (ROOT / f).is_file()\n    ]",
+  "new": "        if False\n    ]"
  }
 ]

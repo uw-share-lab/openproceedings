@@ -94,7 +94,10 @@ panel. No `closeBrackets`: the editor never types what the reader didn't.
    backend's own golden lists and `backend/tests/fixtures/queries/trust-evals.txt`, so the sides cannot drift)
    gives the server lexer's classes at its spans, with no `⚠` node.
 2. `parser.ts` is regenerated in the test and compared with the committed file.
-3. Operator case: `a or b` has no `Or` node; `a OR b` does. Incremental reparses equal fresh parses.
+3. Operator case: `a or b` has no `Or` node; `a OR b` does. Incremental reparses equal fresh parses: short
+   hand-picked edits, and a long query (every golden input) under 200 seeded random edits, each parse chained
+   on the last one's fragments. That case also requires most steps to keep an old subtree (object identity), so
+   it can't pass with no reuse at all (TASK-264).
 4. A test reads the tree with `ensureSyntaxTree(state, length, timeout)`, never `syntaxTree(state)`: that one
    is only what was parsed within a start-up time budget on the wall clock, so under load it is a prefix's
    tree and a different case fails each run (TASK-182; `grammar.test.ts` pins it with a fast clock).

@@ -53,8 +53,10 @@ runs on 2026-10-08 showed it couldn't, without losing any of decision-048's safe
   documented to us → a documented shape (or an expected-head parameter) would let the routine pass it.
 
 ## Follow-ups
-- [ ] task-213 — confirm from a cloud run the CCR `PUT`/`DELETE`, the job-log download and `gh attestation verify`
-  (the owner's one-off probe, listed in the PR and the task); the task stays open until then.
+- [x] task-213 — closed 2026-10-13 as built. The first cloud runs confirmed REST reads and one REST write
+  through the Claude GitHub App. `gh attestation verify` failed closed there. The CCR `PUT`/`DELETE`, the
+  job-log download and a push are still unconfirmed: task-243 (see the 2026-10-13 addendum to
+  `2026-10-07-a-routine-runs-only-what-is-scripted-and-a-fake-must-fail-like-the-real-tool.md`).
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/commands/dependabot-review.md`, spec 08 §CI "Dependabot", decision-048 (addendum), `.claude/skills/pr-workflow/SKILL.md` (`--attest --pr`), `.claude/agents/ci-engineer.md`

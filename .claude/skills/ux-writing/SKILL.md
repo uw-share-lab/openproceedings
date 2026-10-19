@@ -59,7 +59,7 @@ These are drafts. The registry holds the shipped text, and golden tests pin it (
 | reproduced | replay status: the same `index_version` and `query_version` were available, and `ids_hash` and `excluded` are equal | passed, verified |
 | drifted | replay status: only a different index or query version is available; always shown with the reason (which inputs changed) and `+added / −removed` | changed, outdated |
 | mismatch | replay status: the same versions, but the ids or `excluded` differ. A bug, shown as "do not cite" | failed, error |
-| near-miss suggestion | phase 2 panel, never part of the set | result, recommendation |
+| near-miss suggestion | shelved panel, never part of the set | result, recommendation |
 | kept / dropped / added | a comparison with the reader's own RIS file (TASK-177): a paper of the file the search returns / one the index holds and the search doesn't return / a paper the search returns that the file lacks. "Dropped" is always shown with its reason and never means irrelevant | lost, missing, removed, new, excluded (that word stays for default filters: a dropped paper may be "excluded by a default filter") |
 | not in the index / not compared | a paper of the file with no index record / a record of the file outside the indexed venues | missing, skipped, ignored |
 | import only | an index record whose only source is an imported RIS file (the API's `independent: false`) | unverified, untrusted |

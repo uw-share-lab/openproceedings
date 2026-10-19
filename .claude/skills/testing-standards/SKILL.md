@@ -59,7 +59,8 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
   directly read the same two). Locally the config reuses a server already on its port, so with another
   instance on 8000/3000 an unset run would test *that* instance: set both variables. The owner's dev servers
   run `main`-branch code on the real index, so from a worktree an unset run failed all 66 tests; always run
-  `OP_E2E_API_PORT=8100 OP_E2E_WEB_PORT=3100 make e2e`.
+  `OP_E2E_API_PORT=8100 OP_E2E_WEB_PORT=3100 make e2e`. The fixture server also listens on the API port + 1 and
+  + 2 (`tight`, `plain`; TASK-182), so the web port never sits there (`/dependabot-review` step 5 picks both).
 
 ## Rules
 1. **TDD.** Write the failing test first, watch it fail for the right reason, then implement. A bug fix
@@ -96,12 +97,32 @@ compilation). Anything the frontend or a script depends on → contract. User-vi
 `make mutate` / `make mutate-changed` / `mutate.py --match` (spec 08 §Mutation testing). Every new check in a
 hook or tooling script ships with a mutant in `.claude/scripts/mutants/*.json` (`gates.json`, or a file of its own such as `merge-group.json`), and with a case-table row
 that kills it. A row that passes only because something else fails first (a stale index, a parser crash
-that fails closed, an unreviewed HEAD) does not count. Isolate the one check the row is about.
+that fails closed, an unreviewed HEAD) does not count. Isolate the one check the row is about. Text kept
+identical in several files (the shared AI-attribution pattern) is mutated in all of them at once with `also`
+(`{label, file, old, new, also: [files]}`); a one-file mutant there is killed only by the identity row (TASK-243).
+A table that exercises only some files says so in its header comment (`# mutate-scope: <file> …`, repo-relative paths exactly as a mutant's `file`), and `mutate.py`
+then runs it only for those files' mutants, so a failure from load is never credited with another file's (TASK-238); a
+declared path that doesn't exist is refused (exit 2). A mutant's `old` text must occur exactly once in each of its files,
+and its edit must leave a file that compiled still compiling (`mutate.py --check`, in `make tooling`, refuses `STALE`,
+`AMBIGUOUS` and `UNCOMPILABLE` ones: TASK-254). Make an `old` text unique with the lines around it, and write a `new`
+that compiles (`if False:` for a removed branch, `pass` for a removed body).
 An `equivalent` label needs evidence for the actual replacement, including a distinguishing negative case
 and a positive control. Dropping an explicit default and forcing its opposite are different mutations:
 `--no-renames` makes an unchanged learning rename look newly added, even though `--find-renames` gives 0/0.
 Compare actual hook verdicts for benign unsupported syntax too: a conservative parser can intentionally
 block a shape that a mutant allows. Identical destructive-case verdicts alone do not prove equivalence.
+
+A killing row decays when later work changes what blocks it first (TASK-261, nine nightly survivors). It can decay
+because a "made-up" fallback case becomes a known one: `caffeinate` became a known wrapper in TASK-248, so the
+unknown-wrapper rows stopped reaching their fallback. It can decay because a newer fail-closed check refuses the
+probe for its own reason: `HOOK_INPUT='{}'` became malformed to `guard_payload`, and a missing message file became
+unreadable under TASK-243. And it can decay because the fixture differs by OS: on Linux, `mktemp -d` is under
+`/tmp`, so `find /tmp .` was blocked by its first start. So:
+- a row probing a fallback uses a name that can never join the known set (`unknown-wrapper`);
+- a block row's other inputs are well formed, present and harmless, so only the check under test can block;
+- a start or path in a row lives inside the table's own root, never at a system path.
+When the nightly reports a survivor, apply that one mutant and run its table on the OS that reported it, before
+assuming the row still kills it.
 
 Case tables must also parse on the developer platform's Bash. Stock macOS Bash 3.2 can misparse a
 case-pattern `)` inside command substitution; compute the case result in a variable outside `$(...)`
@@ -111,16 +132,26 @@ Capture controlled runner output on the line before a `check` call and pass the 
 
 ## CPU growth checks
 
-For adversarial algorithmic scaling checks, keep the input sizes and growth cutoff fixed. Measure
-thread CPU time in batches, pair the small and large measurements in each round, alternate their order,
-and compare the median paired growth ratio. Independent fastest calls at each size can compare unlike
-CPU/allocation phases even though thread CPU time excludes preemption. Keep allocation and GC costs in
-the measurement. Before changing a sampling method, demonstrate that the former quadratic behavior
-still fails the same cutoff; a green optimized implementation alone does not prove the check works.
-`backend/tests/timing.py` is the one implementation (`growth`, `assert_near_linear`: 4x the input under 8x
-the CPU time, median of paired rounds; `backend/tests/unit/test_timing.py` shows a quadratic cost fails it);
-use it for every linear-time test. Never assert a wall-clock bound at one size: on a shared runner, beside four
-xdist workers running 50,000-example properties, a 17 ms parse took 1.9 s and a 5 ms page 2.5 s (nightlies
-37943547380, 38056534247). A wall-clock bound in a concurrency test is set by the hold it tells apart (under
-the 2 s wait it would otherwise wait), never tighter. `backend/tests/unit/test_latex_scan.py` applies this to
-unclosed math openers (TASK-171 recovery).
+For adversarial algorithmic scaling checks, keep the input sizes and growth cutoff fixed. Measure thread CPU
+time in batches, pair the small and large measurements in each round, alternate their order, and compare the
+median paired growth ratio. Independent fastest calls at each size can compare unlike CPU/allocation phases
+even though thread CPU time excludes preemption. Keep allocation, copying and reference-counted freeing in
+the measurement, but pause the cyclic garbage collector while a call is timed: a full collection walks the
+whole test worker's heap, not the input, and fires mostly on the side that keeps more objects alive (the
+ICML 2007 hostile page failed at 8.09 and 8.24 in CI's xdist workers that way, runs 38176036366 and
+38197206724). Before changing a sampling method, demonstrate that the former quadratic behavior still fails
+the same cutoff; a green optimized implementation alone does not prove the check works.
+`backend/tests/timing.py` is the one implementation (`cpu`, `growth`, `assert_near_linear`: 4x the input
+under 8x the CPU time, median of paired rounds, collector paused; `backend/tests/unit/test_timing.py` shows
+a quadratic in work and one in allocation fail it, and that no collection runs inside a timed call); use it
+(or its `cpu`, for a one-size CPU bound) for every linear-time test, including batched ones (`growth(...,
+calls=8)`). Work another thread does (a request TestClient serves) is invisible to this thread's CPU clock:
+pass `growth` a `measure` that reads that thread's own CPU time and pauses the collector (`collector_paused`),
+as `contract/test_verification_scale.py`'s `width_is_free` reads the server's `verify_cpu_ms` from each
+request's access line, never the request's wall time. Never assert a wall-clock bound at one size: on a shared
+runner, beside four xdist workers running 50,000-example properties, a 17 ms parse took 1.9 s and a 5 ms page
+2.5 s (nightlies 37943547380, 38056534247). A wall-clock bound in a concurrency test is set by the hold it
+tells apart (under the 2 s wait it would otherwise wait), never tighter.
+`backend/tests/unit/test_latex_scan.py` (unclosed math openers, TASK-171 recovery),
+`backend/tests/unit/engine/test_highlight_speed.py` (tokenizer stretches) and
+`backend/tests/unit/ingest/test_html.py` (`escape_bare_lt`) apply it in batches.

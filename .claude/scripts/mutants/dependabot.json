@@ -314,8 +314,98 @@
   {
     "label": "dependabot: docker: attestation failure ignored",
     "file": ".claude/scripts/dependabot/docker_digest.py",
-    "old": "        if r.returncode:\n",
-    "new": "        if False:\n"
+    "old": "    if r.returncode:\n        return None, r.stderr.strip()[:200]\n",
+    "new": "    if False:\n        return None, r.stderr.strip()[:200]\n"
+  },
+  {
+    "label": "dependabot: docker: image age not checked",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    elif (days := age_days(min(stamps, key=parse_time))) < COOLDOWN_DAYS:\n",
+    "new": "    elif (days := age_days(min(stamps, key=parse_time))) < 0:\n"
+  },
+  {
+    "label": "dependabot: docker: image age read from the newest attestation",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    elif (days := age_days(min(stamps, key=parse_time))) < COOLDOWN_DAYS:\n",
+    "new": "    elif (days := age_days(max(stamps, key=parse_time))) < COOLDOWN_DAYS:\n"
+  },
+  {
+    "label": "dependabot: docker: image age compared as text, not as a time",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    elif (days := age_days(min(stamps, key=parse_time))) < COOLDOWN_DAYS:\n",
+    "new": "    elif (days := age_days(min(stamps))) < COOLDOWN_DAYS:\n"
+  },
+  {
+    "label": "dependabot: docker: an undated attestation accepted",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    if not stamps:\n",
+    "new": "    if not stamps:\n        return\n"
+  },
+  {
+    "label": "dependabot: docker: age not checked after a verified attestation",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "        check_age(rep, pin, found, publishers, why)\n",
+    "new": "        pass\n"
+  },
+  {
+    "label": "dependabot: docker: an undated registry accepted",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    elif host == \"registry-1.docker.io\":\n",
+    "new": "    elif True:\n"
+  },
+  {
+    "label": "dependabot: docker: an attestation by any publisher dates the image",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    ours = [stamps for publisher, stamps in found if publisher in publishers]\n",
+    "new": "    ours = [stamps for publisher, stamps in found]\n"
+  },
+  {
+    "label": "dependabot: docker: a new publisher falls through to the age check",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "(a new publisher)\"\n        )\n        return\n",
+    "new": "(a new publisher)\"\n        )\n"
+  },
+  {
+    "label": "dependabot: docker: the signer's ref kept in the publisher",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "str(cert[\"buildSignerURI\"]).split(\"@\", 1)[0]",
+    "new": "str(cert[\"buildSignerURI\"])"
+  },
+  {
+    "label": "dependabot: docker: no previous publisher accepted",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    if not publishers:\n",
+    "new": "    if not publishers:\n        publishers = {publisher for publisher, _ in found}\n    if False:\n"
+  },
+  {
+    "label": "dependabot: docker: a 0.x minor accepted",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    elif version_tuple(old_tag)[:1] == (0,) and is_minor_or_more(old_tag, pin.tag):\n",
+    "new": "    elif False:\n"
+  },
+  {
+    "label": "dependabot: docker: a 0.x patch counted as a minor",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    elif version_tuple(old_tag)[:1] == (0,) and is_minor_or_more(old_tag, pin.tag):\n",
+    "new": "    elif version_tuple(old_tag)[:1] == (0,) and pin.tag != old_tag:\n"
+  },
+  {
+    "label": "dependabot: docker: every minor stopped, not only 0.x",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    elif version_tuple(old_tag)[:1] == (0,) and is_minor_or_more(old_tag, pin.tag):\n",
+    "new": "    elif is_minor_or_more(old_tag, pin.tag):\n"
+  },
+  {
+    "label": "dependabot: docker: image age threshold weakened",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    elif (days := age_days(min(stamps, key=parse_time))) < COOLDOWN_DAYS:\n",
+    "new": "    elif (days := age_days(min(stamps, key=parse_time))) < COOLDOWN_DAYS - 0.5:\n"
+  },
+  {
+    "label": "dependabot: docker: only the first attestation read",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "        for a in json.loads(output):\n",
+    "new": "        for a in json.loads(output)[:1]:\n"
   },
   {
     "label": "dependabot: docker: new image accepted",
@@ -394,6 +484,18 @@
     "file": ".claude/scripts/dependabot/restore_libc.py",
     "old": "    if repaired:\n        LOCK.write_text",
     "new": "    if True:\n        LOCK.write_text"
+  },
+  {
+    "label": "dependabot: prs: the skipped-cooldown notice ignored",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if COOLDOWN_SKIPPED in (pr.get(\"body\") or \"\").lower():\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: prs: the skipped-cooldown notice matched by case",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if COOLDOWN_SKIPPED in (pr.get(\"body\") or \"\").lower():\n",
+    "new": "    if COOLDOWN_SKIPPED in (pr.get(\"body\") or \"\"):\n"
   },
   {
     "label": "dependabot: prs: tantivy title accepted",
@@ -876,6 +978,54 @@
     "new": "        if entry is None:\n"
   },
   {
+    "label": "dependabot: npm: the owner allowlist is never read",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "            if accepted:\n",
+    "new": "            if False:\n"
+  },
+  {
+    "label": "dependabot: npm: the owner allowlist matches the name at any version",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "OWNER_ACCEPTED.get(f\"{name}@{version}\")",
+    "new": "next((u for p, u in OWNER_ACCEPTED.items() if p.startswith(f\"{name}@\")), None)"
+  },
+  {
+    "label": "dependabot: npm: an owner-accepted package skips the registry check",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "                check_entry(rep, k, None, new[k])\n",
+    "new": "                pass\n"
+  },
+  {
+    "label": "dependabot: npm: a new entry's label reads None -> version",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "if old_v not in (None, new_v) else",
+    "new": "if old_v != new_v else"
+  },
+  {
+    "label": "dependabot: npm: an owner-accepted package skips the cooldown",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "                check_entry(rep, k, None, new[k])\n",
+    "new": "                check_entry(rep, k, new[k], new[k])\n"
+  },
+  {
+    "label": "dependabot: npm: an owner-accepted alias is accepted",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "None if \"name\" in new[k] else ",
+    "new": ""
+  },
+  {
+    "label": "dependabot: npm: an owner-accepted package's install script passes",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "    if old is None and install_scripts(m):  # an owner-accepted",
+    "new": "    if False:  # an owner-accepted"
+  },
+  {
+    "label": "dependabot: npm: an owner-accepted package's provenance not shown",
+    "file": ".claude/scripts/dependabot/npm_lock.py",
+    "old": "prov = f\", provenance {provenance_repo(m) or 'none'}\" if old is None else \"\"",
+    "new": "prov = \"\""
+  },
+  {
     "label": "npm specs: neither file passes",
     "file": ".claude/scripts/dependabot/npm_specs.py",
     "old": "            return [f\"no package.json or package-lock.json in {root}: nothing to compare (a wrong --root?)\"]\n",
@@ -890,14 +1040,14 @@
   {
     "label": "dependabot: prs: GitHub's file list ignored",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "        paths.add(f[\"filename\"])\n",
-    "new": "        pass\n"
+    "old": "    paths = {p for p in diff.split(\"\\0\") if p}\n    for f in api_pages(f\"repos/{REPO}/pulls/{number}/files\"):\n        paths.add(f[\"filename\"])\n",
+    "new": "    paths = {p for p in diff.split(\"\\0\") if p}\n    for f in api_pages(f\"repos/{REPO}/pulls/{number}/files\"):\n        pass\n"
   },
   {
     "label": "dependabot: prs: a rename's old path on GitHub ignored",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "        if f.get(\"previous_filename\"):\n",
-    "new": "        if False:\n"
+    "old": "    paths = {p for p in diff.split(\"\\0\") if p}\n    for f in api_pages(f\"repos/{REPO}/pulls/{number}/files\"):\n        paths.add(f[\"filename\"])\n        if f.get(\"previous_filename\"):\n",
+    "new": "    paths = {p for p in diff.split(\"\\0\") if p}\n    for f in api_pages(f\"repos/{REPO}/pulls/{number}/files\"):\n        paths.add(f[\"filename\"])\n        if False:\n"
   },
   {
     "label": "dependabot: prs: GitHub's and git's commits not compared",
@@ -925,13 +1075,13 @@
   },
   {
     "label": "dependabot: prs: cloud never detected",
-    "file": ".claude/scripts/dependabot/prs.py",
+    "file": ".claude/scripts/dependabot/_common.py",
     "old": "    if GRAPHQL_BLOCKED in r.stdout + r.stderr:\n",
     "new": "    if False:\n"
   },
   {
     "label": "dependabot: prs: any GraphQL failure read as cloud",
-    "file": ".claude/scripts/dependabot/prs.py",
+    "file": ".claude/scripts/dependabot/_common.py",
     "old": "    if GRAPHQL_BLOCKED in r.stdout + r.stderr:\n",
     "new": "    if True:\n"
   },
@@ -996,16 +1146,22 @@
     "new": "\"--auto\"]"
   },
   {
-    "label": "dependabot: prs: a failed PUT ignored",
+    "label": "dependabot: prs: a cloud session queues (notify-only not enforced)",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if mode != \"local\":  # notify-only",
+    "new": "    if False:  # notify-only"
+  },
+  {
+    "label": "dependabot: prs: a failed request ignored",
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "    if not enabled:\n",
     "new": "    if False:\n"
   },
   {
-    "label": "dependabot: prs: turning off PUTs again",
+    "label": "dependabot: prs: turning auto-merge off turns it on",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "\"PUT\" if on else \"DELETE\"",
-    "new": "\"PUT\""
+    "old": "REPO, \"--disable-auto\"]",
+    "new": "REPO, \"--auto\"]"
   },
   {
     "label": "dependabot: prs: a queue branch not read as queued",
@@ -1062,7 +1218,7 @@
     "new": "    if not events or events[0][\"event\"] != \"added_to_merge_queue\":\n"
   },
   {
-    "label": "dependabot: prs: an accepted PUT not checked for effect",
+    "label": "dependabot: prs: an accepted request not checked for effect",
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "    elif not visible:\n",
     "new": "    elif False:\n"
@@ -1074,13 +1230,13 @@
     "new": "    return in_queue(number, since)\n"
   },
   {
-    "label": "dependabot: prs: a failed call after the PUT not undone",
+    "label": "dependabot: prs: a failed call after the request not undone",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "        why = undo(mode, number, sha, since, settle)\n        if why is None:\n            raise ToolError(\n                f\"queueing",
+    "old": "        why = undo(number, sha, since, settle)\n        if why is None:\n            raise ToolError(\n                f\"queueing",
     "new": "        why = None\n        if why is None:\n            raise ToolError(\n                f\"queueing"
   },
   {
-    "label": "dependabot: prs: a failed undo after a dead PUT read as done",
+    "label": "dependabot: prs: a failed undo after a dead request read as done",
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "        if why is None:\n            raise ToolError(\n                f\"queueing",
     "new": "        if True:\n            raise ToolError(\n                f\"queueing"
@@ -1093,18 +1249,18 @@
   },
   {
     "label": "dependabot: prs: an empty GraphQL login read as local",
-    "file": ".claude/scripts/dependabot/prs.py",
+    "file": ".claude/scripts/dependabot/_common.py",
     "old": "        if login:\n",
     "new": "        if True:\n"
   },
   {
-    "label": "dependabot: prs: turned off again on a refused PUT that turned nothing on",
+    "label": "dependabot: prs: turned off again on a refused request that turned nothing on",
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "        if state == \"open\" and (moved or enabled or visible):\n",
     "new": "        if state == \"open\":\n"
   },
   {
-    "label": "dependabot: prs: a PR already set to merge PUT again",
+    "label": "dependabot: prs: a PR already set to merge request again",
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "    if taken(number, pr):\n",
     "new": "    if False:\n"
@@ -1128,7 +1284,7 @@
     "new": "        if False:\n"
   },
   {
-    "label": "dependabot: prs: a failed PUT that GitHub queued not undone",
+    "label": "dependabot: prs: a failed request that GitHub queued not undone",
     "file": ".claude/scripts/dependabot/prs.py",
     "old": "        if state == \"open\" and (moved or enabled or visible):\n",
     "new": "        if state == \"open\" and (moved or enabled):\n"
@@ -1152,9 +1308,9 @@
     "new": "    has_stored = stored.returncode == 0 and bool(stored.stdout.strip())\n"
   },
   {
-    "label": "dependabot: prs: only a ToolError after the PUT undone",
+    "label": "dependabot: prs: only a ToolError after the request undone",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "    except Exception as e:  # a timeout, an odd exit, a failed or odd read: the PUT may have taken effect\n",
+    "old": "    except Exception as e:  # a timeout, an odd exit, a failed or odd read: the request may have taken effect\n",
     "new": "    except ToolError as e:\n"
   },
   {
@@ -1224,9 +1380,9 @@
     "new": "        if verification.get(\"verified\") is False:\n"
   },
   {
-    "label": "dependabot: prs: an empty gh api user login accepted",
+    "label": "dependabot: prs: preflight accepts any repository call's answer",
     "file": ".claude/scripts/dependabot/prs.py",
-    "old": "    if not login:\n        raise ToolError",
+    "old": "    if name != REPO:\n        raise ToolError",
     "new": "    if False:\n        raise ToolError"
   },
   {
@@ -1253,5 +1409,371 @@
     "old": "        branch = urllib.parse.quote(b, safe=\"/\")\n",
     "new": "        branch = b\n",
     "equivalent": true
+  },
+  {
+    "label": "dependabot: prs: preflight writes no marker in the cloud",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        marker.write_text(\n",
+    "new": "        str(\n"
+  },
+  {
+    "label": "dependabot: prs: preflight leaves a stale marker locally",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        marker.unlink()\n",
+    "new": "        pass\n"
+  },
+  {
+    "label": "dependabot: prs: preflight writes the marker locally too",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if mode == \"cloud\":\n        marker.write_text(",
+    "new": "    if True:\n        marker.write_text("
+  },
+  {
+    "label": "dependabot: prs: ci counts a check another app wrote",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "if (r.get(\"app\") or {}).get(\"slug\") != CI_APP or name not in names:",
+    "new": "if name not in names:"
+  },
+  {
+    "label": "dependabot: prs: ci takes the oldest run of a check",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "if name not in latest or r[\"id\"] > latest[name][\"id\"]:",
+    "new": "if name not in latest or r[\"id\"] < latest[name][\"id\"]:"
+  },
+  {
+    "label": "dependabot: prs: ci reads a running check as its conclusion",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        elif r.get(\"status\") != \"completed\":\n            state[name] = (\"pending\", r.get(\"html_url\") or \"\")\n",
+    "new": ""
+  },
+  {
+    "label": "dependabot: prs: ci accepts any conclusion",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if got == \"success\":\n            rep.ok(",
+    "new": "        if True:\n            rep.ok("
+  },
+  {
+    "label": "dependabot: prs: ci never needs web-image",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "((\"web-image\",) if any(WEB_IMAGE_PATHS.fullmatch(p) for p in paths) else ())",
+    "new": "()"
+  },
+  {
+    "label": "dependabot: prs: ci always needs web-image",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "((\"web-image\",) if any(WEB_IMAGE_PATHS.fullmatch(p) for p in paths) else ())",
+    "new": "(\"web-image\",)"
+  },
+  {
+    "label": "dependabot: prs: ci skips the PR's state",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    pr_problems(rep, get_pr(number), sha)\n    if rep.problems:\n        rep.finish()\n    paths: set[str] = set()",
+    "new": "    paths: set[str] = set()"
+  },
+  {
+    "label": "dependabot: prs: ci never waits",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if red or not waiting or time.monotonic() >= deadline:\n",
+    "new": "        if True:\n"
+  },
+  {
+    "label": "dependabot: prs: ci waits on through a red check",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if red or not waiting or time.monotonic() >= deadline:\n",
+    "new": "        if not waiting or time.monotonic() >= deadline:\n"
+  },
+  {
+    "label": "dependabot: prs: ci passes a missing check",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "            state[name] = (\"missing\", \"\")\n",
+    "new": "            state[name] = (\"success\", \"\")\n"
+  },
+  {
+    "label": "dependabot: prs: ci ignores a renamed file's old path",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if f.get(\"previous_filename\"):\n            paths.add(f[\"previous_filename\"])\n    names = CI_CHECKS",
+    "new": "    names = CI_CHECKS"
+  },
+  {
+    "label": "dependabot: prs: ci web-image paths drop frontend/",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "r\"(?:deploy|frontend)/.+|",
+    "new": "r\"(?:deploy)/.+|"
+  },
+  {
+    "label": "dependabot: prs: ci web-image paths drop .dockerignore",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "|\\.dockerignore|",
+    "new": "|"
+  },
+  {
+    "label": "dependabot: prs: ci web-image paths drop package.json",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "|package\\.json|package-lock",
+    "new": "|package-lock"
+  },
+  {
+    "label": "dependabot: prs: ci web-image paths drop web-image.yml",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "|\\.github/workflows/web-image\\.yml\"",
+    "new": "\""
+  },
+  {
+    "label": "dependabot: prs: ci web-image paths matched by search",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "WEB_IMAGE_PATHS.fullmatch(p)",
+    "new": "WEB_IMAGE_PATHS.search(p)"
+  },
+  {
+    "label": "dependabot: prs: ci timeout read as seconds",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "deadline = time.monotonic() + timeout_min * 60\n    while True:\n        state = ci_state",
+    "new": "deadline = time.monotonic() + timeout_min\n    while True:\n        state = ci_state"
+  },
+  {
+    "label": "dependabot: prs: ci timeout exits 0",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        sys.exit(4)\n    rep.finish()\n",
+    "new": "        sys.exit(0)\n    rep.finish()\n"
+  },
+  {
+    "label": "dependabot: prs: ci red check not reported",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "            rep.problem(f\"{n}: {got} {at}: CI's result stands",
+    "new": "            print(f\"{n}: {got} {at}: CI's result stands"
+  },
+  {
+    "label": "dependabot: prs: check ignores a stale tree in a cloud clone",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if marker_path().exists():  # a cloud clone",
+    "new": "    if False:  # a cloud clone"
+  },
+  {
+    "label": "dependabot: prs: check stops a stale tree locally too",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if marker_path().exists():  # a cloud clone",
+    "new": "    if True:  # a cloud clone"
+  },
+  {
+    "label": "dependabot: prs: check doesn't need the pre-push guard",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    \".githooks/pre-push\": NO_DEP_CODE,\n",
+    "new": ""
+  },
+  {
+    "label": "dependabot: prs: preflight's marker in the worktree's git dir",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "\"--path-format=absolute\", \"--git-common-dir\"]",
+    "new": "\"--path-format=absolute\", \"--git-dir\"]"
+  },
+  {
+    "label": "dependabot: prs: check reads HEAD, not the PR head",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "git_show(sha, f)",
+    "new": "git_show(\"HEAD\", f)"
+  },
+  {
+    "label": "dependabot: common: a binding refusal with any message accepted",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "    if r.returncode == 1 and \"HTTP 403\" in out and message in out:\n",
+    "new": "    if r.returncode == 1 and \"HTTP 403\" in out:\n"
+  },
+  {
+    "label": "dependabot: common: a binding refusal with any status accepted",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "    if r.returncode == 1 and \"HTTP 403\" in out and message in out:\n",
+    "new": "    if r.returncode == 1 and message in out:\n"
+  },
+  {
+    "label": "dependabot: common: an answered binding call not named as one",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "    if r.returncode == 0:\n        return \"it answered (HTTP 2xx)\"\n",
+    "new": "    if False:\n        return \"it answered (HTTP 2xx)\"\n"
+  },
+  {
+    "label": "dependabot: common: every binding call read as refused",
+    "file": ".claude/scripts/dependabot/_common.py",
+    "old": "    return refusal(run(cmd, ok_codes=(0, 1)), message)\n",
+    "new": "    return None\n"
+  },
+  {
+    "label": "dependabot: prs: session binding: any answer passes",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if got is None:\n            rep.ok(f\"session binding",
+    "new": "        if True:\n            rep.ok(f\"session binding"
+  },
+  {
+    "label": "dependabot: prs: session binding: the other repository not asked",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        (\n            [\"gh\", \"api\", f\"repos/{OTHER_REPO}\"],\n            NOT_ENABLED,\n            f\"gh api repos/{OTHER_REPO} (another repository)\",\n        ),\n",
+    "new": ""
+  },
+  {
+    "label": "dependabot: prs: session binding: the path outside repos/ not asked",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        ([\"gh\", \"api\", UNBOUND_PATH], SESSION_BOUND, f\"gh api {UNBOUND_PATH} (outside repos/...)\"),\n",
+    "new": ""
+  },
+  {
+    "label": "dependabot: prs: session binding: messages swapped",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        ([\"gh\", \"api\", UNBOUND_PATH], SESSION_BOUND,",
+    "new": "        ([\"gh\", \"api\", UNBOUND_PATH], NOT_ENABLED,"
+  },
+  {
+    "label": "dependabot: prs: cloud preflight skips the session binding",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        session_binding(rep)\n",
+    "new": "        pass\n"
+  },
+  {
+    "label": "dependabot: prs: session binding runs locally too",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        installations(rep)\n",
+    "new": "        installations(rep)\n        session_binding(rep)\n"
+  },
+  {
+    "label": "dependabot: prs: local preflight skips the installation check",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        installations(rep)\n",
+    "new": "        pass\n"
+  },
+  {
+    "label": "dependabot: prs: installation on all repositories accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        if selection != \"selected\":\n",
+    "new": "        if False:\n"
+  },
+  {
+    "label": "dependabot: prs: any app's installation read as Claude's",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "if i[\"app_slug\"] == APP_SLUG]",
+    "new": "if True]"
+  },
+  {
+    "label": "dependabot: prs: only the first installation read",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    for inst in found:\n",
+    "new": "    for inst in found[:1]:\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: a patch read as a newer minor",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if latest[:2] > have[:2]:\n",
+    "new": "    if latest > have:\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: a newer minor never reported",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if latest[:2] > have[:2]:\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: two uv pins accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if len(set(pins)) != 1:\n",
+    "new": "    if not pins:\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: reads the checkout, not origin/dev",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    text = git_show(\"origin/dev\", UV_DOCKERFILE)\n",
+    "new": "    text = git_show(\"HEAD\", UV_DOCKERFILE)\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: the path message taken for the repo refusal",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if (why := refusal(r, NOT_ENABLED)) is None:\n",
+    "new": "    if (why := refusal(r, SESSION_BOUND)) is None:\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: any failure read as the cloud refusal",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if (why := refusal(r, NOT_ENABLED)) is None:\n",
+    "new": "    if (why := refusal(r, NOT_ENABLED)) is None or r.returncode:\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: a tag with no version accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if not latest:\n        raise ToolError",
+    "new": "    if False:\n        raise ToolError"
+  },
+  {
+    "label": "dependabot: docker: the cloud's Sigstore reason never given",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "        return CLOUD_SIGSTORE if detect_mode() == \"cloud\" else \"\"\n",
+    "new": "        return \"\"\n"
+  },
+  {
+    "label": "dependabot: docker: the cloud's Sigstore reason given locally",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "        return CLOUD_SIGSTORE if detect_mode() == \"cloud\" else \"\"\n",
+    "new": "        return CLOUD_SIGSTORE\n"
+  },
+  {
+    "label": "dependabot: docker: an unknown mode read as the cloud",
+    "file": ".claude/scripts/dependabot/docker_digest.py",
+    "old": "    except ToolError:\n        return \"\"\n",
+    "new": "    except ToolError:\n        return CLOUD_SIGSTORE\n"
+  },
+  {
+    "label": "dependabot: prs: a cut-short installation list accepted",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if got[\"total_count\"] != len(got[\"installations\"]):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: prs: no Claude installation passes",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "        rep.problem(\n            f\"installation: no {APP_SLUG!r}",
+    "new": "        rep.ok(\n            f\"installation: no {APP_SLUG!r}"
+  },
+  {
+    "label": "dependabot: actions: any failed tag call read as the cloud refusal",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "        if refusal(r, NOT_ENABLED) is None:\n            raise CloudRefused(path)\n",
+    "new": "        raise CloudRefused(path)\n"
+  },
+  {
+    "label": "dependabot: actions: the cloud refusal read as a tool error",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "        if refusal(r, NOT_ENABLED) is None:\n            raise CloudRefused(path)\n",
+    "new": ""
+  },
+  {
+    "label": "dependabot: actions: a cloud-refused pin passes",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "        except CloudRefused:\n            rep.problem(\n",
+    "new": "        except CloudRefused:\n            rep.ok(\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: the same minor read as newer",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if latest[:2] > have[:2]:\n",
+    "new": "    if latest[:2] >= have[:2]:\n"
+  },
+  {
+    "label": "dependabot: prs: session binding asks the bound repository",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "            [\"gh\", \"api\", f\"repos/{OTHER_REPO}\"],\n",
+    "new": "            [\"gh\", \"api\", f\"repos/{REPO}\"],\n"
+  },
+  {
+    "label": "dependabot: prs: uv-release: a failed call not stopped",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if r.returncode:\n        raise ToolError(f\"gh api repos/{OTHER_REPO}/releases/latest failed",
+    "new": "    if False:\n        raise ToolError(f\"gh api repos/{OTHER_REPO}/releases/latest failed"
+  },
+  {
+    "label": "dependabot: prs: no Claude installation never checked",
+    "file": ".claude/scripts/dependabot/prs.py",
+    "old": "    if not found:\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "dependabot: actions: a cloud-refused pin falls through to the sha compare",
+    "file": ".claude/scripts/dependabot/actions_pins.py",
+    "old": "                \"the cloud (decision-048)\"\n            )\n            continue\n",
+    "new": "                \"the cloud (decision-048)\"\n            )\n"
   }
 ]

@@ -48,9 +48,11 @@ tempted to bypass it.
    fixture manifest, `TOKENIZER_VERSION` and `SCHEMA_VERSION`.
 5. **claude-tooling:** `make tooling` — roster lint, `.claude/README.md` and learnings `INDEX.md`
    freshness (`--check`), `check_backlog.py` (no Done task left in `backlog/tasks/`, no task or decision
-   id used twice), digest pins in `deploy/` (`check_digest_pins.py`), the npm manifests against the lock's
-   workspace entries (`dependabot/npm_specs.py`, TASK-212), `lint_probes.py`, and every case table under
-   `.claude/hooks/tests/` and `.claude/scripts/tests/`.
+   id used twice), digest pins in `deploy/` (`check_digest_pins.py`), every tracked file
+   `scripts/setup-dev.sh` chmods +x committed 100755 (`check_file_modes.py`, TASK-241), every `setup-uv` step's
+   `version` equal to `deploy/api.Dockerfile`'s uv (`check_uv_pin.py`, TASK-252), the npm manifests
+   against the lock's workspace entries (`dependabot/npm_specs.py`, TASK-212), `lint_probes.py`, and every
+   case table under `.claude/hooks/tests/` and `.claude/scripts/tests/`.
 6. **pr-gates** (three jobs): `attribution` scans every commit message in `base..head` and the PR
    title/body; `learnings` needs an added or extended `YYYY-MM-DD-<slug>.md` entry directly in
    `.claude/learnings/` unless labelled `no-learning`; `review-attested` compares `<!-- op-review: <sha>
@@ -71,7 +73,8 @@ tempted to bypass it.
 - Pinning: every action is pinned to a full commit SHA with a `# vX.Y.Z` version comment, and must stay
   that way. Dependabot (`.github/dependabot.yml`) bumps `github-actions`, `uv`, `npm` and the `docker`
   base-image digests in `deploy/` weekly, minor and patch grouped into one PR per ecosystem and semver-majors
-  ignored (a major is a deliberate, hand-made PR; spec 08 §CI); review its PRs like any other, plus the
+  ignored (a major is a deliberate, hand-made PR; spec 08 §CI), and so are a `python` image minor and, while uv is
+  0.x, an `astral-sh/uv` minor (a breaking release; the rule goes at uv 1.0); review its PRs like any other, plus the
   Dependabot checks in spec 08 §CI (release notes, supply chain, the manifest against the lock's
   `packages["frontend"]`, which `make tooling` also checks on every PR with `npm_specs.py` (TASK-212),
   `npm audit --omit=dev`, lock edits under the `.nvmrc` Node). A weekly routine runs
@@ -79,7 +82,17 @@ tempted to bypass it.
   change to a check changes the script, its rows in `.claude/scripts/tests/dependabot_cases.py` and its
   mutants in `.claude/scripts/mutants/dependabot.json` together. The routine is a Claude Code cloud session,
   which refuses GitHub GraphQL (so every `gh pr` command): the procedure and scripts call GitHub through REST
-  only, and queue through the session's CCR auto-merge route (TASK-213, decision-048's addendum). Its `uv` entry
+  only (TASK-213, decision-048's addendum). A cloud run is notify-only (decision-048, 2026-10-16): it reviews and
+  reports through its run summary and makes no GitHub write; merging is a local run's (`prs.py queue` runs `gh pr
+  merge --auto --match-head-commit` and refuses in a cloud session). A cloud run also executes none of the PR's
+  dependency code (2026-10-13): it reads CI's results for the head with `prs.py ci` instead of running `make
+  test`, and `prs.py preflight`'s `op-no-dep-code` marker makes the Makefile's dependency targets refuse
+  (`dep-code-allowed`), `setup-dev.sh` skip `uv sync`, the pre-push hook refuse every push and `record-review.py
+  --attest` refuse; a new target that installs or runs dependencies takes `dep-code-allowed` as a prerequisite.
+  The session's proxy refuses the paths outside `repos/` and the other repositories probed so far (with its own
+  403s; the advisory calls too, TASK-247), so a cloud check must be one it can answer: `prs.py preflight`
+  checks those refusals in the cloud and the App installation locally, and Sigstore and `actions_pins.py`'s tag
+  lookups can't run there (decision-048's TASK-243 AC3/AC6 addendum). Its `uv` entry
   ignores `tantivy`, whose upgrade must bump `SCHEMA_VERSION` by hand (spec 08 §Release), and every image a
   `deploy/` build pulls stays digest-pinned (`check_digest_pins.py`, spec 08 §Deploy).
 - Secrets: CI never needs OpenReview credentials — tests use recorded HTTP fixtures. No `data/` in

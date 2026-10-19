@@ -17,17 +17,20 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
   spec 08 §Release), which requires green checks but **no mandatory approving review** under the
   solo-maintainer policy applied on 2026-10-03; `main` doesn't require `dev` up to date, so there is no
   back-merge (decision-046).
-- Branch protection: both `dev` and `main` accept only PRs whose required checks are green. `dev` merges
+- Branch protection: both `dev` and `main` accept only PRs whose required checks are green, and on each branch every
+  one must be GitHub Actions' check run (app_id 15368: `dev` TASK-251, `main` TASK-258; rollback in decision-027). `dev` merges
   through a **merge queue** (TASK-161, decision-027; §Merge method).
 
 ## Closing order (CLAUDE.md §Closing workflow — approvals are per-commit)
 1. Tests and lint green locally, **scaled by risk** (§Local test runs). Paste the command and the result,
    never a claim.
-2. Backlog task updated via the CLI (criteria checked, notes, final summary); a finished task is moved with
-   `backlog task complete <id>` (`.claude/skills/task-hygiene/SKILL.md`).
+2. Backlog task updated via the CLI (criteria checked, notes); it stays In Progress until step 5 is over.
 3. Docs, specs and READMEs as-built in the same branch.
 4. `/record-learnings` → commit the entry and regenerated `INDEX.md`.
-5. `/review-gate` → routed reviewers, every finding dispositioned, `record-review.py APPROVE` for HEAD.
+5. `/review-gate` → routed reviewers, every finding dispositioned. When a round leaves nothing to fix, finalize
+   the task (`-s Done --final-summary`, `backlog task complete <id>`) in a commit of only the CLI's files, have
+   `code-reviewer` and `docs-reviewer` review that head, then `record-review.py APPROVE` for HEAD
+   (`.claude/skills/task-hygiene/SKILL.md`).
 6. Before the first push, `git log -p origin/dev..HEAD | grep -i` for the owner's contact address and any other
    personal data (plans, rulings and briefs say "the address in `.env`", never the address; a leak found
    after commit is removed by rewriting the unpushed branch, never after push). Then
@@ -67,7 +70,12 @@ the affected tests. A long command runs in the **foreground**, behind a wait for
 a session that backgrounds its run and waits to be told can stop with its work uncommitted. Scratch files are
 named after the task (`t181-test.log`), never `test.log`. Nothing a session starts listens on 8000 or 3000
 (`OP_E2E_API_PORT` / `OP_E2E_WEB_PORT` for e2e). A session in a worktree reports its follow-ups; it creates no
-Backlog ids.
+Backlog ids. A mutation run is as heavy as a full suite: one `mutate.py` run on the machine at a time, at
+`--jobs 2` (its default is the CPU count, up to 8), with nothing else heavy running (two at `--jobs 4` took the
+load to 180–260 on 8 CPUs; 2026-10-16). A decision a background agent needs before it merges goes in its brief;
+one sent later as a message counts only once the agent says it has it, and the agent doesn't queue the PR
+(`gh pr merge --auto`) before then, because a message to an agent that is mid-turn is read when the turn ends,
+often after the merge (2026-10-16).
 
 The learnings commit comes **before** the review because the review record is keyed to the exact HEAD
 sha. Any commit after an approval — a typo fix, a rebase, an amend — produces a new sha with no record, and
@@ -87,15 +95,17 @@ sha. Any commit after an approval — a typo fix, a rebase, an amend — produce
 - Records are **per-sha**: an approval covers exactly one commit.
 - `--attest` adds `<!-- op-review: <sha> APPROVE -->` to the PR body; CI's `review-attested` step compares
   it to the PR head sha. After pushing a fix to an open PR, re-run the gate and `--attest` again. It finds the
-  branch's PR with `gh pr view` (GraphQL); `--attest --pr <n> --repo <owner>/<name>` reads it over REST instead,
-  for a Claude Code cloud session, which refuses GraphQL, and refuses a PR that isn't open at HEAD (TASK-213).
+  branch's PR with `gh pr view` (GraphQL); `--attest --pr <n> --repo <owner>/<name>` reads it over REST instead
+  (`/dependabot-review` uses it; TASK-213), and refuses a PR that isn't open at HEAD. In a cloud
+  `/dependabot-review` clone (`prs.py preflight`'s `op-no-dep-code` marker) `--attest` refuses, and `--attest --pr`
+  also wherever GraphQL is refused as in a cloud session: that run is notify-only (decision-048, 2026-10-16).
 
 ## Required CI checks (six)
 | Check (workflow) | Covers |
 |---|---|
 | `lint` (`lint.yml`) | `make lint`: ruff format/check, mypy --strict (`backend/src` and the `/dependabot-review` scripts), shellcheck; prettier, eslint, tsc; then actionlint |
 | `test` (`test.yml`) | pytest unit/golden/differential/contract under pytest-xdist, properties at the `pr` profile (200 examples, 2 s deadline); vitest; OpenAPI→TS freshness |
-| `claude-tooling` (`claude-tooling.yml`) | `make tooling`: roster lint, `.claude/README.md` + learnings index freshness, backlog hygiene (no Done task in `tasks/`, no id used twice), digest pins in `deploy/`, the npm manifests against the lock (`npm_specs.py`, TASK-212), every case table |
+| `claude-tooling` (`claude-tooling.yml`) | `make tooling`: roster lint, `.claude/README.md` + learnings index freshness, backlog hygiene (no Done task in `tasks/`, no id used twice), digest pins in `deploy/`, the files `setup-dev.sh` chmods committed 100755 (`check_file_modes.py`, TASK-241), every CI `setup-uv` step on the api image's uv (`check_uv_pin.py`, TASK-252), the npm manifests against the lock (`npm_specs.py`, TASK-212), `lint_probes.py`, every mutant runnable as written (`mutate.py --check`, TASK-254), every case table |
 | `attribution` (`pr-gates.yml`) | no AI attribution in any commit message or the PR title/body |
 | `learnings` (`pr-gates.yml`) | the branch adds or extends a learnings entry, or is labelled `no-learning` |
 | `review-attested` (`pr-gates.yml`) | the PR body attests APPROVE for the head sha |

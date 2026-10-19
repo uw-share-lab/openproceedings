@@ -12,5 +12,13 @@ unset $(git rev-parse --local-env-vars)
 # GitHub credential, which only the push itself (git, in the parent process) needs (decision-048, TASK-211)
 ghcfg=$(mktemp -d) && trap 'rm -rf "$ghcfg"' EXIT
 nocred=(env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN "GH_CONFIG_DIR=$ghcfg")
+# A cloud /dependabot-review run is notify-only (decision-048, 2026-10-16): it makes no GitHub write, a push
+# included, so the hook refuses every push while prs.py preflight's marker is there (and runs nothing: make lint
+# would install and run the PR's dependencies, which a cloud run never does, 2026-10-13).
+common=$(git rev-parse --path-format=absolute --git-common-dir) || { echo "pre-push: git rev-parse failed: can't check for op-no-dep-code" >&2; exit 1; }
+if [ -e "$common/op-no-dep-code" ]; then
+  echo "pre-push: refused: $common/op-no-dep-code is there (a cloud /dependabot-review run is notify-only and pushes nothing: decision-048)" >&2
+  exit 1
+fi
 echo "pre-push: make lint" && "${nocred[@]}" make --no-print-directory lint
 echo "pre-push: make tooling" && "${nocred[@]}" make --no-print-directory tooling

@@ -238,6 +238,29 @@ echo "xargs appends words no gate can see (TASK-067):"
 check feature/x block 'echo dev | xargs git push origin'           # xargs supplies the refspec
 check feature/x block "echo origin dev | xargs sh -c 'git push \"\$@\"' sh"   # ... also through sh -c "\$@"
 check feature/x allow 'echo x | xargs git log -1'                  # positive control
+# TASK-249: xargs's flag is carried into the sh -c it runs, so the commit there is refused; without it, a commit on
+# a feature branch passes (the words xargs adds reach git as "$@", which this gate doesn't see)
+check feature/x block "echo -- --amend | xargs sh -c 'git commit -m wip \"\$@\"' sh"
+check feature/x allow "echo x | xargs sh -c 'git log -1 \"\$@\"' sh"        # positive control: no guarded command
+
+echo "more wrappers cmdparse strips, each with its value-taking options (TASK-248):"
+# Regression rows: this gate reads any `git` word after a command it doesn't know, so only the flock -c/--command
+# rows (git inside one quoted string) need the stripping; the rows that kill the wrapper mutants are in
+# test-openproceedings-gates.sh's TASK-248 section.
+check main  block 'xcrun git commit -m x'
+check main  block 'xcrun -sdk macosx git commit -m x'                 # -sdk takes a value
+check main  block 'xcrun --toolchain=swift git commit -m x'
+check main  block 'caffeinate -i -t 60 git commit -m x'               # -t takes a value
+check main  block 'arch -arch arm64 git commit -m x'                  # -arch takes a value
+check main  block 'arch -x86_64 -e A=1 git commit -m x'               # -e NAME=value is an assignment
+check main  block 'doas -u root git commit -m x'                      # -u takes a value
+check main  block 'flock -w 5 /tmp/op.lock git commit -m x'           # -w takes a value; then the lock file
+check main  block "flock -n /tmp/op.lock -c 'git commit -m x'"        # -c runs its string in a shell
+check feature/x block "flock /tmp/op.lock --command 'git status; git push origin HEAD:dev'"
+check main  block 'unbuffer -p git commit -m x'
+check main  allow "flock /tmp/op.lock -c 'git status'"                # positive control: a read in the shell
+check main  allow "flock /tmp/op.lock --command 'git status'"         # --command is -c
+check main  allow 'xcrun -sdk macosx git log -1'                      # positive control
 
 echo "git -c config overrides and aliases are expanded before classifying (TASK-067):"
 check feature/x block 'git -c remote.origin.push=HEAD:refs/heads/dev push origin'   # -c picks the destination
@@ -346,7 +369,12 @@ echo "git-<sub> programs are git <sub> (TASK-067 review gate):"
 check feature/x block '$(git --exec-path)/git-push origin HEAD:dev'
 check main      block '/usr/libexec/git-core/git-commit -m x'
 check feature/x allow '/usr/libexec/git-core/git-push origin feat'
-check feature/x block 'caffeinate -i /usr/libexec/git-core/git-push origin HEAD:dev'   # behind a wrapper cmdparse doesn't know
+check feature/x block 'caffeinate -i /usr/libexec/git-core/git-push origin HEAD:dev'   # a known wrapper since TASK-248: kept as a regression row
+# behind a wrapper cmdparse doesn't know, git_calls reads the git word itself (TASK-261: these rows used caffeinate,
+# which TASK-248 made a known wrapper, so the fallback went untested); the name is made up so it stays unknown
+check feature/x block 'unknown-wrapper -i /usr/libexec/git-core/git-push origin HEAD:dev'   # basenamed, git-<sub> kept as its subcommand
+check main      block 'unknown-wrapper git-commit -m x'
+check feature/x allow 'unknown-wrapper git-push origin feat'          # positive control
 
 echo "an unparseable command with a git write word is refused (TASK-067 final review gate):"
 check main      block 'git cherry-pick x "'
@@ -435,6 +463,8 @@ check_cwd main "$WT" block "GIT_DIR=\"$REPO/.git\"; export GIT_DIR; git commit -
 check_cwd main "$WT" block "declare -x GIT_DIR=\"$REPO/.git\" && git commit -m x"
 check_cwd main "$WT" allow "GIT_DIR=\"$REPO/.git\"; git commit -m x"         # a shell variable git never sees
 check_cwd main "$WT" allow "export GIT_DIR=\"$REPO/.git\"; unset GIT_DIR; git commit -m x"
+check_cwd main "$WT" block "arch -e GIT_DIR=\"$REPO/.git\" git commit -m x"   # arch -e sets it for what it runs (TASK-248)
+check_cwd main "$WT" allow "export GIT_DIR=\"$REPO/.git\"; arch -d GIT_DIR git commit -m x"  # ... and arch -d unsets it
 check_cwd main "$WT" block "GIT_DIR=\"$REPO/.git\" git branch -f main HEAD"  # moves the main worktree's branch
 
 echo "multiple -C flags chain like real git (defect 1 -- HIGH bypass fix):"
@@ -570,7 +600,8 @@ check_cwd main "$WT" block "cd ~+/\"$WT_TO_REPO\" && git commit -m x"
 check_cwd main "$WT" block 'cd "$OP_UNSET_DIR" && git commit -m x'      # a directory this gate can't tell
 check_cwd main "$WT" allow "pushd \"$WT_TO_REPO\" && popd && git commit -m x"
 check_cwd main "$WT" allow "cd \"\$OP_UNSET_DIR\" && git -C \"$WT\" commit -m x"   # an absolute -C places it
-check feature/x block 'caffeinate git -c alias.p=push p origin HEAD:dev'   # an alias behind an unknown wrapper
+check feature/x block 'caffeinate git -c alias.p=push p origin HEAD:dev'   # behind a known wrapper since TASK-248: kept as a regression row
+check feature/x block 'unknown-wrapper git -c alias.p=push p origin HEAD:dev'   # an alias behind an unknown wrapper (TASK-261)
 check feature/x block 'B=dev; git push origin HEAD:$B'
 check feature/x block 'git push origin HEAD:$OP_UNSET_REF'                # a destination this gate can't tell
 check feature/x allow 'B=feat; git push origin HEAD:$B'
@@ -672,6 +703,16 @@ check_msg dev block no 'cd ~ && git commit -m x'                                
 HOME="$(dirname "$WT")" check_msg dev block no "cd ~/$WT_NAME && cd ~ && git commit -m x"   # a later cd clears it
 HOME="$(dirname "$WT")" check_msg dev allow no "cd ~/$WT_NAME && git -C $WT commit -m x"        # absolute -C
 HOME="$(dirname "$WT")" check_msg dev block no "cd ~/$WT_NAME && git push origin HEAD:dev"      # not a commit
+
+echo "TASK-253: env -C / sudo -D move only the command they run, read with every option the wrapper takes:"
+check_cwd main "$REPO" block "env -C \"$WT\" true; git commit -m x"         # the commit runs here, on main
+check_cwd main "$REPO" block "sudo -D \"$WT\" true; git commit -m x"
+check_cwd main "$REPO" allow "env -C \"$WT\" git commit -m x"               # the worktree's feature branch
+check_cwd main "$REPO" allow "sudo -nD \"$WT\" git commit -m x"             # a group ending in -D: the next word
+check_cwd main "$REPO" allow "env --ch=\"$WT\" git commit -m x"             # a unique prefix of --chdir
+check_cwd main "$WT"   block 'env -C "$OP_UNSET_253" git commit -m x'      # a directory it can't resolve
+check_cwd main "$WT"   allow 'env -C . git commit -m x'                    # resolved from the call's cwd, not the hook's
+check feature/x block 'env -C /tmp true >> .git/config; git p origin HEAD:main'  # the shell writes ./.git/config
 
 echo "TASK-172: the payload reaches Python on stdin, so a command past ARG_MAX is parsed, not text-checked:"
 BIG=$(python3 -c 'import json; print(json.dumps({"tool_input":{"command":"git commit -m \"" + "x" * 1100000 + "\""}}))')
