@@ -1,10 +1,10 @@
 ---
 id: TASK-261
 title: Kill the 9 nightly mutant survivors in the hook tooling
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-18 14:16'
-updated_date: '2026-10-18 15:44'
+updated_date: '2026-10-19 11:49'
 labels:
   - tooling
   - mutation
@@ -24,7 +24,7 @@ Found by the v0.4.0 release (2026-10-18, spec 08 §Release step 1): the schedule
 <!-- AC:BEGIN -->
 - [x] #1 Each of the 9 mutants is killed by a case-table row that fails on the message it asserts, or recorded as equivalent with the reason in the mutant file
 - [x] #2 mutate.py on each affected shard (at --jobs 2) reports no survivors locally
-- [ ] #3 A nightly dispatched on the merged head is green
+- [x] #3 A nightly dispatched on the merged head is green
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -60,4 +60,12 @@ Review round 1 (code, docs, security, QA): no Must. Fixed:
 - a sibling absolute find start;
 - xargs mv -t /tmp → frontend (on Linux /tmp is above the table's repo);
 - relabels.
+
+AC#3: nightly 39221205207 on b24060b8 (contains edc6d5b5) passed every job; the earlier 39191247944 failed only on a shard timeout (TASK-265), with no survivors.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The nine nightly survivors are killed by case-table rows; a nightly on the merged head is green.
+<!-- SECTION:FINAL_SUMMARY:END -->
