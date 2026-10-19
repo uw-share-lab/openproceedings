@@ -1333,9 +1333,9 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   operationId; and every open enum's schema is marked open (`mark_open_enums`).
 - As built (task-035, `api/search.py`, `api/papers.py`, `api/meta.py`, `api/models.py`; the models are the
   contract):
-  - Each router is declared with `prefix="/api/v1"` and included directly, because FastAPI 0.141 leaves
-    `scope["route"].path` relative to the router that declared a route, and a prefix added by nesting
-    routers drops out of the access line's `route`.
+  - Each router is declared with `prefix="/api/v1"` and included directly, because FastAPI leaves
+    `scope["route"].path` relative to the router that declared a route (found on 0.141 by task-035), and a
+    prefix added by nesting routers drops out of the access line's `route`.
   - `GET /search` calls `openproceedings.search.run`, the function `op search` calls, on the one engine
     the request read. It expands every wildcard first, then collects the match set once for `total` and the
     page, then does exclusion accounting with that `total`, then reads the page's display records. The API

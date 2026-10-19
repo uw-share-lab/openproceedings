@@ -626,6 +626,77 @@ def _(c: Case) -> None:
     c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM node_modules/x 1\.0\.0: added")
 
 
+# npm_lock.OWNER_ACCEPTED's seed: 6.0.0, PR #165's owner comment (TASK-262)
+ACCEPTED = "@codemirror/streamparser"
+
+
+def npm_added(
+    c: Case, pkg: str, v: str, *, key: str | None = None, shown: dict[str, Any] | None = None, **extra: Any
+) -> list[str]:
+    """A lock that adds `pkg` at `v` (under `key` as an alias, `"name": pkg`, when given); `shown` goes to the registry's manifest."""
+    view(c, "next", "16.3.8")
+    view(c, pkg, v, **(shown or {}))
+    new = {
+        "next": entry("next", "16.3.8"),
+        key or pkg: entry(pkg, v, **extra) | ({"name": pkg} if key else {}),
+    }
+    return npm_case(c, {"next": entry("next", "16.3.8")}, new)
+
+
+@row("npm: a new package the owner accepted, at that version")
+def _(c: Case) -> None:
+    args = npm_added(c, ACCEPTED, "6.0.0")
+    c.expect("npm_lock.py", args, OK, r"^ok +node_modules/@codemirror/streamparser 6\.0\.0: added to the lock, a new "
+             r"package the owner accepted \(https://github\.com/uw-share-lab/openproceedings/pull/165"
+             r"#issuecomment-6245774665\)$")  # fmt: skip
+    c.expect("npm_lock.py", args, OK, r"^ok +@codemirror/streamparser 6\.0\.0: matches the registry "
+             r"\(publisher 'alice', provenance none\)$")  # fmt: skip
+
+
+@row("npm: an owner-accepted package's ok line names its provenance")
+def _(c: Case) -> None:
+    args = npm_added(c, ACCEPTED, "6.0.0", shown={"attest": "https://github.com/codemirror/stream-parser"})
+    c.expect("npm_lock.py", args, OK, r"^ok +@codemirror/streamparser 6\.0\.0: matches the registry "
+             r"\(publisher 'alice', provenance https://github\.com/codemirror/stream-parser\)$")  # fmt: skip
+
+
+@row("npm: an owner-accepted package at another version is a new package")
+def _(c: Case) -> None:
+    args = npm_added(c, ACCEPTED, "6.0.1")
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM node_modules/@codemirror/streamparser 6\.0\.1: added")
+
+
+@row("npm: an owner-accepted package installed under an alias is a new package")
+def _(c: Case) -> None:
+    args = npm_added(c, ACCEPTED, "6.0.0", key="streamparser")
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM node_modules/streamparser 6\.0\.0: added")
+
+
+@row("npm: an owner-accepted package is still checked against the registry")
+def _(c: Case) -> None:
+    args = npm_added(c, ACCEPTED, "6.0.0", integrity="sha512-x")
+    c.expect("npm_lock.py", args, PROBLEM, r"^PROBLEM @codemirror/streamparser 6\.0\.0: integrity differs")
+
+
+@row("npm: an owner-accepted package is still under the cooldown")
+def _(c: Case) -> None:
+    args = npm_added(c, ACCEPTED, "6.0.0", shown={"released": NOW})
+    c.expect(
+        "npm_lock.py",
+        args,
+        PROBLEM,
+        r"^PROBLEM @codemirror/streamparser 6\.0\.0: published 0\.\d days ago \(under 7",
+    )
+
+
+@row("npm: an owner-accepted package with an install script")
+def _(c: Case) -> None:
+    shown = {"scripts": {"postinstall": "node x.js"}}
+    args = npm_added(c, ACCEPTED, "6.0.0", shown=shown, hasInstallScript=True)
+    c.expect("npm_lock.py", args, PROBLEM,
+             r"^PROBLEM @codemirror/streamparser 6\.0\.0: install script\(s\) postinstall: never owner-accepted")  # fmt: skip
+
+
 @row("npm: a removed package")
 def _(c: Case) -> None:
     args = npm_case(

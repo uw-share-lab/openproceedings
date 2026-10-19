@@ -28,6 +28,14 @@ didn't move, a new install script, a new publisher, provenance the previous vers
 that comes from another repository, a semver-major bump, a dependency section of a manifest or of a
 workspace entry that isn't an object, a workspace entry missing from the lock (or not an object). A FIX,
 repaired in the PR: a manifest/lock pin that differs, a dropped `libc`.
+
+`OWNER_ACCEPTED` lists the new packages the owner has accepted, each as `name@version` with the URL of the PR
+comment that records the decision (/dependabot-review §10, TASK-262). Such a package, at exactly that version and
+under its own name (not an alias), is an `ok` line naming the comment instead of the new-package PROBLEM, and is
+still checked against the registry like a changed entry, cooldown included; its `ok` line names its publisher and
+provenance, and an install script is a PROBLEM (the acceptance never covers one). Any other version of it is a new
+package again. An entry stays after its PR merges, as the record; it matters again only if the package leaves the
+lock and comes back at that version.
 """
 
 from __future__ import annotations
@@ -58,6 +66,12 @@ DEP_FIELDS = ("dependencies", "optionalDependencies", "peerDependencies", "os", 
 GRAPH_FLAGS = {"dev", "optional", "devOptional", "peer"}  # set by where a package sits in the tree, not by it
 INSTALL_SCRIPTS = ("preinstall", "install", "postinstall")
 SLSA = "https://slsa.dev/provenance/"
+# name@version → the PR comment recording the owner's acceptance of that new package (/dependabot-review §10)
+OWNER_ACCEPTED = {
+    "@codemirror/streamparser@6.0.0": (
+        "https://github.com/uw-share-lab/openproceedings/pull/165#issuecomment-6245774665"
+    ),
+}
 
 Entry = dict[str, Any]
 
@@ -132,7 +146,7 @@ def norm(value: Any) -> Any:
 def check_entry(rep: Report, key: str, old: Entry | None, new: Entry) -> None:
     name = package_name(key, new)
     old_v, new_v = (old or {}).get("version"), str(new.get("version", ""))
-    label = f"{name} {old_v} -> {new_v}" if old_v != new_v else f"{name} {new_v}"
+    label = f"{name} {old_v} -> {new_v}" if old_v not in (None, new_v) else f"{name} {new_v}"
     found = len(rep.problems) + len(rep.fixes)
     if old is not None and package_name(key, old) != name:
         rep.problem(f"{key}: the package changed from {package_name(key, old)} to {name} (a new package)")
@@ -184,8 +198,13 @@ def check_entry(rep: Report, key: str, old: Entry | None, new: Entry) -> None:
             rep.problem(f"{label}: {old_v} had npm provenance ({was}), {new_v} has none")
         elif was and now != was:
             rep.problem(f"{label}: provenance repository changed from {was} to {now}")
+    if old is None and install_scripts(m):  # an owner-accepted new package (OWNER_ACCEPTED)
+        rep.problem(
+            f"{label}: install script(s) {', '.join(sorted(install_scripts(m)))}: never owner-accepted"
+        )
     if len(rep.problems) + len(rep.fixes) == found:
-        rep.ok(f"{label}: matches the registry (publisher {npm_user(m)!r})")
+        prov = f", provenance {provenance_repo(m) or 'none'}" if old is None else ""
+        rep.ok(f"{label}: matches the registry (publisher {npm_user(m)!r}{prov})")
 
 
 def without_deps(doc: dict[str, Any]) -> dict[str, Any]:
@@ -298,7 +317,13 @@ def main() -> None:
     for k in sorted(deps - set(old)):
         name = package_name(k, new[k])
         if name not in versions[0]:
-            rep.problem(f"{k} {new[k].get('version')}: added to the lock (a new package)")
+            version = new[k].get("version")
+            accepted = None if "name" in new[k] else OWNER_ACCEPTED.get(f"{name}@{version}")
+            if accepted:
+                rep.ok(f"{k} {version}: added to the lock, a new package the owner accepted ({accepted})")
+                check_entry(rep, k, None, new[k])
+            else:
+                rep.problem(f"{k} {version}: added to the lock (a new package)")
             continue
         olds = [ok for ok in deps & set(old) if package_name(ok, old[ok]) == name]
         source = max(olds, key=lambda ok: version_tuple(str(old[ok].get("version"))))

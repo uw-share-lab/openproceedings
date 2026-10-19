@@ -17,8 +17,8 @@ main thread, installs the SIGHUP reload. Logging is configured by the entry poin
 
 A new resource adds its `APIRouter(prefix=API_PREFIX)` to `ROUTERS`; its handlers are `def` and take the
 engine through `deps.EngineDep`. Each router carries the prefix itself and is included directly: FastAPI
-0.141 leaves `scope["route"].path` relative to the router that declared it, so a prefix added by nesting
-routers would drop out of the access line's route template (task-035).
+leaves `scope["route"].path` relative to the router that declared it (found on 0.141 by task-035), so a prefix
+added by nesting routers would drop out of the access line's route template.
 """
 
 from __future__ import annotations
