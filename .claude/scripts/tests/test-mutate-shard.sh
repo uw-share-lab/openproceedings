@@ -78,7 +78,7 @@ check "--list: exit 0"                         "$rc" "0"
 got=$(cat "$TMP/all")
 want=$(cat "$TMP/ref")
 check "--list: every mutant, in sorted-file order" "$got" "$want"
-for n in 3 8 12; do
+for n in 3 8 12 16; do
   : > "$TMP/union"; bad=0
   for i in $(seq 1 "$n"); do python3 "$REAL" --list --shard "$i/$n" >> "$TMP/union" || bad=1; done
   check "$n shards: every one exits 0"           "$bad" "0"
@@ -87,7 +87,7 @@ for n in 3 8 12; do
   want=$(sort "$TMP/ref")
   check "$n shards: complete and disjoint" "$got" "$want"
 done
-for n in 8 12; do
+for n in 8 12 16; do
   got=$(for i in $(seq 1 "$n"); do python3 "$REAL" --list --shard "$i/$n" | grep -c .; done | sort -n | sed -n '1p;$p' \
        | paste -sd' ' - | awk '{print ($2 - $1 <= 1) ? "yes" : "no"}')
   check "$n shards: sizes differ by at most 1" "$got" "yes"
