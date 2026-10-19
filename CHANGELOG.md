@@ -52,6 +52,7 @@ names the index it was verified on and which saved records still reproduce.
 - bump the npm-minor-patch group with 7 updates ([#165](https://github.com/uw-share-lab/openproceedings/pull/165))
 - tooling: kill the nine nightly mutant survivors (TASK-261) ([#167](https://github.com/uw-share-lab/openproceedings/pull/167))
 - small Dependabot-batch follow-ups (TASK-260, 262, 263, 264) ([#168](https://github.com/uw-share-lab/openproceedings/pull/168))
+- nightly: run make mutate as 16 shards (TASK-265) ([#171](https://github.com/uw-share-lab/openproceedings/pull/171))
 
 ### Data
 
