@@ -10,6 +10,56 @@ papers a query matches: a search record pins its `index_version`, `tokenizer_ver
 it with the same QUERY_VERSION; otherwise as `drifted`, naming what changed. Each release's Data section
 names the index it was verified on and which saved records still reproduce.
 
+## 0.4.0
+
+### Added
+
+- cloud Dependabot runs execute no PR dependency code (TASK-243) ([#147](https://github.com/uw-share-lab/openproceedings/pull/147))
+- data: AIES 2026 (Vol. 9) OJS section rows, snapshot and index (TASK-217) ([#155](https://github.com/uw-share-lab/openproceedings/pull/155))
+
+### Changed
+
+- dependabot-review waives a red test on a stale base only on checked conditions; cloud credential and attribution as built ([#145](https://github.com/uw-share-lab/openproceedings/pull/145))
+
+### Fixed
+
+- commit setup-dev.sh's chmod targets 100755 and check them in make tooling ([#146](https://github.com/uw-share-lab/openproceedings/pull/146))
+- dependabot-review step 0 checks the cloud session binding; Sigstore and action tags are the owner's in the cloud (TASK-243 AC3, AC6) ([#148](https://github.com/uw-share-lab/openproceedings/pull/148))
+- protect-data-dir refuses git commands that write backlog/ files by pathspec (additive) ([#149](https://github.com/uw-share-lab/openproceedings/pull/149))
+- attribution pattern catches a generated-by footer naming an AI tool; the hook reads bodies sent from files (TASK-243 AC5) ([#150](https://github.com/uw-share-lab/openproceedings/pull/150))
+- AIES 2026 gate note drops the task id from served text (copy deck CV-9) ([#157](https://github.com/uw-share-lab/openproceedings/pull/157))
+- deploy: turn comparisons on with a tested Caddy overlay (TASK-183) ([#156](https://github.com/uw-share-lab/openproceedings/pull/156))
+- tooling: getopt wrapper parsing, env -C for one command, sh -c/eval redirects, mv -t; vetted mutants (TASK-253, TASK-254) ([#169](https://github.com/uw-share-lab/openproceedings/pull/169))
+
+### Internal
+
+- linear-time checks pause the garbage collector while they time a call ([#141](https://github.com/uw-share-lab/openproceedings/pull/141))
+- dependabot: hand-upgrade uv 0.x minors; check a ghcr.io image's age and Dependabot's skipped cooldown ([#140](https://github.com/uw-share-lab/openproceedings/pull/140))
+- width_is_free measures the verifying thread's CPU time, not wall time (TASK-240) ([#144](https://github.com/uw-share-lab/openproceedings/pull/144))
+- bump hypothesis from 6.168.3 to 6.168.4 in the uv-minor-patch group ([#143](https://github.com/uw-share-lab/openproceedings/pull/143))
+- shelve the semantic layer (archive M5) and refresh the deployment tasks ([#151](https://github.com/uw-share-lab/openproceedings/pull/151))
+- bump the docker-minor-patch group across 1 directory with 2 updates ([#142](https://github.com/uw-share-lab/openproceedings/pull/142))
+- AAAI 2021 row at 1,697, op eval openalex vs aaai_library, OpenAlex licence URLs (TASK-234/235/236) ([#152](https://github.com/uw-share-lab/openproceedings/pull/152))
+- make the cloud /dependabot-review run notify-only (TASK-243, TASK-247) ([#153](https://github.com/uw-share-lab/openproceedings/pull/153))
+- upgrade the api image's uv to 0.13.0 by hand ([#154](https://github.com/uw-share-lab/openproceedings/pull/154))
+- cmdparse strips six more wrappers; scoped mutate tables; xargs sh -c row ([#158](https://github.com/uw-share-lab/openproceedings/pull/158))
+- file the 2026-10-16 batch's follow-ups and finish the shelved wording ([#159](https://github.com/uw-share-lab/openproceedings/pull/159))
+- pin dev's required checks and CI's uv; record the proxy cap decision ([#160](https://github.com/uw-share-lab/openproceedings/pull/160))
+- bump the uv-minor-patch group with 4 updates ([#164](https://github.com/uw-share-lab/openproceedings/pull/164))
+- bump the github-actions-minor-patch group with 3 updates ([#161](https://github.com/uw-share-lab/openproceedings/pull/161))
+- record main's required checks pinned to GitHub Actions (TASK-258) ([#166](https://github.com/uw-share-lab/openproceedings/pull/166))
+- bump node from \`43ac6c6\` to \`c3de60b\` in /deploy ([#163](https://github.com/uw-share-lab/openproceedings/pull/163))
+- bump the npm-minor-patch group with 7 updates ([#165](https://github.com/uw-share-lab/openproceedings/pull/165))
+- tooling: kill the nine nightly mutant survivors (TASK-261) ([#167](https://github.com/uw-share-lab/openproceedings/pull/167))
+- small Dependabot-batch follow-ups (TASK-260, 262, 263, 264) ([#168](https://github.com/uw-share-lab/openproceedings/pull/168))
+
+### Data
+
+- index_version `78d2e70310f3`, snapshot `03eab0ef56c4d768ca25c1942207d1c9eaf14a1d852bd276a05e013ae17210c7`
+- TOKENIZER_VERSION 3 · SCHEMA_VERSION 4 · Tantivy 0.26.2 · QUERY_VERSION 2
+- Search records saved under 0.3.0 replay as `reproduced` on the index_version they pin, while it is kept and supported and QUERY_VERSION matches. Earlier records also require a supported retained pin and matching QUERY_VERSION; release tables alone do not determine replay status.
+- Verified on the served index 78d2e70310f3 of the 173,518-paper snapshot of 2026-10-16, in which AIES 2026 (Vol. 9) joins the corpus (TASK-217). It is built with the same tokenizer, schema, query and Tantivy versions as 0.3.0, so search records saved on a retained supported index still replay as reproduced. The question of OpenAlex's terms (TASK-135) is still open: it has yet to go to the university copyright office, the public launch waits on its answer, and the OpenAlex abstract fill is unchanged until then. Promotion does not deploy data.
+
 ## 0.3.0
 
 **Changed replay inputs since 0.2.0: SCHEMA_VERSION 3 → 4. Replay against changed inputs reports `drifted`; retained supported pins reproduce when QUERY_VERSION matches. Incompatible pins require the matching historical release.**
