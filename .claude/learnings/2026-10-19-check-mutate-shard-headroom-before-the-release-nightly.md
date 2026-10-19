@@ -17,6 +17,10 @@ Get a green nightly on the 0.4.0 candidate (993772e9), as §Release step 1 asks,
   mutant set is fixed, so it would land at the cap again).
 - **The trend was visible a day early.** `gh run view <run> --json jobs` gives each shard's start and end; one
   look at the 2026-10-18 nightly (135 min) would have prompted the matrix change before the candidate was cut.
+- **A fix merged after the release bookkeeping makes `CHANGELOG.md` stale.** #171 landed after #170, so
+  `changelog.py --check --release 0.4.0` failed on `dev`, and would have failed step 6 on `main`. Run
+  `make changelog` again on a `release/*` branch (the generator leaves those out of the list, so that PR doesn't
+  make it stale in turn), and dispatch the nightly only once that has merged too.
 
 ## Dead ends — don't repeat these
 - Re-running only the timed-out shard: the same mutants on the same runner size end at the same cap.
