@@ -885,7 +885,11 @@ retention (step 8) matter (guarantee 4).
    changes. A refused replay must be resolved; a `mismatch` (exit 3, `API_REPLAY_MISMATCH`) blocks the release.
 4. **Release branch.** From here until the tag exists, nothing else merges into `dev`. `git switch -c
    release/X.Y.Z origin/dev`; set `version` to `X.Y.Z` in `backend/pyproject.toml` and
-   `frontend/package.json`, then `uv lock` and `npm install --package-lock-only --ignore-scripts`; in
+   `frontend/package.json`, and by hand on the app's own `version` line in each lockfile (the `openproceedings`
+   package in `uv.lock`, the `frontend` workspace entry in `package-lock.json`), never by re-resolving them: a
+   local `uv lock` or `npm install --package-lock-only` can rewrite unrelated fields (the lockfile `revision`,
+   npm's `libc` fields), so check with `uvx --from 'uv==<CI's pin>' uv lock --check` and read the lockfile diff,
+   one line per file (0.4.0's learning); in
    `CITATION.cff` set `version: X.Y.Z` (the release version, exactly) and `date-released:` to the day the tag
    is planned for (step 6), so the tagged file is the one "Cite this repository" shows for it; add
    `[releases."X.Y.Z"]` to `docs/releases.toml` from step 3's index manifest
