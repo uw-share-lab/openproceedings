@@ -1018,6 +1018,10 @@ HOSTILE_DOIS: dict[str, Callable[[int], str]] = {
     "inner-spaces": lambda n: "10.1/x" + " " * n + ".",
     "queries": lambda n: "https://doi.org/10.1/x" + "?" * n,
     "registrant": lambda n: "10." + "1." * (n // 2) + "/x!",
+    "registrant-no-slash": lambda n: "10." + "1." * (n // 2),
+    "registrant-late-bidi": lambda n: "10." + "1." * (n // 2) + "1/x\u202e",
+    "long-registrant-ok": lambda n: "10." + "1." * (n // 2) + "1/x",
+    "link-registrant": lambda n: "https://doi.org/10." + "1." * (n // 2) + "/x!",
     "label-link": lambda n: "doi:" + " " * n + "https://doi.org/10.1/x",
 }
 
@@ -1029,14 +1033,15 @@ def test_doi_key_is_linear_on_a_hostile_value(hostile: str) -> None:
     assert_near_linear(doi_key, HOSTILE_DOIS[hostile], 250_000, rounds=5)
 
 
-def test_doi_key_keeps_no_backtracking_state_on_a_long_registrant() -> None:
-    """A 1 MB registrant (`10.1.1.…1./x!`, no DOI) is refused without the regex engine holding state per `.N`: the
-    old greedy `(?:\\.\\d+)*` peaked at 63 MB here and ran memory-bound on CI (TASK-272). Measured in bytes, not
-    time, so a runner's cache can't make it flaky (tests/timing.py `peak_bytes`)."""
-    value = HOSTILE_DOIS["registrant"](1_000_000)
-    assert doi_key(value) is None
+@pytest.mark.parametrize("hostile", list(HOSTILE_DOIS))
+def test_doi_key_keeps_no_backtracking_state_on_a_hostile_value(hostile: str) -> None:
+    """Every hostile value at 1 MB is read in a bounded number of bytes: the old greedy registrant `(?:\\.\\d+)*`
+    held 63 MB of `re` state on a long `10.1.1.…`, refused or matched, and ran memory-bound on CI (TASK-272).
+    Measured in bytes, not time, so a runner's cache can't make it flaky (tests/timing.py `peak_bytes`); the
+    trim's own copies of the value stay well under 4x its size."""
+    value = HOSTILE_DOIS[hostile](1_000_000)
     peak = peak_bytes(lambda: doi_key(value))
-    assert peak < len(value), peak  # measured ~1 KB; the old pattern held ~63 MB
+    assert peak < 4 * len(value), peak  # the old pattern held ~63 MB on the registrant shapes
 
 
 def test_a_di_tag_is_not_read() -> None:
