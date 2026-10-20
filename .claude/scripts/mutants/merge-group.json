@@ -328,5 +328,23 @@
   "file": ".claude/scripts/merge_group_gate.py",
   "old": "generated[ -](with|by)",
   "new": "generated[ -](with)"
+ },
+ {
+  "label": "pr-gates: pr-base accepts a fork's dev",
+  "file": ".github/workflows/pr-gates.yml",
+  "old": "if [ \"$HEAD_REF\" = dev ] && [ \"$HEAD_REPO\" = \"$REPO\" ]; then",
+  "new": "if [ \"$HEAD_REF\" = dev ]; then"
+ },
+ {
+  "label": "pr-gates: pr-base skipped by a job-level if",
+  "file": ".github/workflows/pr-gates.yml",
+  "old": "  pr-base:\n    runs-on: ubuntu-latest\n",
+  "new": "  pr-base:\n    runs-on: ubuntu-latest\n    if: github.base_ref == 'dev'\n"
+ },
+ {
+  "label": "pr-gates: pr-base's refusal exits 0",
+  "file": ".github/workflows/pr-gates.yml",
+  "old": "Change this PR's base branch to dev (Edit, next to the title) — CONTRIBUTING.md\"\n          exit 1",
+  "new": "Change this PR's base branch to dev (Edit, next to the title) — CONTRIBUTING.md\"\n          exit 0"
  }
 ]
