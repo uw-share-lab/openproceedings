@@ -10,8 +10,9 @@ Merge #176 (TASK-272), then let #175 (TASK-270) and #177 (TASK-271), both alread
 auto-merge, follow it through `dev`'s merge queue before cutting `release/0.4.1`.
 
 ## What we learned
-- **Two learnings make two PRs conflict.** Every PR adds a learning, and `learnings_index.py` writes each new entry
-  at the top of the generated `INDEX.md`, newest first. Once #176 merged, #175 and #177 both conflicted with `dev`
+- **Two learnings make two PRs conflict.** Every PR adds a learning, and `learnings_index.py` inserts each entry by date,
+  newest first, so entries from the same few days land in adjacent lines near the top of the generated `INDEX.md`.
+  Once #176 merged, #175 and #177 both conflicted with `dev`
   on that file alone (evidence: `git merge-tree --write-tree --name-only origin/dev HEAD` named only
   `.claude/learnings/INDEX.md` for each).
 - **`DIRTY` drops the PR from the queue without a word.** #177 had been set to merge. After #176 merged,
@@ -25,8 +26,9 @@ auto-merge, follow it through `dev`'s merge queue before cutting `release/0.4.1`
   from the entries on disk. The rebased diff then added exactly one index line, and `git patch-id --stable` matched
   the old branch on every other file. So the old review record still covered the change; only its `fixed <sha>`
   references needed remapping to the rebased commits.
-- **#175 then conflicted with #177 the same way, but the queue serialized them.** Both were queued after the
-  rebase; #177 merged first and #175 merged right after it with no further rebase.
+- **Index lines conflict only when they land next to each other.** After the rebase, #177 and #175 were both
+  queued. Their index lines (one dated 2026-10-20, one 2026-10-19) don't touch, so #177 merged and #175 followed
+  with no further rebase (evidence: `git merge-tree --write-tree --name-only e0103442 f09b1d0a` is clean).
 
 ## Dead ends — don't repeat these
 - Closing and reopening a `DIRTY` PR to get fresh checks. Rebase it instead.

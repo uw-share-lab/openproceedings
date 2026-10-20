@@ -151,12 +151,12 @@ green PR to the queue with `gh pr merge <n> --auto`. That needs the repository's
 spec 08 §Git and PR rules gives the GraphQL `enqueuePullRequest` call that works without it. The queue's
 MERGE method makes the merge commit, and GitHub deletes the branch. Don't rebase a PR because `dev` moved. Its review record and attestation cover
 its head, and the queue tests that head on top of `dev` plus the PRs ahead of it. Several PRs can wait in
-the queue at once. Rebase only when the queue drops a PR, either for a conflict or for a red queue build.
-Then fix the cause, run the review round on the new head, `--attest` it, and queue it again. A push to a
-queued PR also drops it from the queue. A PR waiting for its checks that a sibling's merge leaves in conflict
-(`mergeStateStatus: DIRTY`) loses its auto-merge with no notice, and closing and reopening it runs no CI, so
-watch for `DIRTY` after each merge. Two PRs that each add a learning conflict in the generated
-`.claude/learnings/INDEX.md`: rebase, and at each stop run `learnings_index.py` instead of merging the hunks by hand.
+the queue at once. Rebase only when the queue drops a PR, either for a conflict or for a red queue build, or
+when a sibling's merge leaves a PR still waiting for its checks in conflict (`mergeStateStatus: DIRTY`). That PR
+loses its auto-merge with no notice, and closing and reopening it runs no CI, so watch for `DIRTY` after each
+merge. Then fix the cause, run the review round on the new head, `--attest` it, and queue it again. A push to a
+queued PR also drops it from the queue. When two PRs' learnings conflict in the generated
+`.claude/learnings/INDEX.md`, rebase and run `learnings_index.py` at each stop instead of merging the hunks by hand.
 
 To change a PR body, use `gh api -X PATCH repos/{owner}/{repo}/pulls/<n>`;
 `gh pr edit` fails here on the retired Projects (classic) API.
