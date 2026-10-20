@@ -6,6 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-20 14:42'
+updated_date: '2026-10-20 14:42'
 labels:
   - eval
   - security
@@ -22,7 +23,7 @@ test_doi_key_is_linear_on_a_hostile_value[registrant] failed twice on PR #175's 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 _DOI's registrant quantifiers are possessive (no backtracking can change its outcome), equivalent on a 200k-string random sample
-- [ ] #2 A test bounds doi_key's peak memory on the 1 MB registrant (tracemalloc, not time), failing on the old pattern (62.8 MB) and passing on the new (~0)
-- [ ] #3 spec 07's /compare hostile-value note says so
+- [x] #1 _DOI's registrant quantifiers are possessive (no backtracking can change its outcome), equivalent on a 200k-string random sample
+- [x] #2 A test bounds doi_key's peak memory on the 1 MB registrant (tracemalloc, not time), failing on the old pattern (62.8 MB) and passing on the new (~0)
+- [x] #3 spec 07's /compare hostile-value note says so
 <!-- AC:END -->

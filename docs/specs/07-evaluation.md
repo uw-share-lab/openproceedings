@@ -77,8 +77,9 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   carry a DOI (`DO`) and no link these rules read: a Scopus `UR` is its own record page, and Web of Science
   writes the venue with its volume and edition (`ADVANCES IN NEURAL INFORMATION PROCESSING SYSTEMS 35 (NEURIPS
   2022)`), which is no venue. A DOI (`DO`, the tag Scopus and Web of Science RIS both write, or a `doi.org` link; `DI` is
-  Web of Science's plain-text export tag, which is no RIS, and is not read; read by `doi_key` in one pass, so a
-  hostile value can't outlast `/compare`'s time limit: a `doi:` or `DOI `
+  Web of Science's plain-text export tag, which is no RIS, and is not read; read by `doi_key` in one pass, its pattern's
+  registrant possessive so refusing a long `10.1.1.…` holds no backtracking state (TASK-272), so a hostile value
+  can't outlast `/compare`'s time limit: a `doi:` or `DOI `
   label is dropped, then a doi.org link's prefix with or without its scheme, `www.` or `dx.`, and its query and
   fragment (so `DOI https://doi.org/…` reads), then the `.`, `,`, `;` or unbalanced `)` a sentence leaves after
   it; a suffix with whitespace, a control character or a bidi format character (marks, embeddings, overrides,
