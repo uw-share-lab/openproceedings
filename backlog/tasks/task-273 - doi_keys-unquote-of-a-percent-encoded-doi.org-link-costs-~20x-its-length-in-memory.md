@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-20 15:03'
+updated_date: '2026-10-20 15:05'
 labels:
   - eval
   - security
@@ -21,5 +22,5 @@ Found in TASK-272's review (qa+security, 2026-10-20): urllib's unquote builds a 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 doi_key's memory on a percent-encoded link is bounded at the largest line /compare accepts, or MAX_COMPARE_LINE is lowered so it is, with a peak_bytes test
+- [ ] #1 doi_key's memory on a percent-encoded link is bounded at the largest line /compare accepts (capped unquoting or a lower MAX_COMPARE_LINE, with a peak_bytes test), or the bound is documented in spec 07 with the owner's decision
 <!-- AC:END -->

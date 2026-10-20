@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-20 14:42'
-updated_date: '2026-10-20 15:02'
+updated_date: '2026-10-20 15:19'
 labels:
   - eval
   - security
@@ -33,4 +33,8 @@ test_doi_key_is_linear_on_a_hostile_value[registrant] failed twice on PR #175's 
 
 <!-- SECTION:NOTES:BEGIN -->
 Gate round 1 (code-reviewer) found the same shape in ingest/record.py _doi and ingest/sources/html.py's two name patterns (62.8 MB each on a 1 MB value); fixed in this PR with tests/timing.py peak_bytes (refuses an outer trace).
+
+Follow-up TASK-273 (unquote memory at MAX_COMPARE_LINE), from the qa+security round 1.
+
+Round 2: peak_bytes tests in test_timing.py; the security sweep's pre-existing quadratic regexes filed as TASK-274 (BibTeX export, before any public instance), TASK-275 (logs.scrub), TASK-276 (openreview_v1).
 <!-- SECTION:NOTES:END -->

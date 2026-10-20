@@ -721,9 +721,8 @@ def test_a_long_dotted_registrant_is_refused_without_backtracking_state() -> Non
         Urls(doi=bad)
     assert Urls(doi=good).doi == good
 
-    def refuse() -> (
-        None
-    ):  # the validator alone: pydantic's error quotes the 1 MB value, which isn't the regex's
+    # the validator alone: pydantic's error quotes the 1 MB value, which isn't the regex's
+    def refuse() -> None:
         with pytest.raises(ValueError):
             record_module._doi(bad)
 

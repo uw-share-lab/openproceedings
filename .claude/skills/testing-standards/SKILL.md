@@ -80,7 +80,7 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
    growth check (§CPU growth checks), in a daemon thread with a generous join when a hang is possible. A
    repeated group that must be followed by a delimiter it can never give back is written possessive
    (`(?:\.\d++)*+`): greedy, Python's `re` keeps state per repetition (63 MB on a 1 MB value, TASK-272), so
-   bound the peak with `tracemalloc` beside the CPU check; bytes don't depend on the runner's cache.
+   bound the peak with `backend/tests/timing.py`'s `peak_bytes` (tracemalloc) beside the CPU check; bytes don't depend on the runner's cache.
 8. **A failure that appears in one checkout only is a stored example.** The `.hypothesis` database holds an input
    no `@example` covers. Extract the falsifying input and pin it as an `@example` before bisecting or calling it
    pre-existing (a database copied between checkouts stores choice sequences, so the bisect proves nothing; the
@@ -144,7 +144,8 @@ whole test worker's heap, not the input, and fires mostly on the side that keeps
 ICML 2007 hostile page failed at 8.09 and 8.24 in CI's xdist workers that way, runs 38176036366 and
 38197206724). Before changing a sampling method, demonstrate that the former quadratic behavior still fails
 the same cutoff; a green optimized implementation alone does not prove the check works.
-`backend/tests/timing.py` is the one implementation (`cpu`, `growth`, `assert_near_linear`: 4x the input
+`backend/tests/timing.py` is the one implementation (`cpu`, `growth`, `assert_near_linear`, and `peak_bytes` for a
+memory bound where CPU time depends on the runner, §7: 4x the input
 under 8x the CPU time, median of paired rounds, collector paused; `backend/tests/unit/test_timing.py` shows
 a quadratic in work and one in allocation fail it, and that no collection runs inside a timed call); use it
 (or its `cpu`, for a one-size CPU bound) for every linear-time test, including batched ones (`growth(...,

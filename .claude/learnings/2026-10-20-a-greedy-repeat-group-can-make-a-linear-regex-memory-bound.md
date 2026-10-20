@@ -2,8 +2,8 @@
 
 **Key lesson:** When a `(?:sep\d+)*` group has to be followed by a character the group can never give back, make it possessive (`(?:\.\d++)*+`, Python 3.11+). Python's `re` keeps backtracking state for every repetition it might give back. On a long hostile value that state is tens of MB, and the time then likely depends on the runner's cache more than on the input. Test the bound in bytes (`tracemalloc`), not in time.
 
-- **Date:** 2026-10-20 · **Task:** TASK-272 · **Area:** eval, tooling
-- **Artifacts:** `eval/scholar_compare.py` (`_DOI`), `ingest/record.py` (`_doi`), `ingest/sources/html.py`, `backend/tests/timing.py` (`peak_bytes`)
+- **Date:** 2026-10-20 · **Task:** TASK-272 · **Area:** eval, ingest, tooling
+- **Artifacts:** `backend/src/openproceedings/eval/scholar_compare.py` (`_DOI`), `backend/src/openproceedings/ingest/record.py` (`_doi`), `backend/src/openproceedings/ingest/sources/html.py`, `backend/tests/timing.py` (`peak_bytes`)
 
 ## What we set out to do
 Get PR #175 (a docs-only head) through CI. `test_doi_key_is_linear_on_a_hostile_value[registrant]` failed twice
@@ -32,8 +32,9 @@ in a row there (10.3x and 11.3x CPU for 4x the input; the limit is 8x), but pass
 - None beyond the fix: possessive is exact for this pattern; a pattern where giving back can matter stays greedy.
 
 ## Follow-ups
-- None.
+- [ ] task-273 — doi_key's unquote of a percent-encoded doi.org link costs ~20x its length in memory
+- [ ] task-274, task-275, task-276 — older regexes that are quadratic in time, not memory (BibTeX `_braced`, `logs.scrub`, openreview_v1 `_TRAILING_AND`): a lookbehind that starts a match only at a run's start, found by the same review's sweep
 
 ## Propagated to
 - Skill: `.claude/skills/testing-standards/SKILL.md` §7 (possessive repeats on untrusted input, and a `tracemalloc` bound).
-- Test: `tests/timing.py` `peak_bytes`, used by `test_scholar_compare.py`, `ingest/test_record.py` and `ingest/test_html.py`.
+- Test: `tests/timing.py` `peak_bytes`, used by `backend/tests/unit/test_scholar_compare.py`, `backend/tests/unit/ingest/test_record.py` and `backend/tests/unit/ingest/test_html.py`.

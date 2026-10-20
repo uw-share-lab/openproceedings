@@ -11,6 +11,9 @@ ratio (a refusal that stops at a bound is constant time). And the large side's m
 `ceiling` (2 s): a backstop, far above any call site's cost, against a linear but far slower implementation,
 which a ratio alone passes.
 
+`peak_bytes` is the other measure: a tracemalloc peak, for a bound a runner's cache can't move (a greedy regex
+repeat holds `re` state per repetition, TASK-272).
+
 The cyclic garbage collector is paused while a call is timed (`cpu`). A full collection walks every tracked
 object in the process, so its cost is the test worker's whole heap, not the input; and it fires once enough
 objects have survived since the last one, so the side that keeps more objects alive pays it more often. In CI's
