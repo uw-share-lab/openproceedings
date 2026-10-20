@@ -227,8 +227,9 @@ is a breaking release (0.13.0 shipped "Breaking changes"; PR #132), so it is upg
 goes once uv reaches 1.0), and only its patches and digest bumps arrive here; `docker_digest.py` stops any 0.x minor
 of an image as well, and the weekly routine reports a newer uv minor (`prs.py uv-release`) or a uv advisory to the
 owner. uv 0.12.24 → 0.13.0 was done by hand on 2026-10-16, once 0.13.0 was 7 days old, with `docker_digest.py`'s age
-and attestation check run locally; 0.13.0 → 0.13.1 the same way on 2026-10-21 (Dependabot's PR #162 moved the tag
-alone, so it was remade by hand with the workflows and closed). **The api image's uv and CI's move together** (owner decision 2026-10-17,
+and attestation check run locally; 0.13.0 → 0.13.1 by hand on 2026-10-20, at 6.4 days, by the owner's explicit
+waiver of the 7-day age for this pin (the digest and its astral-sh attestation verified; TASK-270), to ship in
+v0.4.1 (Dependabot's PR #162 moved the tag alone, so it was remade by hand with the workflows and closed). **The api image's uv and CI's move together** (owner decision 2026-10-17,
 TASK-252): every `astral-sh/setup-uv` step under `.github/` names that release (`with: { version: "X.Y.Z" }`), so CI
 runs the reviewed uv under the same 7-day hold instead of setup-uv's newest (on 2026-10-16 CI ran uv 0.13.1, two
 days old, while the image pinned 0.13.0), and `check_uv_pin.py` (in `make tooling`, so in `claude-tooling`) fails
