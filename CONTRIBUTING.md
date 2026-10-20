@@ -74,8 +74,8 @@ fork's PR before it goes into the merge queue.
 
 **Maintainers: a fork's PR is untrusted code.** Read its diff on GitHub, or as data (`git fetch origin
 pull/<n>/head:pr-<n>` then `git diff origin/dev...pr-<n>`), before checking it out: a checkout here runs its
-`.githooks/` at once (`core.hooksPath` is the relative `.githooks`, so a fork's `post-checkout` runs as the
-checkout fills the tree) and on every later commit, merge or push, its `.claude/` hooks when Claude Code opens there, and its tests,
+`.githooks/` at once (`core.hooksPath` is the relative `.githooks`, so a fork's `post-checkout` runs right after
+the checkout, from the fork's own tree) and on every later commit, merge or push, its `.claude/` hooks when Claude Code opens there, and its tests,
 `Makefile` and `conftest.py` under `make`, all with your GitHub token and `.env`. Read `.claude/`, `.githooks/`,
 `.github/`, `Makefile`, `scripts/`, `conftest.py` and dependency files first, and never queue a PR whose
 `.github/` changes you haven't read (a merge-queue build runs the PR's own workflow files). Run its code only in

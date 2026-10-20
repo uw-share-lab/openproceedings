@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Case table for what the default branch steers (decision-052, TASK-271). GitHub reads .github/dependabot.yml
 # and every `schedule:` workflow from the default branch (`main`), so: every Dependabot ecosystem targets dev;
-# every nightly job but `resolve` needs `resolve` and checks out the one sha it outputs; and `resolve`'s script,
+# every nightly job but `resolve` needs `resolve` (`needs: resolve` or a flow list naming it) and checks out the one sha it outputs; and `resolve`'s script,
 # run here with a fake `git` (no network), gives dev's head on a schedule, the dispatched sha otherwise, and
 # refuses anything but a 40-hex sha. Read as text (no YAML parser on the runner's python3).
 # Mutants in .claude/scripts/mutants/default-branch.json. Usage: ./test-default-branch.sh
@@ -33,6 +33,8 @@ for item in items:
     name = re.search(r"^    package-ecosystem: (.*)$", item, re.M)
     if item.lstrip().startswith("{") or not name:
         errs.append(f"an entry not in block style with a package-ecosystem: {item.strip()[:40]!r}")
+    elif len(keys := re.findall(r"^    ([\w-]+):", item, re.M)) != len(set(keys)):
+        errs.append(f"{name.group(1)}: a repeated key")
     elif not re.search(r"^    target-branch: dev$", item, re.M):
         errs.append(f"{name.group(1)}: no `target-branch: dev`")
 print("\n".join(errs))
@@ -93,13 +95,16 @@ if len(re.findall(r"^      - ", r, re.M)) != 1 or not re.search(r"^      - id: s
     errs.append("resolve: not exactly one step, `- id: sha`")
 if re.search(r"^ +if:|continue-on-error", r, re.M):
     errs.append("resolve: an if: or continue-on-error")
+# the step is env + run and nothing else: a `shell: sh` (dash) would make `[[` "not found" and skip the sha check
+if re.findall(r"^        ([\w-]+):", r, re.M) != ["env", "run"]:
+    errs.append("resolve: its step's keys aren't exactly env and run (GitHub's default bash)")
 if not re.search(r'^        env: \{ EVENT: "\$\{\{ github\.event_name \}\}", REPO: "\$\{\{ github\.repository \}\}", SHA: "\$\{\{ github\.sha \}\}" \}$', r, re.M):
     errs.append("resolve: its env isn't EVENT, REPO and SHA from the event")
 pinned = '        with: { ref: "${{ needs.resolve.outputs.sha }}", persist-credentials: false }'
 for name, body in found.items():
     if name == "resolve":
         continue
-    if not re.search(r"^    needs: resolve$", body, re.M):
+    if not re.search(r"^    needs: (resolve|\[(.+, )?resolve(, .+)?\])$", body, re.M):  # scalar or flow list
         errs.append(f"{name}: doesn't need resolve")
     if re.search(r"^    if:", body, re.M):  # e.g. always(): it would run with resolve failed, an empty ref, main
         errs.append(f"{name}: a job-level if:")

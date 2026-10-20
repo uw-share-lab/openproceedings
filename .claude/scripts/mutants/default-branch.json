@@ -64,5 +64,11 @@
   "file": ".github/dependabot.yml",
   "old": "\nupdates:\n",
   "new": "\nupdates:\n  - directory: /\n    package-ecosystem: pip\n    schedule: { interval: weekly }\n"
+ },
+ {
+  "label": "default branch: resolve's step runs under sh (dash), so [[ is not found",
+  "file": ".github/workflows/nightly.yml",
+  "old": "      - id: sha\n        env:",
+  "new": "      - id: sha\n        shell: sh\n        env:"
  }
 ]
