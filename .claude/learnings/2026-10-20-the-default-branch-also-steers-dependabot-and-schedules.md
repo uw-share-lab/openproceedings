@@ -32,7 +32,9 @@ Make `main` the default branch for the open-source repo, keep `dev` as the integ
 
 ## Dead ends — don't repeat these
 - Checking out `dev` by name in every nightly job (see above).
-- `grep -x` to require one 40-hex sha: it matches line by line, so two shas on two lines pass. Use
-  `[[ "$sha" =~ ^[0-9a-f]{40}$ ]]`.
+- `grep -x` to require one 40-hex sha: it matches line by line, so two shas on two lines pass.
+- Bash's `[[ "$sha" =~ ^[0-9a-f]{40}$ ]]`: a step's `shell: sh` or a `defaults:` shell runs it under dash, where
+  `[[` is "not found" and the check is skipped. Use POSIX, in any shell and locale:
+  `case "$sha" in *[!0123456789abcdef]* | "") sha=bad ;; esac`, then `[ "${#sha}" -ne 40 ]` (gate rounds 3-5).
 - Switching the default branch first and fixing the config "at the next release": until then, Dependabot
   targets `main` past the merge queue, and the nightly tests `main`.
