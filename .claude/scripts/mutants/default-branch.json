@@ -66,7 +66,7 @@
   "new": "\nupdates:\n  - directory: /\n    package-ecosystem: pip\n    schedule: { interval: weekly }\n"
  },
  {
-  "label": "default branch: resolve's step runs under sh (dash), so [[ is not found",
+  "label": "default branch: resolve's step gains an explicit shell: sh",
   "file": ".github/workflows/nightly.yml",
   "old": "      - id: sha\n        env:",
   "new": "      - id: sha\n        shell: sh\n        env:"
@@ -80,7 +80,7 @@
  {
   "label": "default branch: resolve's hex check dropped (a short or newline sha passes to the length check only)",
   "file": ".github/workflows/nightly.yml",
-  "old": "          case \"$sha\" in *[!0-9a-f]* | \"\") sha=bad ;; esac  # POSIX",
+  "old": "          case \"$sha\" in *[!0123456789abcdef]* | \"\") sha=bad ;; esac  # POSIX",
   "new": "          true  # POSIX"
  }
 ]

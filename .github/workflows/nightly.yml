@@ -35,7 +35,7 @@ jobs:
         env: { EVENT: "${{ github.event_name }}", REPO: "${{ github.repository }}", SHA: "${{ github.sha }}" }
         run: |
           if [ "$EVENT" = schedule ]; then sha=$(git ls-remote "https://github.com/$REPO" refs/heads/dev | cut -f1); else sha=$SHA; fi
-          case "$sha" in *[!0-9a-f]* | "") sha=bad ;; esac  # POSIX, so any shell checks it; a newline is refused too
+          case "$sha" in *[!0123456789abcdef]* | "") sha=bad ;; esac  # POSIX, any shell and locale; a newline is refused too
           if [ "${#sha}" -ne 40 ]; then echo "::error::no commit to test ($EVENT)"; exit 1; fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "nightly ($EVENT) tests \`$sha\`" | tee -a "$GITHUB_STEP_SUMMARY"

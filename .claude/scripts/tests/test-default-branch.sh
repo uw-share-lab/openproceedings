@@ -136,7 +136,8 @@ run() {  # run <event> <sha> — prints "rc=<n> sha=<output>", under $SHELL_UNDE
     GITHUB_OUTPUT="$TMP/out" GITHUB_STEP_SUMMARY="$TMP/summary" "$SHELL_UNDER_TEST" -e "$TMP/resolve.sh" >/dev/null 2>&1
   printf 'rc=%s %s' "$?" "$(cat "$TMP/out")"
 }
-for SHELL_UNDER_TEST in bash sh; do  # GitHub runs `run:` under bash; a `shell: sh` or `defaults:` would be dash
+shells="bash sh"; command -v dash >/dev/null && shells="$shells dash"  # macOS's sh is bash; CI's is dash
+for SHELL_UNDER_TEST in $shells; do  # GitHub runs `run:` under bash; a `shell: sh` or `defaults:` would be dash
 cat > "$TMP/bin/git" <<EOF
 #!/bin/sh
 echo "\$*" > "$TMP/git-args"
