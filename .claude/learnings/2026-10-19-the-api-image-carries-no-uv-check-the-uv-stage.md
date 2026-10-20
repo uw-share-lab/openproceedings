@@ -7,6 +7,8 @@
 
 ## What we set out to do
 Prove the hand-made uv 0.13.0 → 0.13.1 bump before its 7-day hold clears, so the PR only waits on the date.
+2026-10-20: it merged a day early, at 6.4 days, when the owner waived the rest of the hold to ship it in
+v0.4.1 (TASK-270).
 
 ## What we learned
 - **The runtime image has no uv.** It runs the synced `.venv`; uv is a build tool there. A version check on the
