@@ -10,6 +10,25 @@ papers a query matches: a search record pins its `index_version`, `tokenizer_ver
 it with the same QUERY_VERSION; otherwise as `drifted`, naming what changed. Each release's Data section
 names the index it was verified on and which saved records still reproduce.
 
+## 0.4.1
+
+### Fixed
+
+- possessive regex repeats on untrusted input; no backtracking state on a long DOI registrant ([#176](https://github.com/uw-share-lab/openproceedings/pull/176))
+
+### Internal
+
+- backlog: close TASK-258, 261, 265 after v0.4.0; file 266-269 ([#174](https://github.com/uw-share-lab/openproceedings/pull/174))
+- main as the default branch: Dependabot and the nightly target dev, pr-base keeps PRs off main, fork-PR rules ([#177](https://github.com/uw-share-lab/openproceedings/pull/177))
+- uv 0.13.0 → 0.13.1 in the api image and CI (TASK-270; 7-day hold waived by the owner) ([#175](https://github.com/uw-share-lab/openproceedings/pull/175))
+
+### Data
+
+- index_version `78d2e70310f3`, snapshot `03eab0ef56c4d768ca25c1942207d1c9eaf14a1d852bd276a05e013ae17210c7`
+- TOKENIZER_VERSION 3 · SCHEMA_VERSION 4 · Tantivy 0.26.2 · QUERY_VERSION 2
+- Search records saved under 0.3.0 to 0.4.0 replay as `reproduced` on the index_version they pin, while it is kept and supported and QUERY_VERSION matches. Earlier records also require a supported retained pin and matching QUERY_VERSION; release tables alone do not determine replay status.
+- Verified on the same served index as 0.4.0, 78d2e70310f3 of the 173,518-paper snapshot of 2026-10-16, with the same tokenizer, schema, query and Tantivy versions, so search records saved on a retained supported index still replay as reproduced. The question of OpenAlex's terms (TASK-135) is still open: it has yet to go to the university copyright office, the public launch waits on its answer, and the OpenAlex abstract fill is unchanged until then. Promotion does not deploy data.
+
 ## 0.4.0
 
 ### Added
