@@ -7,11 +7,12 @@ as `width_is_free` reads the server's CPU time), and `collector_paused` restores
 from __future__ import annotations
 
 import gc
+import tracemalloc
 from collections.abc import Callable
 
 import pytest
 
-from tests.timing import assert_near_linear, collector_paused, cpu, growth
+from tests.timing import assert_near_linear, collector_paused, cpu, growth, peak_bytes
 
 
 def linear(s: str) -> int:
@@ -128,3 +129,33 @@ def test_collector_paused_restores_the_collector() -> None:
     with pytest.raises(ZeroDivisionError), collector_paused():
         1 / 0  # noqa: B018
     assert gc.isenabled()
+
+
+def test_peak_bytes_is_the_peak_not_what_is_left() -> None:
+    """A megabyte allocated and freed inside the call counts; nothing allocated reads about zero (TASK-272)."""
+
+    def churn() -> None:
+        buf = bytearray(10**6)
+        del buf
+
+    assert peak_bytes(churn) >= 10**6
+    assert peak_bytes(lambda: None) < 10_000
+
+
+def test_peak_bytes_refuses_an_outer_trace_and_leaves_it_running() -> None:
+    tracemalloc.start()
+    try:
+        with pytest.raises(AssertionError, match="tracemalloc off"):
+            peak_bytes(lambda: None)
+        assert tracemalloc.is_tracing()
+    finally:
+        tracemalloc.stop()
+
+
+def test_peak_bytes_stops_tracing_when_the_call_raises() -> None:
+    def boom() -> None:
+        raise ValueError("boom")
+
+    with pytest.raises(ValueError, match="boom"):
+        peak_bytes(boom)
+    assert not tracemalloc.is_tracing()

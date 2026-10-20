@@ -11,6 +11,9 @@ ratio (a refusal that stops at a bound is constant time). And the large side's m
 `ceiling` (2 s): a backstop, far above any call site's cost, against a linear but far slower implementation,
 which a ratio alone passes.
 
+`peak_bytes` is the other measure: a tracemalloc peak, for a bound a runner's cache can't move (a greedy regex
+repeat holds `re` state per repetition, TASK-272).
+
 The cyclic garbage collector is paused while a call is timed (`cpu`). A full collection walks every tracked
 object in the process, so its cost is the test worker's whole heap, not the input; and it fires once enough
 objects have survived since the last one, so the side that keeps more objects alive pays it more often. In CI's
@@ -37,6 +40,7 @@ from __future__ import annotations
 
 import gc
 import time
+import tracemalloc
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from statistics import median
@@ -111,3 +115,17 @@ def assert_near_linear(
     assert ratio < 2 * factor, (large_arg[:20], len(small_arg), len(large_arg), ratio, pairs)
     large = median(b for _, b in pairs)
     assert large < ceiling, (large_arg[:20], len(large_arg), large, ceiling)
+
+
+def peak_bytes(f: Callable[[], object]) -> int:
+    """The peak memory `f()` allocates (tracemalloc), for a bound in bytes where CPU time depends on the runner:
+    a greedy repeated group that backtracks holds `re` state per repetition (63 MB on a 1 MB value, TASK-272),
+    and its time then follows the runner's cache. Refuses to run under an outer trace, whose peak it can't reset
+    without disturbing."""
+    assert not tracemalloc.is_tracing(), "peak_bytes needs tracemalloc off (PYTHONTRACEMALLOC is set?)"
+    tracemalloc.start()
+    try:
+        f()
+        return tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
