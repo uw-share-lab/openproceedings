@@ -77,7 +77,10 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
 6. **Claim only what you ran.** Report the command and its summary line (`412 passed in 9.1s`).
 7. **Untrusted input gets a timing-bounded test.** A regex over server output (an XML prolog skip) backtracked
    exponentially; use a linear `find` loop, and test adversarial input (many PIs, unterminated) with a CPU
-   growth check (§CPU growth checks), in a daemon thread with a generous join when a hang is possible.
+   growth check (§CPU growth checks), in a daemon thread with a generous join when a hang is possible. A
+   repeated group that must be followed by a delimiter it can never give back is written possessive
+   (`(?:\.\d++)*+`): greedy, Python's `re` keeps state per repetition (63 MB on a 1 MB value, TASK-272), so
+   bound the peak with `tracemalloc` beside the CPU check; bytes don't depend on the runner's cache.
 8. **A failure that appears in one checkout only is a stored example.** The `.hypothesis` database holds an input
    no `@example` covers. Extract the falsifying input and pin it as an `@example` before bisecting or calling it
    pre-existing (a database copied between checkouts stores choice sequences, so the bisect proves nothing; the

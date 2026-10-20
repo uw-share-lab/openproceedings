@@ -125,8 +125,8 @@ _DOI_TAGS = ("DO",)
 # (its suffix: no whitespace, no control character (C0, DEL, C1) and no bidi format character (the marks,
 # embeddings, overrides and isolates), which could make a key quoted in a row's evidence read as another).
 # The registrant's quantifiers are possessive: what they give back starts with `.` or a digit, never the `/` that
-# must follow, so backtracking can't change the outcome, and without it the engine keeps no state per `.N`
-# (a 1 MB `10.1.1.…1./x` held 63 MB and ran memory-bound, ~11x for 4x the size on a CI runner; TASK-272)
+# must follow, so backtracking can't change the outcome, and so the engine keeps no state per `.N`
+# (a 1 MB `10.1.1.…1./x!` held 63 MB and ran memory-bound, ~11x for 4x the size on a CI runner; TASK-272)
 _DOI = re.compile(
     r"10\.\d++(?:\.\d++)*+/[^\s\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]+"
 )

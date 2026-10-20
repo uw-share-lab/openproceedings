@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import gc
 import time
+import tracemalloc
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from statistics import median
@@ -111,3 +112,17 @@ def assert_near_linear(
     assert ratio < 2 * factor, (large_arg[:20], len(small_arg), len(large_arg), ratio, pairs)
     large = median(b for _, b in pairs)
     assert large < ceiling, (large_arg[:20], len(large_arg), large, ceiling)
+
+
+def peak_bytes(f: Callable[[], object]) -> int:
+    """The peak memory `f()` allocates (tracemalloc), for a bound in bytes where CPU time depends on the runner:
+    a greedy repeated group that backtracks holds `re` state per repetition (63 MB on a 1 MB value, TASK-272),
+    and its time then follows the runner's cache. Refuses to run under an outer trace, whose peak it can't reset
+    without disturbing."""
+    assert not tracemalloc.is_tracing(), "peak_bytes needs tracemalloc off (PYTHONTRACEMALLOC is set?)"
+    tracemalloc.start()
+    try:
+        f()
+        return tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()

@@ -262,7 +262,8 @@ def _url(v: str) -> str:
 
 
 def _doi(v: str) -> str:
-    if not re.fullmatch(r"10\.\d+(?:\.\d+)*/\S+", v) or not _single_line(v):
+    # possessive, as eval.scholar_compare's `_DOI`: a crawled `10.1.1.…` held 63 MB of backtracking state (TASK-272)
+    if not re.fullmatch(r"10\.\d++(?:\.\d++)*+/\S+", v) or not _single_line(v):
         raise ValueError("a DOI must look like 10.NNNN/suffix, with no whitespace or control characters")
     return v
 

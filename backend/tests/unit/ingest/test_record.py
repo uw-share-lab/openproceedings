@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
+from openproceedings.ingest import record as record_module
 from openproceedings.ingest import volumes
 from openproceedings.ingest.record import (
     DBLP_YEARS,
@@ -28,6 +29,8 @@ from openproceedings.ingest.record import (
 from openproceedings.ingest.snapshot import record_line
 from openproceedings.query.normalize import normalize
 from pydantic import ValidationError
+
+from tests.timing import peak_bytes
 
 FETCHED = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
 
@@ -708,3 +711,20 @@ def test_a_faccts_pmlr_id_must_name_its_own_volume_and_year(monkeypatch) -> None
     assert _rec("op:icml:2013:pmlr-v999-x", "ICML", 2013)  # any volume the table doesn't list, as before
     with pytest.raises(ValidationError, match="ICML PMLR volume"):  # but never another venue's volume
         _rec("op:icml:2018:pmlr-v81-one18a", "ICML", 2018)
+
+
+def test_a_long_dotted_registrant_is_refused_without_backtracking_state() -> None:
+    """`Urls.doi` refuses a 1 MB `10.1.1.…1./x` (a crawled value has no length cap) in bytes, not 63 MB of `re`
+    state (TASK-272), and still takes a long valid one."""
+    bad, good = "10." + "1." * 500_000 + "/x", "10." + "1." * 500_000 + "1/x"
+    with pytest.raises(ValidationError):
+        Urls(doi=bad)
+    assert Urls(doi=good).doi == good
+
+    def refuse() -> (
+        None
+    ):  # the validator alone: pydantic's error quotes the 1 MB value, which isn't the regex's
+        with pytest.raises(ValueError):
+            record_module._doi(bad)
+
+    assert peak_bytes(refuse) < len(bad)

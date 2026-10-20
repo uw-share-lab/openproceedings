@@ -4,7 +4,6 @@ hand-built corpus with a known answer. The engine here is the oracle itself: no 
 
 from __future__ import annotations
 
-import tracemalloc
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -51,7 +50,7 @@ from openproceedings.query.defaults import apply_defaults
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import Mode, parse
 
-from tests.timing import assert_near_linear, cpu
+from tests.timing import assert_near_linear, cpu, peak_bytes
 from tests.unit.ingest.test_dedup import H, paper
 
 NAME = "set.ris"
@@ -1033,15 +1032,11 @@ def test_doi_key_is_linear_on_a_hostile_value(hostile: str) -> None:
 def test_doi_key_keeps_no_backtracking_state_on_a_long_registrant() -> None:
     """A 1 MB registrant (`10.1.1.…1./x!`, no DOI) is refused without the regex engine holding state per `.N`: the
     old greedy `(?:\\.\\d+)*` peaked at 63 MB here and ran memory-bound on CI (TASK-272). Measured in bytes, not
-    time, so a runner's cache can't make it flaky."""
+    time, so a runner's cache can't make it flaky (tests/timing.py `peak_bytes`)."""
     value = HOSTILE_DOIS["registrant"](1_000_000)
-    tracemalloc.start()
-    try:
-        assert doi_key(value) is None
-        peak = tracemalloc.get_traced_memory()[1]
-    finally:
-        tracemalloc.stop()
-    assert peak < 4 * len(value), peak  # the stripped copies of the value, and no more
+    assert doi_key(value) is None
+    peak = peak_bytes(lambda: doi_key(value))
+    assert peak < len(value), peak  # measured ~1 KB; the old pattern held ~63 MB
 
 
 def test_a_di_tag_is_not_read() -> None:
