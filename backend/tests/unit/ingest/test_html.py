@@ -368,7 +368,8 @@ def test_the_readings_left_to_the_pinned_parser(markup: str, text: str) -> None:
 @pytest.mark.parametrize("pattern", ["_CUSTOM_OR_NAMESPACED", "_HYPHENATED"])
 def test_a_long_hyphenated_name_is_read_without_backtracking_state(pattern: str) -> None:
     """A crawled tag or attribute name `a-a-…-` (1 MB, ending on a separator) is refused in a bounded number of
-    bytes, not the 63 MB of `re` state (one entry per part) the greedy pattern held (TASK-272); a long valid one still matches."""
+    bytes, not the 63 MB of `re` state (one entry per part) the greedy pattern held (TASK-272); a long valid one
+    still matches."""
     rx = getattr(html, pattern)
     bad, good = "a" + "-a" * 500_000 + "-", "a" + "-a" * 500_000
     assert rx.fullmatch(bad) is None

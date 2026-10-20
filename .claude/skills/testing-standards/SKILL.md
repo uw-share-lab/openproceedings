@@ -144,12 +144,10 @@ whole test worker's heap, not the input, and fires mostly on the side that keeps
 ICML 2007 hostile page failed at 8.09 and 8.24 in CI's xdist workers that way, runs 38176036366 and
 38197206724). Before changing a sampling method, demonstrate that the former quadratic behavior still fails
 the same cutoff; a green optimized implementation alone does not prove the check works.
-`backend/tests/timing.py` is the one implementation (`cpu`, `growth`, `assert_near_linear`, and `peak_bytes` for a
-memory bound where CPU time depends on the runner, §7: 4x the input
-under 8x the CPU time, median of paired rounds, collector paused; `backend/tests/unit/test_timing.py` shows
+`backend/tests/timing.py` is the one implementation (`cpu`, `growth`, `assert_near_linear`: 4x the input under 8x the CPU time, median of paired rounds, collector paused; `backend/tests/unit/test_timing.py` shows
 a quadratic in work and one in allocation fail it, and that no collection runs inside a timed call); use it
 (or its `cpu`, for a one-size CPU bound) for every linear-time test, including batched ones (`growth(...,
-calls=8)`). Work another thread does (a request TestClient serves) is invisible to this thread's CPU clock:
+calls=8)`); `peak_bytes` is its memory bound, for a check whose CPU time depends on the runner (§7). Work another thread does (a request TestClient serves) is invisible to this thread's CPU clock:
 pass `growth` a `measure` that reads that thread's own CPU time and pauses the collector (`collector_paused`),
 as `contract/test_verification_scale.py`'s `width_is_free` reads the server's `verify_cpu_ms` from each
 request's access line, never the request's wall time. Never assert a wall-clock bound at one size: on a shared
