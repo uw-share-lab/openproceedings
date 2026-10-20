@@ -4,6 +4,7 @@ hand-built corpus with a known answer. The engine here is the oracle itself: no 
 
 from __future__ import annotations
 
+import tracemalloc
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -1027,6 +1028,20 @@ def test_doi_key_is_linear_on_a_hostile_value(hostile: str) -> None:
     """The trim is one pass, not a character at a time (a hostile file must not defeat /compare's time cap): 4x
     the value (1 MB at the larger size) costs about 4x the CPU time, never quadratic's ~16x (tests/timing.py)."""
     assert_near_linear(doi_key, HOSTILE_DOIS[hostile], 250_000, rounds=5)
+
+
+def test_doi_key_keeps_no_backtracking_state_on_a_long_registrant() -> None:
+    """A 1 MB registrant (`10.1.1.…1./x!`, no DOI) is refused without the regex engine holding state per `.N`: the
+    old greedy `(?:\\.\\d+)*` peaked at 63 MB here and ran memory-bound on CI (TASK-272). Measured in bytes, not
+    time, so a runner's cache can't make it flaky."""
+    value = HOSTILE_DOIS["registrant"](1_000_000)
+    tracemalloc.start()
+    try:
+        assert doi_key(value) is None
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert peak < 4 * len(value), peak  # the stripped copies of the value, and no more
 
 
 def test_a_di_tag_is_not_read() -> None:
