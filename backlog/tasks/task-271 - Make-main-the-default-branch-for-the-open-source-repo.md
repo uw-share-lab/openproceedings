@@ -4,7 +4,7 @@ title: Make main the default branch for the open-source repo
 status: In Progress
 assignee: []
 created_date: '2026-10-20 13:40'
-updated_date: '2026-10-20 14:16'
+updated_date: '2026-10-20 14:24'
 labels:
   - ci
   - process
@@ -23,8 +23,10 @@ The owner asked on 2026-10-20 for main to be the default branch before open-sour
 - [x] #1 Dependabot's four ecosystems set target-branch: dev, and the nightly's scheduled run checks out dev
 - [x] #2 pr-gates' pr-base job fails any PR into main but the same-repo dev → main promotion, tested in test-merge-group-gate.sh
 - [x] #3 CONTRIBUTING.md, the README and spec 08 tell a fork contributor to target dev
-- [ ] #4 After v0.4.1 is tagged: the default branch is main, pr-base is required on main, and spec 08 says so
+- [ ] #4 After v0.4.1 is tagged, in one step: the default branch is main and pr-base (app_id 15368) is required on main; spec 08 §Branch protection lists it and §Release step 5 says the promotion passes it; the next nightly's summary names the dev sha it tested
 <!-- AC:END -->
+
+
 
 ## Implementation Notes
 

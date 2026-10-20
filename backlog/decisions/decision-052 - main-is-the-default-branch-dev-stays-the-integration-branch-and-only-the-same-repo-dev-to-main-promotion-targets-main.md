@@ -43,7 +43,8 @@ into `main` except the same-repo `dev → main` promotion, telling its author to
 - The nightly's workflow file is `main`'s copy: an edit to it reaches the schedule only at the next release
   (`workflow_dispatch` on a branch runs that branch's copy, as a run dispatched on `dev` for §Release step 1's
   readiness does). A scheduled run is listed under `main` and its sha, so a first `resolve` job reads `dev`'s head once, writes it
-  to the run's summary, and every job checks out that sha.
+  to the run's summary, and every job checks out that sha
+  (`test-default-branch.sh`).
 - Dependabot security updates always open against the default branch, whatever `target-branch` says (GitHub's
   Dependabot options reference, `target-branch`). They are off in this repo (`security_and_analysis`, checked
   2026-10-20); if they are turned on, such a PR fails `pr-base` and is retargeted to `dev` before review.

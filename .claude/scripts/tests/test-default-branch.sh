@@ -22,12 +22,19 @@ dependabot() {
   python3 - "$SRC/.github/dependabot.yml" <<'PY'
 import re, sys
 text = open(sys.argv[1]).read()
-entries = re.split(r"\n  - package-ecosystem: ", text)[1:]
-errs = [] if entries else ["no updates entries"]
-for e in entries:
-    name = e.split("\n", 1)[0]
-    if not re.search(r"^    target-branch: dev$", e, re.M):
-        errs.append(f"{name}: no `target-branch: dev`")
+updates = text.split("\nupdates:\n", 1)[1] if "\nupdates:\n" in text else ""
+updates = re.split(r"\n(?=[^ \n#])", updates, maxsplit=1)[0]  # up to the next top-level key
+# every list item, whatever key it starts with: its first line re-indented like the rest of its keys
+items = ["    " + i for i in re.split(r"\n  - ", "\n" + updates)[1:]]
+errs = [] if items else ["no updates entries"]
+if text.count("package-ecosystem") != len(items):
+    errs.append(f"{text.count('package-ecosystem')} package-ecosystem keys but {len(items)} block-style items")
+for item in items:
+    name = re.search(r"^    package-ecosystem: (.*)$", item, re.M)
+    if item.lstrip().startswith("{") or not name:
+        errs.append(f"an entry not in block style with a package-ecosystem: {item.strip()[:40]!r}")
+    elif not re.search(r"^    target-branch: dev$", item, re.M):
+        errs.append(f"{name.group(1)}: no `target-branch: dev`")
 print("\n".join(errs))
 sys.exit(1 if errs else 0)
 PY
@@ -37,12 +44,31 @@ out=$(dependabot 2>&1)
 check "every ecosystem targets dev" $? "$out"
 
 echo "== nightly.yml"
+# Jobs are split at every line indented exactly two spaces under `jobs:` (a header the reader can't parse is an
+# error, never folded into the job above), up to the next top-level key.
+cat > "$TMP/jobs.py" <<'PY'
+import re
+def jobs(text, errs):
+    body = text.split("\njobs:\n", 1)[1] if "\njobs:\n" in text else ""
+    body = re.split(r"\n(?=[^ \n#])", body, maxsplit=1)[0]
+    lines = body.split("\n")
+    heads = [i for i, line in enumerate(lines) if re.match(r"  [^ #\n]", line)]
+    out = {}
+    for k, i in enumerate(heads):
+        m = re.fullmatch(r"  ([A-Za-z0-9_-]+):( +#.*)?", lines[i])
+        if not m or m.group(1) in out:
+            errs.append(f"unreadable or repeated job header: {lines[i]!r}")
+            continue
+        out[m.group(1)] = "\n".join(lines[i + 1 : heads[k + 1] if k + 1 < len(heads) else len(lines)])
+    return out
+PY
 # The resolve job's script, extracted for the run rows below.
-python3 - "$SRC/.github/workflows/nightly.yml" "$TMP/resolve.sh" <<'PY'
-import re, sys
-text = open(sys.argv[1]).read()
-m = re.search(r"\n  resolve:\n(.*?)(?=\n  [a-z-]+:\n)", text, re.S)
-body = m.group(1).split("        run: |\n", 1)[1] if m and "        run: |\n" in m.group(1) else "exit 99\n"
+python3 - "$SRC/.github/workflows/nightly.yml" "$TMP/resolve.sh" "$TMP" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[3])
+from jobs import jobs
+r = jobs(open(sys.argv[1]).read(), []).get("resolve", "")
+body = r.split("        run: |\n", 1)[1] if "        run: |\n" in r else "exit 99\n"
 lines = []
 for line in body.splitlines():
     if not line.startswith(" " * 10):
@@ -51,32 +77,39 @@ for line in body.splitlines():
 open(sys.argv[2], "w").write("\n".join(lines) + "\n")
 PY
 nightly() {
-  python3 - "$SRC/.github/workflows/nightly.yml" <<'PY'
+  python3 - "$SRC/.github/workflows/nightly.yml" "$TMP" <<'PY'
 import re, sys
-text = open(sys.argv[1]).read()
-jobs = dict(re.findall(r"\n  ([a-z-]+):\n(.*?)(?=\n  [a-z-]+:\n|\Z)", "\n" + text.split("\njobs:\n", 1)[1], re.S))
+sys.path.insert(0, sys.argv[2])
+from jobs import jobs
 errs = []
-r = jobs.get("resolve", "")
+found = jobs(open(sys.argv[1]).read(), errs)
+r = found.get("resolve", "")
 if not r:
     errs.append("no resolve job")
-if "permissions: {}" not in r or "sha: ${{ steps.sha.outputs.sha }}" not in r:
+if not re.search(r"^    permissions: \{\}$", r, re.M) or not re.search(r"^      sha: \$\{\{ steps\.sha\.outputs\.sha \}\}$", r, re.M):
     errs.append("resolve: not permissions: {} with the sha output")
-if re.search(r"^    if: |continue-on-error", r, re.M):
-    errs.append("resolve: a job-level if: or continue-on-error")
-for need in ('EVENT: "${{ github.event_name }}"', 'REPO: "${{ github.repository }}"', 'SHA: "${{ github.sha }}"'):
-    if need not in r:
-        errs.append(f"resolve: lacks {need}")
-for name, body in jobs.items():
+# one step, the one the output reads, and nothing that can skip it or ignore its failure
+if len(re.findall(r"^      - ", r, re.M)) != 1 or not re.search(r"^      - id: sha$", r, re.M):
+    errs.append("resolve: not exactly one step, `- id: sha`")
+if re.search(r"^ +if:|continue-on-error", r, re.M):
+    errs.append("resolve: an if: or continue-on-error")
+if not re.search(r'^        env: \{ EVENT: "\$\{\{ github\.event_name \}\}", REPO: "\$\{\{ github\.repository \}\}", SHA: "\$\{\{ github\.sha \}\}" \}$', r, re.M):
+    errs.append("resolve: its env isn't EVENT, REPO and SHA from the event")
+pinned = '        with: { ref: "${{ needs.resolve.outputs.sha }}", persist-credentials: false }'
+for name, body in found.items():
     if name == "resolve":
         continue
     if not re.search(r"^    needs: resolve$", body, re.M):
         errs.append(f"{name}: doesn't need resolve")
-    checkouts = re.findall(r"- uses: actions/checkout@[0-9a-f]{40}[^\n]*\n        with: ([^\n]*)", body)
-    if not checkouts or len(checkouts) != body.count("actions/checkout@"):
-        errs.append(f"{name}: a checkout without a with: line")
-    for w in checkouts:
-        if 'ref: "${{ needs.resolve.outputs.sha }}"' not in w:
-            errs.append(f"{name}: a checkout not pinned to resolve's sha")
+    if re.search(r"^    if:", body, re.M):  # e.g. always(): it would run with resolve failed, an empty ref, main
+        errs.append(f"{name}: a job-level if:")
+    lines = body.split("\n")
+    uses = [i for i, line in enumerate(lines) if "actions/checkout@" in line]
+    if not uses:
+        errs.append(f"{name}: no checkout")
+    for i in uses:
+        if not re.fullmatch(r"      - uses: actions/checkout@[0-9a-f]{40} # v[0-9.]+", lines[i]) or i + 1 >= len(lines) or lines[i + 1] != pinned:
+            errs.append(f"{name}: a checkout not pinned to resolve's sha: {lines[i].strip()}")
 print("\n".join(errs))
 sys.exit(1 if errs else 0)
 PY
