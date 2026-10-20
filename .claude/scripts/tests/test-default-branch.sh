@@ -161,6 +161,9 @@ check "$SHELL_UNDER_TEST: two shas are refused" "$ok" "$got"
 got=$(run workflow_dispatch "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")
 if [ "$got" = "rc=1 " ]; then ok=0; else ok=1; fi
 check "$SHELL_UNDER_TEST: a 40-character non-hex value is refused" "$ok" "$got"
+got=$(run workflow_dispatch "ABCDEF0123456789ABCDEF0123456789ABCDEF01")
+if [ "$got" = "rc=1 " ]; then ok=0; else ok=1; fi
+check "$SHELL_UNDER_TEST: an uppercase sha is refused (the class is spelled out, so no locale's range lets it in)" "$ok" "$got"
 printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/git"
 got=$(run schedule "$DISP")
 if [ "$got" = "rc=1 " ]; then ok=0; else ok=1; fi
