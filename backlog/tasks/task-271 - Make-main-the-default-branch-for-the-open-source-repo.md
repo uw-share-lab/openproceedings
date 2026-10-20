@@ -4,7 +4,7 @@ title: Make main the default branch for the open-source repo
 status: In Progress
 assignee: []
 created_date: '2026-10-20 13:40'
-updated_date: '2026-10-20 13:41'
+updated_date: '2026-10-20 14:16'
 labels:
   - ci
   - process
@@ -29,5 +29,7 @@ The owner asked on 2026-10-20 for main to be the default branch before open-sour
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-AC4 runs after v0.4.1 is tagged (2026-10-21): gh api -X PATCH repos/uw-share-lab/openproceedings -f default_branch=main; add pr-base to main's required status checks (app_id 15368); update spec 08 §Branch protection to the as-built state. Dependabot security updates always target the default branch (GitHub docs); they are off here.
+AC4 runs right after v0.4.1 is tagged (2026-10-20), in one step so there is no window without the check: gh api -X PATCH repos/uw-share-lab/openproceedings -f default_branch=main, and add pr-base (app_id 15368) to main's required status checks; then update spec 08 §Branch protection to the as-built state (pr-base in main's list) and §Release step 5 (the promotion passes pr-base). Dependabot security updates always target the default branch (GitHub docs); they are off here. Wording elsewhere (repo.ts links, pr-workflow, dependabot-review, ci-engineer, README Quickstart) is written to hold before and after the switch.
+
+Gate round 1 added: nightly's resolve job (one sha for all 40 jobs), test-default-branch.sh (Dependabot target-branch, nightly wiring, resolve run with a fake git) with mutants/default-branch.json, pr-gates edited/main trigger assertion, fork-PR safety rules for maintainers (CONTRIBUTING, pr-workflow), repo.ts links to main, README Quickstart on main.
 <!-- SECTION:NOTES:END -->

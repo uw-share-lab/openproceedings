@@ -251,8 +251,8 @@ maintainer's own machine, which runs `make test` with it every day). In the clou
 no-dependency-code marker and says so (`ok no dependency code: …`); locally it removes one it finds. Stop, and
 print the summary with every PR as "not reviewed: <why>", if `gh api repos/uw-share-lab/openproceedings` fails, `prs.py preflight` doesn't exit 0, a tool above is missing or too old, or the git
 identity is empty or names an AI (it matches `claude|anthropic|noreply@anthropic`): commits are authored by people.
-`scripts/setup-dev.sh` and `npm ci` install **dev's** environment (a fresh clone starts on `dev`, its default branch:
-`git rev-parse --abbrev-ref HEAD` prints `dev` before they run; if it doesn't, `git switch dev` first), before any
+`scripts/setup-dev.sh` and `npm ci` install **dev's** environment (a fresh clone starts on the default branch, `main` since
+decision-052: `git switch dev` first, and check that `git rev-parse --abbrev-ref HEAD` prints `dev` before they run), before any
 PR is fetched: that is code
 already on `dev`, and `make tooling` and the autofix hook need it. In the cloud, nothing is installed again after
 this: `prs.py preflight` writes the no-dependency-code marker (§Where it runs), so a later `make sync` or

@@ -328,6 +328,10 @@ if not steps or "Refuse an event" not in steps[0] or "!= 'pull_request' && githu
     errs.append("pr-base: the first step doesn't refuse other events")
 if re.findall(r"^    if: ", pb, re.M) or "continue-on-error" in pb:
     errs.append("pr-base: a job-level if: or continue-on-error")
+# A PR retargeted from dev to main must run pr-base again (`edited`), and a PR into main must run it at all.
+pr_on = text.split("\njobs:\n", 1)[0].split("\n  merge_group:", 1)[0]
+if not re.search(r"\n    branches: \[[^\]\n]*\bmain\b[^\]\n]*\]", pr_on) or not re.search(r"\n    types: \[[^\]\n]*\bedited\b[^\]\n]*\]", pr_on):
+    errs.append("pr-base: pull_request doesn't run on PRs into main, or on edited (a base change)")
 gate = [s for s in steps if "github.base_ref == 'main'" in s]
 if len(gate) != 1 or not re.search(r"^        if: github\.event_name == 'pull_request' && github\.base_ref == 'main'$", gate[0], re.M):
     errs.append("pr-base: not exactly one step, run on a pull_request into main")

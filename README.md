@@ -107,11 +107,12 @@ so those searches replay the same ids (decision-022). This is the project's deci
 - An [OpenReview](https://openreview.net) account, only to crawl OpenReview
 
 ### 2. Set up
-The current tested pre-release code is on `dev`. Until a tagged release is available, use `dev` for this
-quickstart. Once a release is available, use its tag for a fixed version.
+`main`, the default branch, holds the latest release; for a fixed version, clone its tag instead
+(`--branch vX.Y.Z`, from the [releases](https://github.com/uw-share-lab/openproceedings/releases)). `dev` is where
+unreleased work integrates (CONTRIBUTING.md).
 
 ```bash
-git clone --branch dev https://github.com/uw-share-lab/openproceedings.git && cd openproceedings
+git clone --branch main https://github.com/uw-share-lab/openproceedings.git && cd openproceedings
 scripts/setup-dev.sh   # git hooks and a .env skeleton
 make sync              # uv sync (backend) + npm ci --ignore-scripts (frontend)
 uv run op --help       # the CLI

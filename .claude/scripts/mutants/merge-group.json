@@ -346,5 +346,11 @@
   "file": ".github/workflows/pr-gates.yml",
   "old": "Change this PR's base branch to dev (Edit, next to the title) — CONTRIBUTING.md\"\n          exit 1",
   "new": "Change this PR's base branch to dev (Edit, next to the title) — CONTRIBUTING.md\"\n          exit 0"
+ },
+ {
+  "label": "pr-gates: pull_request drops edited (a base change)",
+  "file": ".github/workflows/pr-gates.yml",
+  "old": "    types: [opened, synchronize, reopened, edited, labeled, unlabeled]\n",
+  "new": "    types: [opened, synchronize, reopened, labeled, unlabeled]\n"
  }
 ]
