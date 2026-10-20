@@ -73,15 +73,15 @@ default branch, `main`, unless you pick another; decision-052). Only the `dev �
 fork's PR before it goes into the merge queue.
 
 **Maintainers: a fork's PR is untrusted code.** Read its diff on GitHub, or as data (`git fetch origin
-pull/<n>/head:pr-<n>` then `git diff origin/dev...pr-<n>`), before checking it out: a checkout here runs its
++pull/<n>/head:pr-<n>` then `git diff origin/dev...pr-<n>`), before checking it out: a checkout here runs its
 `.githooks/` at once (`core.hooksPath` is the relative `.githooks`, so a fork's `post-checkout` runs right after
 the checkout, from the fork's own tree) and on every later commit, merge or push, its `.claude/` hooks when Claude Code opens there, and its tests,
 `Makefile` and `conftest.py` under `make`, all with your GitHub token and `.env`. Read `.claude/`, `.githooks/`,
 `.github/`, `Makefile`, `scripts/`, `conftest.py` and dependency files first, and never queue a PR whose
 `.github/` changes you haven't read (a merge-queue build runs the PR's own workflow files). Run its code only in
 a throwaway sandbox: no `.env`, no `gh` token, `core.hooksPath` unset, no Claude Code project hooks. The review
-gate for a fork's PR follows the `review-gates` skill §Fork PRs: reviewers read the diff only, CI's run is the
-test evidence, and the maintainer records and attests the review (the recorder PATCHes the PR body). A fork's
+gate for a fork's PR follows the `review-gates` skill §Fork PRs: reviewers read the diff only, CI's run is test
+evidence once the PR's `.github/`, `Makefile`, `conftest.py` and test-config changes are read (it runs the PR's own copies), and the maintainer records and attests the review (the recorder PATCHes the PR body). A fork's
 author adds the learnings entry, or the maintainer labels the PR `no-learning`.
 
 ## Rules the tooling enforces

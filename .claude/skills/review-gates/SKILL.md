@@ -80,7 +80,7 @@ one (CONTRIBUTING.md §Flow, "From a fork"):
 - Record from a detached worktree at that commit in a new `mktemp -d` directory outside the trusted worktree,
   made with the fork's hooks and LFS filters off, calling the trusted copy of the recorder by its absolute path
   with the dispositions file outside that directory (an untracked file there makes the tree dirty):
-  `GIT_LFS_SKIP_SMUDGE=1 git -c core.hooksPath=/dev/null worktree add --detach "$d" pr-<n>`, then in `"$d"`,
+  `d=$(mktemp -d); GIT_LFS_SKIP_SMUDGE=1 git -c core.hooksPath=/dev/null worktree add --detach "$d" pr-<n>`, then in `"$d"`,
   `python3 <trusted worktree>/.claude/scripts/record-review.py APPROVE <absolute dispositions path> --attest
   --pr <n> --repo uw-share-lab/openproceedings` (on a detached HEAD only `--pr` finds the PR; its REST read checks
   the PR's head is that commit). Run nothing else there, and `git worktree remove "$d"` after. `--attest`

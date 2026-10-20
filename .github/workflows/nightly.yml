@@ -23,6 +23,7 @@ jobs:
   # The one commit every job tests (decision-052): a scheduled run uses the default branch's copy of this file
   # and is listed under the default branch's sha, but tests `dev`'s head, read once here, so jobs queued behind
   # the 20-at-once limit don't each check out a later `dev`; a dispatched run tests the sha it was dispatched on.
+  # Its check is POSIX sh, so a `shell:` or `defaults:` can't turn it off.
   resolve:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -34,7 +35,8 @@ jobs:
         env: { EVENT: "${{ github.event_name }}", REPO: "${{ github.repository }}", SHA: "${{ github.sha }}" }
         run: |
           if [ "$EVENT" = schedule ]; then sha=$(git ls-remote "https://github.com/$REPO" refs/heads/dev | cut -f1); else sha=$SHA; fi
-          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::no commit to test ($EVENT): '$sha'"; exit 1; fi
+          case "$sha" in *[!0-9a-f]* | "") sha=bad ;; esac  # POSIX, so any shell checks it; a newline is refused too
+          if [ "${#sha}" -ne 40 ]; then echo "::error::no commit to test ($EVENT)"; exit 1; fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "nightly ($EVENT) tests \`$sha\`" | tee -a "$GITHUB_STEP_SUMMARY"
   # The whole backend suite at 2,000 examples across the runner's CPUs: the depth PR CI gave up for speed.

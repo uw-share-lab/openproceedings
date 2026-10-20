@@ -33,6 +33,8 @@ for item in items:
     name = re.search(r"^    package-ecosystem: (.*)$", item, re.M)
     if item.lstrip().startswith("{") or not name:
         errs.append(f"an entry not in block style with a package-ecosystem: {item.strip()[:40]!r}")
+    elif [ln for ln in item.split("\n") if re.match(r"    \S", ln) and not re.match(r"    [a-z-]+:( |$)", ln)]:
+        errs.append(f"{name.group(1)}: a key that isn't plain `key:` (quoted or spaced)")
     elif len(keys := re.findall(r"^    ([\w-]+):", item, re.M)) != len(set(keys)):
         errs.append(f"{name.group(1)}: a repeated key")
     elif not re.search(r"^    target-branch: dev$", item, re.M):
@@ -95,7 +97,8 @@ if len(re.findall(r"^      - ", r, re.M)) != 1 or not re.search(r"^      - id: s
     errs.append("resolve: not exactly one step, `- id: sha`")
 if re.search(r"^ +if:|continue-on-error", r, re.M):
     errs.append("resolve: an if: or continue-on-error")
-# the step is env + run and nothing else: a `shell: sh` (dash) would make `[[` "not found" and skip the sha check
+# the step is env + run and nothing else (an explicit shell:, even bash, is refused); the check itself is POSIX, and
+# the run rows below run it under sh too, so a `defaults:` shell can't skip it either
 if re.findall(r"^        ([\w-]+):", r, re.M) != ["env", "run"]:
     errs.append("resolve: its step's keys aren't exactly env and run (GitHub's default bash)")
 if not re.search(r'^        env: \{ EVENT: "\$\{\{ github\.event_name \}\}", REPO: "\$\{\{ github\.repository \}\}", SHA: "\$\{\{ github\.sha \}\}" \}$', r, re.M):
@@ -104,7 +107,7 @@ pinned = '        with: { ref: "${{ needs.resolve.outputs.sha }}", persist-crede
 for name, body in found.items():
     if name == "resolve":
         continue
-    if not re.search(r"^    needs: (resolve|\[(.+, )?resolve(, .+)?\])$", body, re.M):  # scalar or flow list
+    if not re.search(r"^    needs: (resolve|\[\s*(.+,\s*)?resolve(\s*,.+)?\s*\])$", body, re.M):  # scalar or flow list
         errs.append(f"{name}: doesn't need resolve")
     if re.search(r"^    if:", body, re.M):  # e.g. always(): it would run with resolve failed, an empty ref, main
         errs.append(f"{name}: a job-level if:")
@@ -126,36 +129,43 @@ check "every job needs resolve and checks out its sha" $? "$out"
 mkdir -p "$TMP/bin"
 DEV=1111111111111111111111111111111111111111
 DISP=2222222222222222222222222222222222222222
+
+run() {  # run <event> <sha> — prints "rc=<n> sha=<output>", under $SHELL_UNDER_TEST (bash, then sh)
+  : > "$TMP/out"; : > "$TMP/summary"
+  env -i PATH="$TMP/bin:/usr/bin:/bin" EVENT="$1" REPO=uw-share-lab/openproceedings SHA="$2" \
+    GITHUB_OUTPUT="$TMP/out" GITHUB_STEP_SUMMARY="$TMP/summary" "$SHELL_UNDER_TEST" -e "$TMP/resolve.sh" >/dev/null 2>&1
+  printf 'rc=%s %s' "$?" "$(cat "$TMP/out")"
+}
+for SHELL_UNDER_TEST in bash sh; do  # GitHub runs `run:` under bash; a `shell: sh` or `defaults:` would be dash
 cat > "$TMP/bin/git" <<EOF
 #!/bin/sh
 echo "\$*" > "$TMP/git-args"
 [ "\$1" = ls-remote ] && [ "\$3" = refs/heads/dev ] && printf '%s\trefs/heads/dev\n' "$DEV"
 EOF
 chmod +x "$TMP/bin/git"
-run() {  # run <event> <sha> — prints "rc=<n> sha=<output>"
-  : > "$TMP/out"; : > "$TMP/summary"
-  env -i PATH="$TMP/bin:/usr/bin:/bin" EVENT="$1" REPO=uw-share-lab/openproceedings SHA="$2" \
-    GITHUB_OUTPUT="$TMP/out" GITHUB_STEP_SUMMARY="$TMP/summary" bash "$TMP/resolve.sh" >/dev/null 2>&1
-  printf 'rc=%s %s' "$?" "$(cat "$TMP/out")"
-}
 got=$(run schedule "$DISP")
 if [ "$got" = "rc=0 sha=$DEV" ] && grep -q "$DEV" "$TMP/summary" && [ "$(cat "$TMP/git-args")" = "ls-remote https://github.com/uw-share-lab/openproceedings refs/heads/dev" ]; then ok=0; else ok=1; fi
-check "schedule: dev's head, from ls-remote, in the summary" "$ok" "$got"
+check "$SHELL_UNDER_TEST: schedule: dev's head, from ls-remote, in the summary" "$ok" "$got"
 rm -f "$TMP/git-args"
 got=$(run workflow_dispatch "$DISP")
 if [ "$got" = "rc=0 sha=$DISP" ] && [ ! -e "$TMP/git-args" ]; then ok=0; else ok=1; fi
-check "dispatch: the dispatched sha, no ls-remote" "$ok" "$got"
+check "$SHELL_UNDER_TEST: dispatch: the dispatched sha, no ls-remote" "$ok" "$got"
 got=$(run workflow_dispatch "2222")
 if [ "$got" = "rc=1 " ]; then ok=0; else ok=1; fi
-check "a short sha is refused" "$ok" "$got"
+check "$SHELL_UNDER_TEST: a short sha is refused" "$ok" "$got"
 got=$(run workflow_dispatch "$DISP
 3333333333333333333333333333333333333333")
 if [ "$got" = "rc=1 " ]; then ok=0; else ok=1; fi
-check "two shas are refused" "$ok" "$got"
+check "$SHELL_UNDER_TEST: two shas are refused" "$ok" "$got"
+got=$(run workflow_dispatch "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")
+if [ "$got" = "rc=1 " ]; then ok=0; else ok=1; fi
+check "$SHELL_UNDER_TEST: a 40-character non-hex value is refused" "$ok" "$got"
 printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/git"
 got=$(run schedule "$DISP")
 if [ "$got" = "rc=1 " ]; then ok=0; else ok=1; fi
-check "schedule: no dev head is refused" "$ok" "$got"
+check "$SHELL_UNDER_TEST: schedule: no dev head is refused" "$ok" "$got"
+
+done
 
 echo "passed: $pass  failed: $fail"
 [ "$fail" = 0 ]

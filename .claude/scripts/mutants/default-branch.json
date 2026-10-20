@@ -18,10 +18,10 @@
   "new": "    env:\n      SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}\n    steps:\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with: { ref: \"${{ github.event_name == 'schedule' && 'dev' || github.ref }}\", persist-credentials: false }\n"
  },
  {
-  "label": "default branch: resolve accepts any hex",
+  "label": "default branch: resolve's length check accepts any non-empty hex",
   "file": ".github/workflows/nightly.yml",
-  "old": "^[0-9a-f]{40}$",
-  "new": "^[0-9a-f]+$"
+  "old": "if [ \"${#sha}\" -ne 40 ]; then",
+  "new": "if [ \"${#sha}\" -lt 1 ]; then"
  },
  {
   "label": "default branch: resolve reads main's head on a schedule",
@@ -70,5 +70,17 @@
   "file": ".github/workflows/nightly.yml",
   "old": "      - id: sha\n        env:",
   "new": "      - id: sha\n        shell: sh\n        env:"
+ },
+ {
+  "label": "default branch: uv's Dependabot entry repeats target-branch as main",
+  "file": ".github/dependabot.yml",
+  "old": "  - package-ecosystem: uv\n    directory: /\n    schedule: { interval: weekly }\n    target-branch: dev\n",
+  "new": "  - package-ecosystem: uv\n    directory: /\n    schedule: { interval: weekly }\n    target-branch: dev\n    target-branch: main\n"
+ },
+ {
+  "label": "default branch: resolve's hex check dropped (a short or newline sha passes to the length check only)",
+  "file": ".github/workflows/nightly.yml",
+  "old": "          case \"$sha\" in *[!0-9a-f]* | \"\") sha=bad ;; esac  # POSIX",
+  "new": "          true  # POSIX"
  }
 ]
