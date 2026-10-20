@@ -25,7 +25,7 @@ another.
 
 Options: keep `dev` as the default (refused: the owner wants visitors on released code); switch at once and fix the
 config at the next release (refused: until then Dependabot and the nightly point at `main`); land the config on
-`dev` first and switch right after the next release puts it on `main` (chosen; v0.4.1, with uv 0.13.1, PR #175). For
+`dev` first and switch right after the next release puts it on `main` (chosen; v0.4.1, cut the same day, 2026-10-20). For
 outsiders' PRs: allow them into `dev` (chosen, the usual open-source flow) or refuse every PR from a non-member
 (refused by the owner).
 
@@ -42,8 +42,9 @@ into `main` except the same-repo `dev → main` promotion, telling its author to
   fork's `dev`, a feature branch and `main` (TASK-271).
 - The nightly's workflow file is `main`'s copy: an edit to it reaches the schedule only at the next release
   (`workflow_dispatch` on a branch runs that branch's copy, as spec 08 §Release's candidate run does).
-- Dependabot security updates may still open against the default branch whatever `target-branch` says; the weekly
-  routine (decision-048) retargets such a PR to `dev` rather than merging it into `main`.
+- Dependabot security updates always open against the default branch, whatever `target-branch` says (GitHub's
+  Dependabot options reference, `target-branch`). They are off in this repo (`security_and_analysis`, checked
+  2026-10-20); if they are turned on, such a PR fails `pr-base` and is retargeted to `dev` before review.
 - `pr-base`, like `review-attested`, is a signpost, not an access control: a PR's own copy of `pr-gates.yml` runs.
   Branch protection and the maintainers who merge are the access control.
 - After the switch, `gh pr create` without `--base` targets `main`; `/open-pr` and the promotion command already

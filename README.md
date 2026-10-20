@@ -293,7 +293,8 @@ the suite at 2,000 examples, every property and the differential (Tantivy agains
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) has the walkthrough. In short:
 
-- The flow is `feature → PR → dev → PR → main`. Nobody commits or pushes to `dev` or `main` directly.
+- The flow is `feature → PR → dev → PR → main`. Nobody commits or pushes to `dev` or `main` directly. PRs from
+  forks are welcome: open them against `dev` (only the `dev → main` promotion targets `main`).
 - Before a push, the routed reviewers check the diff (`/review-gate`, the
   [`review-gates`](.claude/skills/review-gates/SKILL.md) skill). Every finding gets a disposition, and
   `record-review.py` records an approval for the exact commit, which the PR body attests. Each PR also adds a
