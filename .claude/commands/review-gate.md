@@ -4,7 +4,8 @@ argument-hint: "(optional) extra reviewers to include, e.g. qa-auditor"
 allowed-tools: Read, Grep, Glob, Bash, Task, Write
 ---
 
-Run the review gate for the current branch, following `.claude/skills/review-gates/SKILL.md` exactly.
+Run the review gate for the current branch, following `.claude/skills/review-gates/SKILL.md` exactly. For a PR
+from a fork, follow its §Fork PRs instead of running anything from the fork's checkout (decision-052).
 Extra reviewers requested: $ARGUMENTS
 
 1. **Preconditions.** Working tree clean (commit first). The local tests the diff calls for green

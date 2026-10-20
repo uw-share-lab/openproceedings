@@ -25,7 +25,8 @@ tempted to bypass it.
 1. **Map the change to workflows** in `.github/workflows/`: `lint.yml`, `test.yml`, `claude-tooling.yml`,
    `pr-gates.yml`, `e2e.yml`, `bench.yml`, `nightly.yml` and `web-image.yml` (the advisory Docker build of
    `deploy/web.Dockerfile`, behind a `paths` filter, so it can't become required as is) exist today. The
-   **six required checks** are the job names `lint`, `test`, `claude-tooling`, `attribution`, `learnings` and `review-attested` (`pr-gates` is a workflow holding the last three jobs, not a check).
+   **six required checks** are the job names `lint`, `test`, `claude-tooling`, `attribution`, `learnings` and `review-attested` (`pr-gates` is a workflow holding the last three jobs, not a check); `pr-gates`' fourth job, `pr-base`, is required
+   on `main` only, once `main` is the default branch (decision-052).
    **Never rename a required job** without updating branch protection in the same change and saying so in
    the PR. A workflow that produces a required check must also trigger on `merge_group`, or the merge
    queue waits forever for a check that never starts (spec 08 §Merge queue, decision-027).
@@ -53,14 +54,17 @@ tempted to bypass it.
    `version` equal to `deploy/api.Dockerfile`'s uv (`check_uv_pin.py`, TASK-252), the npm manifests
    against the lock's workspace entries (`dependabot/npm_specs.py`, TASK-212), `lint_probes.py`, and every
    case table under `.claude/hooks/tests/` and `.claude/scripts/tests/`.
-6. **pr-gates** (three jobs): `attribution` scans every commit message in `base..head` and the PR
+6. **pr-gates** (four jobs): `attribution` scans every commit message in `base..head` and the PR
    title/body; `learnings` needs an added or extended `YYYY-MM-DD-<slug>.md` entry directly in
    `.claude/learnings/` unless labelled `no-learning`; `review-attested` compares `<!-- op-review: <sha>
-   APPROVE -->` with the head sha. Same-repo `dev → main` promotions are exempt from the last two. On
-   `merge_group` the three jobs run `.claude/scripts/merge_group_gate.py`. It resolves every PR in the
+   APPROVE -->` with the head sha. Same-repo `dev → main` promotions are exempt from the last two; `pr-base` (required on `main`
+   only, decision-052) fails any PR into `main` but the same-repo promotion, and passes on `merge_group`. On
+   `merge_group` the other three jobs run `.claude/scripts/merge_group_gate.py`. It resolves every PR in the
    queue's group from its merge commits and runs the same check on each one, failing closed. Change it
    together with its case table (`.claude/scripts/tests/test-merge-group-gate.sh`) and its mutants
-   (`.claude/scripts/mutants/merge-group.json`).
+   (`.claude/scripts/mutants/merge-group.json`). `dependabot.yml`'s `target-branch` and `nightly.yml`'s `resolve`
+   job (every job checks out its one sha) change with `.claude/scripts/tests/test-default-branch.sh` and
+   `.claude/scripts/mutants/default-branch.json` (decision-052).
 7. **Verify locally** before pushing: `make lint` and `make tooling` (what `.githooks/pre-push` runs),
    `actionlint`, and each changed job's commands in a clean shell. Test a gate by making it fail once (a throwaway branch commit) and pasting the red run.
 8. **Close out** per `CLAUDE.md` §Closing workflow. `/review-gate` will route `.github/**` to

@@ -5,10 +5,13 @@ version: 2
 # publication date, Docker Hub alone: a ghcr.io PR says "Cooldown could not be applied", and the routine leaves
 # it for the owner with its attestation's age): a compromised release is most often pulled within days, and the
 # weekly /dependabot-review routine leaves a younger one for the owner (decision-048).
+# `target-branch: dev` on every ecosystem: Dependabot reads this file from the default branch, `main` once
+# decision-052 lands, and without it would open its version updates against `main`, past dev's queue.
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
+    target-branch: dev
     cooldown: { default-days: 7 }
     commit-message: { prefix: "ci" }
     groups:
@@ -20,6 +23,7 @@ updates:
   - package-ecosystem: uv
     directory: /
     schedule: { interval: weekly }
+    target-branch: dev
     cooldown: { default-days: 7 }
     commit-message: { prefix: "deps" }
     groups:
@@ -36,6 +40,7 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule: { interval: weekly }
+    target-branch: dev
     cooldown: { default-days: 7 }
     commit-message: { prefix: "deps" }
     groups:
@@ -55,6 +60,7 @@ updates:
   - package-ecosystem: docker
     directories: ["/deploy", "/deploy/**"]
     schedule: { interval: weekly }
+    target-branch: dev
     cooldown: { default-days: 7 }
     commit-message: { prefix: "build" }
     groups:

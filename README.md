@@ -107,11 +107,12 @@ so those searches replay the same ids (decision-022). This is the project's deci
 - An [OpenReview](https://openreview.net) account, only to crawl OpenReview
 
 ### 2. Set up
-The current tested pre-release code is on `dev`. Until a tagged release is available, use `dev` for this
-quickstart. Once a release is available, use its tag for a fixed version.
+`main`, the default branch, holds the latest release; for a fixed version, clone its tag instead
+(`--branch vX.Y.Z`, from the [releases](https://github.com/uw-share-lab/openproceedings/releases)). `dev` is where
+unreleased work integrates (CONTRIBUTING.md).
 
 ```bash
-git clone --branch dev https://github.com/uw-share-lab/openproceedings.git && cd openproceedings
+git clone --branch main https://github.com/uw-share-lab/openproceedings.git && cd openproceedings
 scripts/setup-dev.sh   # git hooks and a .env skeleton
 make sync              # uv sync (backend) + npm ci --ignore-scripts (frontend)
 uv run op --help       # the CLI
@@ -293,7 +294,8 @@ the suite at 2,000 examples, every property and the differential (Tantivy agains
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) has the walkthrough. In short:
 
-- The flow is `feature → PR → dev → PR → main`. Nobody commits or pushes to `dev` or `main` directly.
+- The flow is `feature → PR → dev → PR → main`. Nobody commits or pushes to `dev` or `main` directly. PRs from
+  forks are welcome: open them against `dev` (only the `dev → main` promotion targets `main`).
 - Before a push, the routed reviewers check the diff (`/review-gate`, the
   [`review-gates`](.claude/skills/review-gates/SKILL.md) skill). Every finding gets a disposition, and
   `record-review.py` records an approval for the exact commit, which the PR body attests. Each PR also adds a

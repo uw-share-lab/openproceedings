@@ -7,7 +7,7 @@ import { ISSUES_URL } from "@/components/search/search-states";
 describe("the repository's links", () => {
   it("point a repo path at its page on the default branch", () => {
     expect(blobUrl("docs/results/coverage-sources.md")).toBe(
-      "https://github.com/uw-share-lab/openproceedings/blob/dev/docs/results/coverage-sources.md",
+      "https://github.com/uw-share-lab/openproceedings/blob/main/docs/results/coverage-sources.md",
     );
   });
 

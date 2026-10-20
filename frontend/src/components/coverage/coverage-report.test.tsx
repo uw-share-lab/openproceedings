@@ -309,7 +309,7 @@ describe("an ungated cell's note (TASK-222, CV-9)", () => {
     ).toEqual([
       "https://example.org/list",
       "https://example.org/conf/",
-      "https://github.com/uw-share-lab/openproceedings/blob/dev/docs/research/notes.md",
+      "https://github.com/uw-share-lab/openproceedings/blob/main/docs/research/notes.md",
     ]);
   });
 
@@ -446,7 +446,7 @@ describe("the header", () => {
     );
     expect(within(note).getByText("abstract_kind:official").tagName).toBe("CODE");
     expect(within(note).getByRole("link", { name: "the OpenAlex audit" }).getAttribute("href")).toBe(
-      "https://github.com/uw-share-lab/openproceedings/blob/dev/docs/results/2026-10-16-openalex-audit.md",
+      "https://github.com/uw-share-lab/openproceedings/blob/main/docs/results/2026-10-16-openalex-audit.md",
     );
     expect(note.getAttribute("tabindex")).toBe("-1"); // the label's target takes focus
     const region = screen.getByRole("region", { name: "Coverage table" });

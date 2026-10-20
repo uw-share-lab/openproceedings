@@ -44,7 +44,8 @@ row counts the whole document it cites, its own later sections too (AAAI-21's "M
 AI for Social Impact list, pp. 121–124), and says which part each number comes from; to date a list, list every capture
 of its URL and of its pre-migration path in the Wayback CDX index (the digest is the file's base32 SHA-1), name the
 earliest copy too (its content may differ), and say which copy each number is counted from (TASK-234). On
-a public page a repo-path citation is rendered as a link to the file on the repository's default branch.
+a public page a repo-path citation is rendered as a link to the file on `main`, the released code and the
+repository's default branch (decision-052; `frontend/src/lib/repo.ts`).
 
 **Abstract kinds (decision-049, milestone C).** Every cell, venue-year and the totals carry `abstract_official` and
 `abstract_openalex` beside `abstract_missing` and `abstract_withheld`, and they sum to `records`: official + OpenAlex +
