@@ -1,10 +1,10 @@
 ---
 id: TASK-270
 title: uv 0.13.0 → 0.13.1 by hand (image and CI pins together)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-19 13:28'
-updated_date: '2026-10-20 13:55'
+updated_date: '2026-10-20 13:56'
 labels:
   - deps
   - ci
@@ -33,3 +33,9 @@ Digest verified (registry resolves 0.13.1 to it; GitHub attestation for astral-s
 
 2026-10-20: the owner waived the rest of the 7-day hold to ship uv 0.13.1 in v0.4.1 today. docker_digest.py on origin/build/uv-0.13.1: registry resolves 0.13.1 to the pinned digest; GitHub attestation verified for astral-sh; first attested 6.4 days ago (the only PROBLEM, accepted by the owner). #162 is closed once this merges.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+uv 0.13.0 → 0.13.1 in deploy/api.Dockerfile (pinned by digest, attestation verified) and all 11 CI setup-uv steps, remade by hand from Dependabot's #162. Merged 2026-10-20, at 6.4 days, by the owner's waiver of the 7-day hold, to ship in v0.4.1; #162 closed.
+<!-- SECTION:FINAL_SUMMARY:END -->
