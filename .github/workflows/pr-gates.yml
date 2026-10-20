@@ -8,6 +8,9 @@ name: pr-gates
 # (decision-027). Its jobs read the PRs through the API, hence pull-requests: read. Each job's first step
 # refuses any other event: unreachable with today's triggers, it stops a future trigger from passing a job
 # whose gate steps all skip. Wiring checked by .claude/scripts/tests/test-merge-group-gate.sh.
+# pr-base keeps every PR but the same-repo dev → main promotion out of main (decision-052): a fork's PR opens
+# against the default branch, `main`, unless its author picks dev. Like the attestation it is a signpost, not
+# an access control (a PR's own copy of this file runs): only maintainers can merge.
 on:
   pull_request:
     branches: [dev, main]
@@ -121,3 +124,22 @@ jobs:
           HEAD_SHA: ${{ github.event.merge_group.head_sha }}
           HEAD_REF: ${{ github.event.merge_group.head_ref }}
         run: python3 .claude/scripts/merge_group_gate.py review --base "$BASE_SHA" --head "$HEAD_SHA" --head-ref "$HEAD_REF" --repo "$REPO"
+  pr-base:
+    runs-on: ubuntu-latest
+    # Required on main only (decision-052); on a PR into dev and in a merge-queue build it passes.
+    permissions: {}
+    steps:
+      - name: Refuse an event this gate doesn't check (a job whose steps all skip would pass)
+        if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
+        env: { EVENT: "${{ github.event_name }}" }
+        run: echo "::error::pr-gates has no check for the $EVENT event" && exit 1
+      - name: A PR into main is the same-repo dev → main promotion
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$HEAD_REF" = dev ] && [ "$HEAD_REPO" = "$REPO" ]; then echo "the dev → main promotion"; exit 0; fi
+          echo "::error::PRs go into dev; only the dev → main promotion targets main. Change this PR's base branch to dev (Edit, next to the title) — CONTRIBUTING.md"
+          exit 1

@@ -8,6 +8,9 @@ name: nightly
 # blob. A long pytest step runs verbose (`-v` prints each test as it starts, and its result when it ends) and is
 # interrupted a few minutes before its job's limit, so an overrun fails with an ::error:: and the log shows which
 # test started with no result, rather than a bare cancellation.
+# A schedule runs from the default branch, `main` once decision-052 lands, so a scheduled run checks out `dev`
+# (the workflow file itself is still `main`'s: an edit here reaches the schedule at the next release);
+# workflow_dispatch checks out the ref it was dispatched on (a release candidate, spec 08 §Release).
 on:
   schedule:
     - cron: "17 7 * * *"
@@ -23,7 +26,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
+        with: { ref: "${{ github.event_name == 'schedule' && 'dev' || github.ref }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with: { version: "0.13.0" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
@@ -65,7 +68,7 @@ jobs:
       OP_EARLY_FAILURES: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
+        with: { ref: "${{ github.event_name == 'schedule' && 'dev' || github.ref }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with: { version: "0.13.0" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
@@ -103,7 +106,7 @@ jobs:
       TEST: backend/tests/unit/test_clauses.py::test_every_year_edit_on_a_toggleable_clause_parses_and_edits_only_that_clause
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
+        with: { ref: "${{ github.event_name == 'schedule' && 'dev' || github.ref }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with: { version: "0.13.0" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
@@ -140,7 +143,7 @@ jobs:
       SEED: ${{ github.run_id }}${{ matrix.shard }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
+        with: { ref: "${{ github.event_name == 'schedule' && 'dev' || github.ref }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with: { version: "0.13.0" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
@@ -167,7 +170,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
+        with: { ref: "${{ github.event_name == 'schedule' && 'dev' || github.ref }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with: { version: "0.13.0" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
@@ -219,7 +222,7 @@ jobs:
       SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
+        with: { ref: "${{ github.event_name == 'schedule' && 'dev' || github.ref }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with: { version: "0.13.0" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
