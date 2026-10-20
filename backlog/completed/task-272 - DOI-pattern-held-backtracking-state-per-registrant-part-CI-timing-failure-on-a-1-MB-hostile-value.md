@@ -3,10 +3,10 @@ id: TASK-272
 title: >-
   DOI pattern held backtracking state per registrant part (CI timing failure on
   a 1 MB hostile value)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-20 14:42'
-updated_date: '2026-10-20 15:19'
+updated_date: '2026-10-20 15:27'
 labels:
   - eval
   - security
@@ -38,3 +38,9 @@ Follow-up TASK-273 (unquote memory at MAX_COMPARE_LINE), from the qa+security ro
 
 Round 2: peak_bytes tests in test_timing.py; the security sweep's pre-existing quadratic regexes filed as TASK-274 (BibTeX export, before any public instance), TASK-275 (logs.scrub), TASK-276 (openreview_v1).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Possessive quantifiers in the four greedy repeat-then-delimiter patterns on untrusted input: eval/scholar_compare.py _DOI (/compare uploads), ingest/record.py _doi (Urls.doi) and ingest/sources/html.py's _CUSTOM_OR_NAMESPACED and _HYPHENATED. Each held 62.8 MB of re backtracking state on a 1 MB hostile value (now ~1 KB), which made PR #175's CI timing test fail at 10-11x for 4x the input; equivalence shown exhaustively on short strings. tests/timing.py gains peak_bytes (tracemalloc; refuses an outer trace) with its own tests, and memory bounds cover every HOSTILE_DOIS shape plus the ingest patterns. testing-standards §7 carries the lesson. Follow-ups: TASK-273 (unquote memory), TASK-274 (BibTeX _braced, before a public instance), TASK-275 (logs.scrub), TASK-276 (openreview_v1).
+<!-- SECTION:FINAL_SUMMARY:END -->
