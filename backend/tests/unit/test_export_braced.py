@@ -80,8 +80,8 @@ def test_balances_is_the_frozen_function(text: str, escaped_count: bool) -> None
 
 # --- frozen: export.py's three backslash-run patterns before TASK-274 (f81c71cc) -----------------------------
 # A match could start at any backslash: on a run that no brace, `&%#` or `@` ends, `\\*` took the rest of the
-# run and gave it back one backslash at a time at every start, so a run of n cost ~n²/2 steps (TASK-274: 7.3 s
-# for one 20,000-character abstract).
+# run and gave it back one backslash at a time at every start, so a run of n cost ~n²/2 steps (TASK-274: ~6.6 s
+# CPU for one 20,000-character abstract).
 _PRE274 = {
     "_BRACE": re.compile(r"(\\*)[{}]"),
     "_SPECIAL": re.compile(r"(\\*)([&%#])"),

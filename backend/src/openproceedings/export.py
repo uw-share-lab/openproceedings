@@ -416,8 +416,9 @@ def bibtex_key(r: dict[str, Any]) -> str:
 
 # A brace and the whole backslash run before it. Each of the three backslash-run patterns here starts a match only
 # where a run starts (`(?<!\\)`): unanchored, every backslash of a run that no brace ends started an attempt that
-# read the rest of the run, so a run of n cost ~n²/2 steps (TASK-274: 7.3 s for one 20,000-character abstract). The
-# matches are the same: a match never ends on a backslash, so the unanchored scan reached every run at its start too.
+# read the rest of the run, so a run of n cost ~n²/2 steps (TASK-274: ~6.6 s CPU for one 20,000-character abstract).
+# The matches are the same: a match never ends on a backslash, so the unanchored scan reached every run at its start,
+# and `\\*` can give the run back down to nothing, so an attempt that fails there fails at every later start too.
 _BRACE = re.compile(r"(?<!\\)(\\*)[{}]")
 
 

@@ -15,8 +15,11 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
   and gave the run back one backslash at a time. That is ~n²/2 steps for a run of n. The fix is not
   possessive (TASK-272's tool for memory): possessive stops giving back within one attempt, but the attempts
   still start at every backslash. A lookbehind `(?<!\\)` makes every start inside a run fail in one step.
-- **Why the anchor is exact here.** No match ends on a backslash, so the unanchored scan never resumed inside a
-  run. It reached each run at its first backslash, and a run start is exactly where the lookbehind allows one.
+- **Why the anchor is exact here.** Two things hold. No match ends on a backslash, so the unanchored scan never
+  resumed inside a run: it reached each run at its first backslash, where the lookbehind allows a start. And
+  `\\*` can give the run back down to nothing, so an attempt that fails at the first backslash fails at every
+  later one. The second is not automatic: a parity pattern `(?:\\\\)*@` matches the last two backslashes and the `@` of `\\\@` (three backslashes), and
+  anchored it finds nothing (the docs review's counterexample).
   The test doesn't trust that argument. It compares the three patterns' `(span, groups)` lists, and
   `_braced`, `_debraced` and `_balances`, against the old patterns on all 299,593 strings of up to 6 characters
   over `\{}&%#@x`. A one-off run took it to length 8 for the patterns and 7 for the functions: no difference.
@@ -35,10 +38,11 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
 
 ## Decisions (and what would change them)
 - The lookbehind rather than a hand-written scanner. It is a one-token change that is exactly equivalent
-  (shown exhaustively). A pattern whose matches can end inside a run would need its own proof, or a scanner.
+  (shown exhaustively). A pattern whose matches can end inside a run, or whose run can't shrink to nothing
+  (parity), needs its own proof, or a scanner.
 
 ## Follow-ups
-- [ ] task-279 — decide ingest length caps for DOI, URL and author fields (decision-026 caps only titles and abstracts)
+- [ ] task-279 — decide ingest length caps for the uncapped stored string fields: DOI, URLs, authors, keywords, venue_id_raw (decision-026 caps only titles and abstracts)
 
 ## Propagated to
 - Skill: `.claude/skills/testing-standards/SKILL.md` §7 (anchor a run-opening pattern with a lookbehind and

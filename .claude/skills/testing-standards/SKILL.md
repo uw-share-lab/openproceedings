@@ -83,7 +83,9 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
    bound the peak with `backend/tests/timing.py`'s `peak_bytes` (tracemalloc) beside the CPU check; bytes don't depend on the runner's cache.
    A `search`/`finditer`/`sub` pattern that opens with a run (`(\\*)[{}]`) tries a match at every character of a
    run that nothing ends, each attempt reading the rest of the run: quadratic. Anchor it where the run starts
-   (`(?<!\\)(\\*)[{}]`), which gives the same matches when no match ends inside a run, and show that with an
+   (`(?<!\\)(\\*)[{}]`). That gives the same matches only when no match ends inside a run *and* an attempt that
+   fails at a run's first character fails at every later one too: true of `(\\*)X`, whose run can shrink to
+   nothing, false of a parity pattern such as `(?:\\\\)*@`, which anchored misses the match in `\\\@` (three backslashes). Show it with an
    exhaustive comparison of the matches over every short string of the characters it reads (TASK-274).
 8. **A failure that appears in one checkout only is a stored example.** The `.hypothesis` database holds an input
    no `@example` covers. Extract the falsifying input and pin it as an `@example` before bisecting or calling it
