@@ -97,9 +97,14 @@ text screeners see.
 - Collapse newlines inside values to spaces (refaudit normalises whitespace anyway).
 - `export._braced` runs once per field of every exported record, so each pass is skipped when its
   character doesn't occur (no brace: no balance count; no `&%#`: no escaping; no `@`: no `{@}`), and `&%#`
-  are escaped in one pass that reads each backslash run whole (`(\\*)([&%#])`, escaped only after an even
-  run). A speed-up here must stay byte-identical: `tests/unit/test_export_braced.py` holds `_braced` to a
-  frozen copy of the pre-guard function under Hypothesis.
+  are escaped in one pass that reads each backslash run whole (`(?<!\\)(\\*)([&%#])`, escaped only after an
+  even run). Its three backslash-run patterns (`_BRACE`, `_SPECIAL`, `_AT`) start a match only where a run
+  starts (`(?<!\\)`, TASK-274): unanchored, every backslash of a run that nothing ends started an attempt that
+  read the rest of the run, quadratic in the run (~6.6 s CPU for one 20,000-character abstract; `doi` and `url`,
+  which have no length cap, go through the same passes). A speed-up here must stay byte-identical:
+  `tests/unit/test_export_braced.py` holds `_braced` to a frozen copy of the pre-guard function under
+  Hypothesis, holds the three patterns to their unanchored form on every string of up to 6 characters over
+  `\{}&%#@x`, and checks `_braced`'s CPU growth over a long backslash run (`tests/timing.py`).
 
 ## refaudit's parser (`refaudit.bibtex`, from the pinned `refaudit` PyPI package)
 - Entries match `@(\w+)\s*[{(]\s*([^,\s{}]+)\s*,`. `@comment`, `@preamble` and `@string` are skipped.
