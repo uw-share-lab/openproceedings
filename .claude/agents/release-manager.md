@@ -46,12 +46,13 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    or the index manifest.
    The combined-snapshot golden includes the manifest's app version. After an app-version bump, if that
    golden fails, prove that reverting only `openproceedings_version` in memory restores the exact prior
-   whole-directory hash before updating its expected hash. To do that, use a throwaway test in a
-   `git archive HEAD backend pyproject.toml` copy in a mktemp directory (its own rootdir, so `conftest.py` and
-   `tests.` imports apply and the release worktree stays clean), placed under the copy's `backend/tests/` and run
-   with the worktree's `.venv` python, that monkeypatches `openproceedings.ingest.snapshot.__version__` (the name
-   the module bound at import) to the old version. Record the deliberate metadata change in the test and release
-   evidence; retain the strict all-files check and run the full suite again.
+   whole-directory hash before updating its expected hash. To do that, use a throwaway test that
+   monkeypatches `openproceedings.ingest.snapshot.__version__` (the name the module bound at import) to the old
+   version. Put it under `backend/tests/` in a `git archive HEAD backend pyproject.toml` copy in a mktemp
+   directory, and run it from the copy's root with the worktree's `.venv` python: the copy is its own rootdir, so
+   `conftest.py` and `tests.` imports apply and the release worktree stays clean. The code under test is still the
+   worktree's (the `.venv` editable install), so the worktree must be clean. Record the deliberate metadata
+   change in the test and release evidence; retain the strict all-files check and run the full suite again.
 3. **Code and data ship separately**, except a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or
    Tantivy: it deploys together with an index its own code built.
 4. **Index promotion (runbook, spec 08 §Deploy).** Offline: `op snapshot build`, `op snapshot diff <old snapshot dir>

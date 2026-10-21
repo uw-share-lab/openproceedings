@@ -32,12 +32,12 @@ the proof was run:
 - **Patch the name the snapshot module bound.** `ingest/snapshot.py` does `from openproceedings import
   __version__`, so the probe sets `monkeypatch.setattr(snapshot, "__version__", "0.4.1")`. Patching
   `openproceedings.__version__` changes nothing after import.
-- **Put the probe under a `backend/tests/`.** It needs `tests.unit.ingest.test_combined_snapshot`'s `combined()`,
+- **Put the probe under some checkout's `backend/tests/`.** It needs `tests.unit.ingest.test_combined_snapshot`'s `combined()`,
   `files_hash()` and the session `conftest.py` (the network guard). Run on its own from the scratchpad, it fails
   with `ModuleNotFoundError: tests`. This release copied it into the worktree, ran it and deleted it. The
   `qa-auditor`'s route is better because it never dirties the worktree: `git archive HEAD backend pyproject.toml`
-  into a mktemp directory, put the probe under that copy's `backend/tests/`, and run it with the worktree's `.venv`
-  python.
+  into a mktemp directory, put the probe under that copy's `backend/tests/`, and run it from the copy's root with the
+  worktree's `.venv` python (which still imports the worktree's code, so keep the worktree clean).
 - **Result.** With 0.4.1 the build hashed to `661ad734…`, the old value, and `SNAPSHOT_HASH` was unchanged. With
   0.4.2 it hashed to `03e68379…`. So the new `FILES_HASH` and its provenance comment went in with the release commit.
 
