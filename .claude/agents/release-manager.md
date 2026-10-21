@@ -46,7 +46,10 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    or the index manifest.
    The combined-snapshot golden includes the manifest's app version. After an app-version bump, if that
    golden fails, prove that reverting only `openproceedings_version` in memory restores the exact prior
-   whole-directory hash before updating its expected hash. Record the deliberate metadata change in the
+   whole-directory hash before updating its expected hash. To do that, use a throwaway test under `backend/tests/`
+   (so its `conftest.py` and `tests.` imports apply; deleted before committing) that monkeypatches
+   `openproceedings.ingest.snapshot.__version__` (the name the module bound at import) to the old version. Record
+   the deliberate metadata change in the
    test and release evidence; retain the strict all-files check and run the full suite again.
 3. **Code and data ship separately**, except a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or
    Tantivy: it deploys together with an index its own code built.
