@@ -1,10 +1,10 @@
 ---
 id: TASK-271
 title: Make main the default branch for the open-source repo
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-20 13:40'
-updated_date: '2026-10-21 15:36'
+updated_date: '2026-10-21 16:02'
 labels:
   - ci
   - process
@@ -37,3 +37,9 @@ AC4 done except its last clause, 2026-10-21 ~01:34Z, right after v0.4.1 was tagg
 
 AC4's last clause met 2026-10-21: the scheduled nightly run 39603491179 (created 12:55Z, listed under main's 66b5b1fe, the default branch's head) has a resolve job (119233649320) whose log and step summary line read: nightly (schedule) tests `2d963d475f8128ae1fe96f9528ed66b397ae9ca1`. That sha is dev's #183 merge (on origin/dev, not on main), so the run tested dev. When this was checked, 39 of the run's 40 jobs had passed and mutate (8/16) was still in progress; the clause is only about the summary naming the sha.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+main is the default branch (decision-052) and dev stays the integration branch. Dependabot's four ecosystems set target-branch: dev; the nightly's resolve job reads dev's head once and every job tests it; pr-gates' pr-base job fails any PR into main but the same-repo dev → main promotion and is required on main (app_id 15368); CONTRIBUTING, the README and spec 08 tell fork contributors to target dev. The switch ran right after v0.4.1 (2026-10-21 ~01:34Z), required check first. Verified: test-default-branch.sh and test-merge-group-gate.sh in make tooling, and the first scheduled nightly after the switch (run 39603491179, listed under main's 66b5b1fe) tested dev's 2d963d47, as its resolve job's summary line names.
+<!-- SECTION:FINAL_SUMMARY:END -->
