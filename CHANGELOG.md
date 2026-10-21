@@ -10,6 +10,18 @@ papers a query matches: a search record pins its `index_version`, `tokenizer_ver
 it with the same QUERY_VERSION; otherwise as `drifted`, naming what changed. Each release's Data section
 names the index it was verified on and which saved records still reproduce.
 
+## Unreleased
+
+### Changed
+
+- main is the default branch and requires pr-base, as built (TASK-271 AC4) ([#182](https://github.com/uw-share-lab/openproceedings/pull/182))
+
+### Internal
+
+- uv 0.13.1 → 0.13.4 in the api image and CI (TASK-277; security release, 7-day hold waived by the owner) ([#183](https://github.com/uw-share-lab/openproceedings/pull/183))
+- bump the uv-minor-patch group with 2 updates ([#179](https://github.com/uw-share-lab/openproceedings/pull/179))
+- bump the npm-minor-patch group with 3 updates ([#178](https://github.com/uw-share-lab/openproceedings/pull/178))
+
 ## 0.4.1
 
 ### Fixed

@@ -46,3 +46,12 @@ list, so the request must resend all six existing checks with their `app_id: 153
 `pr-base` would have dropped the other six. Save the current list first (`gh api …/required_status_checks`), send
 the full list with `strict` unchanged (`false` on `main`, decision-046), and read the response's
 `checks[].context:app_id` before changing the default branch.
+
+## Addendum — 2026-10-21 (the first scheduled nightly after the switch)
+The `resolve` job did what it was written for. Scheduled run 39603491179 (created 12:55Z) is listed under `main`'s
+head, 66b5b1fe, as a schedule always is (it runs the default branch's copy of the file), but its `resolve` job
+printed, and wrote to the step summary, ``nightly (schedule) tests `2d963d475f8128ae1fe96f9528ed66b397ae9ca1` ``:
+dev's #183 merge. To confirm a run like this tested `dev`, read the `resolve` job's log
+(`gh api repos/<owner>/<repo>/actions/jobs/<id>/logs`), not the run's `headSha`, and check the printed sha with
+`git branch -r --contains <sha>` (here only `origin/dev`). That closed TASK-271's AC4; the run's last mutate shard
+was still going, which the clause doesn't depend on.

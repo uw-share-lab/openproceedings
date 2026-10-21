@@ -744,7 +744,12 @@ not proof of who decided. Then:
    archive` line), since `$RUN` holds the copy taken at step 0.
 2. **Re-run the checks on the head to be attested.** The acceptance covers that one finding, so run the checker
    that reported it again on the head: every line but the accepted one must be clean (exit 0 once the package is
-   in `OWNER_ACCEPTED`). Then every step after the one that stopped runs as usual on that head, and step 5's tests
+   in `OWNER_ACCEPTED`). A finding no checker can record (`OWNER_ACCEPTED` lists only new npm packages), such as
+   a semver-major bump of a package already in the lock (`obug` 2.2.1 → 3.0.0 on #178, accepted in
+   https://github.com/uw-share-lab/openproceedings/pull/178#issuecomment-6318776903), takes no tooling PR, and
+   the checker keeps exiting 1: it passes when its only PROBLEM line is the accepted one, character for
+   character, and it prints no FIX line. The comment covers that one line, so a second PROBLEM line or a FIX is
+   a hard stop again. Then every step after the one that stopped runs as usual on that head, and step 5's tests
    and step 6's reviewers run again if this run added a commit after they ran.
 3. **Attest only that head.** Steps 7 and 8 run for the head of item 2, and `--attest --pr <n>` names it alone.
    A new head (a fix, a Dependabot rebase) is a new run: the acceptance still holds only if the accepted package
