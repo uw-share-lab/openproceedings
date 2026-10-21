@@ -24,3 +24,7 @@ Get a green nightly on the 0.4.0 candidate (993772e9), as §Release step 1 asks,
 
 ## Dead ends — don't repeat these
 - Re-running only the timed-out shard: the same mutants on the same runner size end at the same cap.
+- Chaining release steps as `git push … | tail -n 2 && gh pr create …` in one background script: the pipe's
+  status is `tail`'s, so a push the pre-push hook refused (a fresh worktree with no `node_modules`) went on to
+  the PR steps and an hour of polling for a PR that didn't exist. Keep the push's own status, and `make sync`
+  in every new worktree before its first push.

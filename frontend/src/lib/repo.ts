@@ -5,10 +5,10 @@
  */
 export const REPO_URL = "https://github.com/uw-share-lab/openproceedings";
 
-/** The branch a file link points at: the repository's default branch. */
-export const DEFAULT_BRANCH = "dev";
+/** The branch a file link points at: `main`, the released code and the repository's default branch (decision-052). */
+export const DEFAULT_BRANCH = "main";
 
-/** The GitHub page of a repository file on the default branch (`docs/x.md` → `…/blob/dev/docs/x.md`). */
+/** The GitHub page of a repository file on the default branch (`docs/x.md` → `…/blob/main/docs/x.md`). */
 export function blobUrl(path: string): string {
   return `${REPO_URL}/blob/${DEFAULT_BRANCH}/${path}`;
 }

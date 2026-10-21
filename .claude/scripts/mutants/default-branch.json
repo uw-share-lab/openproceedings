@@ -1,0 +1,86 @@
+[
+ {
+  "label": "default branch: npm's Dependabot updates lose target-branch",
+  "file": ".github/dependabot.yml",
+  "old": "  - package-ecosystem: npm\n    directory: /\n    schedule: { interval: weekly }\n    target-branch: dev\n",
+  "new": "  - package-ecosystem: npm\n    directory: /\n    schedule: { interval: weekly }\n"
+ },
+ {
+  "label": "default branch: the mutate job doesn't need resolve",
+  "file": ".github/workflows/nightly.yml",
+  "old": "  mutate:\n    needs: resolve\n",
+  "new": "  mutate:\n"
+ },
+ {
+  "label": "default branch: the mutate job checks out dev by name",
+  "file": ".github/workflows/nightly.yml",
+  "old": "    env:\n      SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}\n    steps:\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with: { ref: \"${{ needs.resolve.outputs.sha }}\", persist-credentials: false }\n",
+  "new": "    env:\n      SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}\n    steps:\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with: { ref: \"${{ github.event_name == 'schedule' && 'dev' || github.ref }}\", persist-credentials: false }\n"
+ },
+ {
+  "label": "default branch: resolve's length check accepts any non-empty hex",
+  "file": ".github/workflows/nightly.yml",
+  "old": "if [ \"${#sha}\" -ne 40 ]; then",
+  "new": "if [ \"${#sha}\" -lt 1 ]; then"
+ },
+ {
+  "label": "default branch: resolve reads main's head on a schedule",
+  "file": ".github/workflows/nightly.yml",
+  "old": "\"https://github.com/$REPO\" refs/heads/dev",
+  "new": "\"https://github.com/$REPO\" refs/heads/main"
+ },
+ {
+  "label": "default branch: resolve uses github.sha on a schedule",
+  "file": ".github/workflows/nightly.yml",
+  "old": "if [ \"$EVENT\" = schedule ]; then sha=",
+  "new": "if [ \"$EVENT\" = never ]; then sha="
+ },
+ {
+  "label": "default branch: resolve's step id no longer matches its output",
+  "file": ".github/workflows/nightly.yml",
+  "old": "      - id: sha\n",
+  "new": "      - id: resolve\n"
+ },
+ {
+  "label": "default branch: resolve's step skipped by a step-level if",
+  "file": ".github/workflows/nightly.yml",
+  "old": "      - id: sha\n",
+  "new": "      - id: sha\n        if: false\n"
+ },
+ {
+  "label": "default branch: suite-ci runs with resolve failed (if: always())",
+  "file": ".github/workflows/nightly.yml",
+  "old": "  suite-ci:\n    needs: resolve\n",
+  "new": "  suite-ci:\n    needs: resolve\n    if: always()\n"
+ },
+ {
+  "label": "default branch: a new job with a commented header and no needs",
+  "file": ".github/workflows/nightly.yml",
+  "old": "  # Every property at 50,000",
+  "new": "  extra: # new\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with: { ref: \"${{ needs.resolve.outputs.sha }}\", persist-credentials: false }\n  # Every property at 50,000"
+ },
+ {
+  "label": "default branch: a Dependabot entry written directory-first, no target-branch",
+  "file": ".github/dependabot.yml",
+  "old": "\nupdates:\n",
+  "new": "\nupdates:\n  - directory: /\n    package-ecosystem: pip\n    schedule: { interval: weekly }\n"
+ },
+ {
+  "label": "default branch: resolve's step gains an explicit shell: sh",
+  "file": ".github/workflows/nightly.yml",
+  "old": "      - id: sha\n        env:",
+  "new": "      - id: sha\n        shell: sh\n        env:"
+ },
+ {
+  "label": "default branch: uv's Dependabot entry repeats target-branch as main",
+  "file": ".github/dependabot.yml",
+  "old": "  - package-ecosystem: uv\n    directory: /\n    schedule: { interval: weekly }\n    target-branch: dev\n",
+  "new": "  - package-ecosystem: uv\n    directory: /\n    schedule: { interval: weekly }\n    target-branch: dev\n    target-branch: main\n"
+ },
+ {
+  "label": "default branch: resolve's hex check dropped (a short or newline sha passes to the length check only)",
+  "file": ".github/workflows/nightly.yml",
+  "old": "          case \"$sha\" in *[!0123456789abcdef]* | \"\") sha=bad ;; esac  # POSIX",
+  "new": "          true  # POSIX"
+ }
+]

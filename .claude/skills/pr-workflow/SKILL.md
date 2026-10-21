@@ -1,6 +1,6 @@
 ---
 name: pr-workflow
-description: The openproceedings branch and PR flow (feature → PR → dev → PR → main), the per-sha review records that gate push and PR creation, the order of /review-gate then /open-pr, the six required CI checks, and the solo-maintainer approval policy for main. Use when starting a branch, preparing to push, opening or promoting a PR, or diagnosing a push/PR the hooks blocked.
+description: The openproceedings branch and PR flow (feature → PR → dev → PR → main), the per-sha review records that gate push and PR creation, the order of /review-gate then /open-pr, the six required CI checks (plus pr-base on main), fork PRs into dev, and the solo-maintainer approval policy for main. Use when starting a branch, preparing to push, opening or promoting a PR, or diagnosing a push/PR the hooks blocked.
 ---
 
 # PR workflow
@@ -17,6 +17,11 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
   spec 08 §Release), which requires green checks but **no mandatory approving review** under the
   solo-maintainer policy applied on 2026-10-03; `main` doesn't require `dev` up to date, so there is no
   back-merge (decision-046).
+- `main` is the default branch once v0.4.1 is tagged (decision-052), so `gh pr create` without `--base` targets
+  `main`: always pass `--base dev` (`/open-pr` does). `pr-gates`' `pr-base` job fails any PR into `main` but the
+  same-repo `dev → main` promotion; it is required on `main` only. Forks may open PRs, into `dev`. A maintainer
+  reads a fork PR's diff as data first and never runs its code with their own credentials (CONTRIBUTING.md §Flow,
+  "Maintainers: a fork's PR is untrusted code"; the gate for it is `review-gates` §Fork PRs).
 - Branch protection: both `dev` and `main` accept only PRs whose required checks are green, and on each branch every
   one must be GitHub Actions' check run (app_id 15368: `dev` TASK-251, `main` TASK-258; rollback in decision-027). `dev` merges
   through a **merge queue** (TASK-161, decision-027; §Merge method).
@@ -146,9 +151,12 @@ green PR to the queue with `gh pr merge <n> --auto`. That needs the repository's
 spec 08 §Git and PR rules gives the GraphQL `enqueuePullRequest` call that works without it. The queue's
 MERGE method makes the merge commit, and GitHub deletes the branch. Don't rebase a PR because `dev` moved. Its review record and attestation cover
 its head, and the queue tests that head on top of `dev` plus the PRs ahead of it. Several PRs can wait in
-the queue at once. Rebase only when the queue drops a PR, either for a conflict or for a red queue build.
-Then fix the cause, run the review round on the new head, `--attest` it, and queue it again. A push to a
-queued PR also drops it from the queue.
+the queue at once. Rebase only when the queue drops a PR, either for a conflict or for a red queue build, or
+when a sibling's merge leaves a PR still waiting for its checks in conflict (`mergeStateStatus: DIRTY`). That PR
+loses its auto-merge with no notice, and closing and reopening it runs no CI, so watch for `DIRTY` after each
+merge. Then fix the cause, run the review round on the new head, `--attest` it, and queue it again. A push to a
+queued PR also drops it from the queue. When two PRs' learnings conflict in the generated
+`.claude/learnings/INDEX.md`, rebase and run `learnings_index.py` at each stop instead of merging the hunks by hand.
 
 To change a PR body, use `gh api -X PATCH repos/{owner}/{repo}/pulls/<n>`;
 `gh pr edit` fails here on the retired Projects (classic) API.

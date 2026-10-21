@@ -320,6 +320,34 @@ for job, gate in (("attribution", "attribution"), ("learnings", "learnings"), ("
         errs.append(f"{job}: continue-on-error lets a failing gate pass")
     if "pull-requests: read" not in (jobs.get(job) or ""):
         errs.append(f"{job}: no pull-requests: read")
+# pr-base (decision-052): the event guard first, no job-level if: or continue-on-error (either would let a PR
+# into main pass unchecked), and its one gate step, run here, passes only the same-repo dev -> main promotion.
+pb = jobs.get("pr-base") or ""
+steps = pb.split("\n      - ")[1:]
+if not steps or "Refuse an event" not in steps[0] or "!= 'pull_request' && github.event_name != 'merge_group'" not in steps[0] or "exit 1" not in steps[0]:
+    errs.append("pr-base: the first step doesn't refuse other events")
+if re.findall(r"^    if: ", pb, re.M) or "continue-on-error" in pb:
+    errs.append("pr-base: a job-level if: or continue-on-error")
+# A PR retargeted from dev to main must run pr-base again (`edited`), and a PR into main must run it at all.
+pr_on = text.split("\njobs:\n", 1)[0].split("\n  merge_group:", 1)[0]
+if not re.search(r"\n    branches: \[[^\]\n]*\bmain\b[^\]\n]*\]", pr_on) or not re.search(r"\n    types: \[[^\]\n]*\bedited\b[^\]\n]*\]", pr_on):
+    errs.append("pr-base: pull_request doesn't run on PRs into main, or on edited (a base change)")
+gate = [s for s in steps if "github.base_ref == 'main'" in s]
+if len(gate) != 1 or not re.search(r"^        if: github\.event_name == 'pull_request' && github\.base_ref == 'main'$", gate[0], re.M):
+    errs.append("pr-base: not exactly one step, run on a pull_request into main")
+else:
+    import subprocess
+    body = gate[0].split("        run: |\n", 1)[-1]
+    script = "\n".join(line[10:] for line in body.splitlines())
+    repo = "uw-share-lab/openproceedings"
+    for ref, head_repo, want in (("dev", repo, 0), ("dev", "someone/openproceedings", 1), ("feat/x", repo, 1), ("main", repo, 1)):
+        rc = subprocess.run(["bash", "-c", script], env={"HEAD_REF": ref, "HEAD_REPO": head_repo, "REPO": repo, "PATH": "/usr/bin:/bin"},
+                            capture_output=True).returncode
+        if (rc == 0) != (want == 0):
+            errs.append(f"pr-base: {head_repo}:{ref} into main exits {rc}")
+    for need in ("HEAD_REF: ${{ github.head_ref }}", "HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}", "REPO: ${{ github.repository }}"):
+        if need not in gate[0]:
+            errs.append(f"pr-base: the gate step lacks {need}")
 # The inline pull_request attribution step and the script must match the same pattern.
 sys.path.insert(0, str(wf.parents[1] / ".claude" / "scripts"))
 from merge_group_gate import ATTRIBUTION  # noqa: E402
@@ -330,7 +358,7 @@ print("\n".join(errs))
 sys.exit(1 if errs else 0)
 PY
 }
-if out=$(wiring 2>&1); then pass=$((pass+1)); echo "  ok   wiring       pr-gates, test, lint and claude-tooling are wired for merge_group"
+if out=$(wiring 2>&1); then pass=$((pass+1)); echo "  ok   wiring       pr-gates, test, lint and claude-tooling are wired for merge_group; pr-base passes only the promotion"
 else fail=$((fail+1)); echo "  FAIL wiring       $out"; fi
 
 echo "passed: $pass  failed: $fail"

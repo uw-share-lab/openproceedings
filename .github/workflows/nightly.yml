@@ -4,10 +4,14 @@ name: nightly
 # the benchmarks with their budgets plus the ~80k report, and the full mutation run of every gate and tooling
 # check (make mutate's mutants, as 16 `--shard` jobs). Reviews run only `make mutate-changed`; this catches
 # anything that slipped (TASK-057).
-# Not a PR check: a failure shows as a red run on `dev`. Every Hypothesis failure prints its `@reproduce_failure`
+# Not a PR check: a failure shows as a red nightly run (a scheduled one listed under the default branch: its
+# summary names the `dev` sha it tested). Every Hypothesis failure prints its `@reproduce_failure`
 # blob. A long pytest step runs verbose (`-v` prints each test as it starts, and its result when it ends) and is
 # interrupted a few minutes before its job's limit, so an overrun fails with an ::error:: and the log shows which
 # test started with no result, rather than a bare cancellation.
+# A schedule runs from the default branch, `main` once decision-052 lands, so a scheduled run tests `dev`'s head
+# (the `resolve` job below; the workflow file itself is still `main`'s: an edit here reaches the schedule at the
+# next release); a dispatched run tests the sha it was dispatched on (`--ref dev` for spec 08 §Release step 1).
 on:
   schedule:
     - cron: "17 7 * * *"
@@ -16,16 +20,36 @@ permissions:
   contents: read
 
 jobs:
+  # The one commit every job tests (decision-052): a scheduled run uses the default branch's copy of this file
+  # and is listed under the default branch's sha, but tests `dev`'s head, read once here, so jobs queued behind
+  # the 20-at-once limit don't each check out a later `dev`; a dispatched run tests the sha it was dispatched on.
+  # Its check is POSIX sh, so a `shell:` or `defaults:` can't turn it off.
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - id: sha
+        env: { EVENT: "${{ github.event_name }}", REPO: "${{ github.repository }}", SHA: "${{ github.sha }}" }
+        run: |
+          if [ "$EVENT" = schedule ]; then sha=$(git ls-remote "https://github.com/$REPO" refs/heads/dev | cut -f1); else sha=$SHA; fi
+          case "$sha" in *[!0123456789abcdef]* | "") sha=bad ;; esac  # POSIX, any shell and locale; a newline is refused too
+          if [ "${#sha}" -ne 40 ]; then echo "::error::no commit to test ($EVENT)"; exit 1; fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "nightly ($EVENT) tests \`$sha\`" | tee -a "$GITHUB_STEP_SUMMARY"
   # The whole backend suite at 2,000 examples across the runner's CPUs: the depth PR CI gave up for speed.
   # ~20 min on a 4-CPU runner. The differential suite is left to its own job (below), which runs 25x as many.
   suite-ci:
+    needs: resolve
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
+        with: { ref: "${{ needs.resolve.outputs.sha }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with: { version: "0.13.0" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
+        with: { version: "0.13.1" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
         run: uv sync --locked
       - name: Backend suite with properties at 2,000 examples (parallel)
@@ -37,6 +61,7 @@ jobs:
   # (~100 min); the other oracle-backed properties (~215 CPU-min); engine/ (~155 CPU-min, its slowest test
   # ~75 min); ingest/ (~130 CPU-min); and everything else with the exhaustive tokenizer check.
   properties:
+    needs: resolve
     runs-on: ubuntu-latest
     timeout-minutes: 150
     strategy:
@@ -65,9 +90,9 @@ jobs:
       OP_EARLY_FAILURES: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
+        with: { ref: "${{ needs.resolve.outputs.sha }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with: { version: "0.13.0" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
+        with: { version: "0.13.1" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
         run: uv sync --locked
       - name: Exhaustive tokenizer check (every Unicode code point in 8 contexts, and its Unicode forms in 16; ~4 min)
@@ -90,6 +115,7 @@ jobs:
   # ran past 90 min and never finished in either proof run (36972065571, 36993177724), so it is 4 seeded jobs of
   # 12,500 (OP_YEAR_EDIT_SHARDS).
   year-edits:
+    needs: resolve
     runs-on: ubuntu-latest
     timeout-minutes: 150
     strategy:
@@ -103,9 +129,9 @@ jobs:
       TEST: backend/tests/unit/test_clauses.py::test_every_year_edit_on_a_toggleable_clause_parses_and_edits_only_that_clause
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
+        with: { ref: "${{ needs.resolve.outputs.sha }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with: { version: "0.13.0" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
+        with: { version: "0.13.1" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
         run: uv sync --locked
       - name: The year-edit property, 1/4 of 50,000 examples
@@ -127,6 +153,7 @@ jobs:
   # shard beside the main property's 11-32 in 38141281560, so shards ran 50-89 min, and shard 7, on a slow runner,
   # past 110. n is the matrix size (strategy.job-total), so adding a shard is one edit to the matrix list.
   differential:
+    needs: resolve
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -140,9 +167,9 @@ jobs:
       SEED: ${{ github.run_id }}${{ matrix.shard }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
+        with: { ref: "${{ needs.resolve.outputs.sha }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with: { version: "0.13.0" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
+        with: { version: "0.13.1" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
         run: uv sync --locked
       - name: Differential suite, 1/12 of 50,000 examples, 4,166 or 4,167 (50-89 min a shard at 8 in 38141281560)
@@ -163,13 +190,14 @@ jobs:
   # and an artifact, kept for inspection; a citable number is a committed docs/results report. The real corpus
   # is local only (decision-004).
   benchmarks:
+    needs: resolve
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
+        with: { ref: "${{ needs.resolve.outputs.sha }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with: { version: "0.13.0" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
+        with: { version: "0.13.1" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
         id: sync
         run: uv sync --locked
@@ -208,6 +236,7 @@ jobs:
   # unchecked mutants would go unchecked). Shard 1's first step vets every mutant (`mutate.py --check`: stale,
   # ambiguous or uncompilable), in seconds; such a mutant also fails its own shard.
   mutate:
+    needs: resolve
     runs-on: ubuntu-latest
     timeout-minutes: 150
     strategy:
@@ -219,9 +248,9 @@ jobs:
       SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
+        with: { ref: "${{ needs.resolve.outputs.sha }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with: { version: "0.13.0" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
+        with: { version: "0.13.1" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
         run: uv sync --locked
       - name: Every mutant can be run as written (all of them, in seconds; make tooling runs it too)

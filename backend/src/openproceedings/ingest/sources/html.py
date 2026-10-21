@@ -72,7 +72,9 @@ _ELEMENTS = _names(
     msqrt msrow mstack mstyle msub msubsup msup mtable mtd mtext mtr munder munderover none semantics
     """
 )
-_CUSTOM_OR_NAMESPACED = re.compile(r"[a-z][a-z0-9_.]*(?:[-:][a-z0-9_.]+)+")
+# possessive: a separator never matches a part, so giving back can't help, and a crawled `a-a-…-` holds no
+# backtracking state (TASK-272)
+_CUSTOM_OR_NAMESPACED = re.compile(r"[a-z][a-z0-9_.]*+(?:[-:][a-z0-9_.]++)++")
 # Every attribute name of HTML (current, HTML 4 and presentational): a tag with no attribute value whose
 # attribute names aren't all among these, or `data-`/`aria-`/`xml` names, is prose (`<b and c>`), while legacy
 # markup's bare attributes (`<table border>`, `<td nowrap>`) stay a tag.
@@ -108,7 +110,7 @@ _START_TAG = re.compile(
 _ATTRIBUTES = re.compile(_ATTRIBUTE)
 _END_TAG = re.compile(r"""</([a-zA-Z][^\t\n\r\f />\x00<]*+)(?>(?:[^<>"']++|"[^"]*+"|'[^']*+')*+)>""")
 # a hyphenated attribute name (`v-cloak`, `ng-app`, `amp-custom`): framework markup, never prose
-_HYPHENATED = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)+")
+_HYPHENATED = re.compile(r"[a-z][a-z0-9]*+(?:-[a-z0-9]++)++")  # possessive, as above
 _TAG_OPEN = re.compile(r"</?[a-zA-Z]")
 _RAW_TEXT_END = {name: re.compile(rf"</{name}", re.IGNORECASE) for name in ("script", "style")}
 

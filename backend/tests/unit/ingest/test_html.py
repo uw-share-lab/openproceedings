@@ -21,7 +21,7 @@ from openproceedings.ingest.sources.html import (
 )
 from openproceedings.ingest.sources.http import PageCache, SourceError
 
-from tests.timing import growth
+from tests.timing import growth, peak_bytes
 from tests.unit.test_python_pin import html_parser_fixed
 
 FIXTURES = Path(__file__).parents[2] / "fixtures"
@@ -363,3 +363,16 @@ def test_the_readings_left_to_the_pinned_parser(markup: str, text: str) -> None:
     assert text_of(markup) == node_text(parse(markup)) == text
     if "href==" in markup:
         assert [a.attributes["href"] for a in parse(markup).iter("a")] == ["=x"]
+
+
+@pytest.mark.parametrize("pattern", ["_CUSTOM_OR_NAMESPACED", "_HYPHENATED"])
+def test_a_long_hyphenated_name_is_read_without_backtracking_state(pattern: str) -> None:
+    """A crawled tag or attribute name `a-a-…-` (1 MB, ending on a separator) is refused in a bounded number of
+    bytes, not the 63 MB of `re` state (one entry per part) the greedy pattern held (TASK-272); a long valid one
+    still matches."""
+    rx = getattr(html, pattern)
+    bad, good = "a" + "-a" * 500_000 + "-", "a" + "-a" * 500_000
+    assert rx.fullmatch(bad) is None
+    assert rx.fullmatch(good) is not None
+    peak = peak_bytes(lambda: rx.fullmatch(bad))
+    assert peak < len(bad), peak
