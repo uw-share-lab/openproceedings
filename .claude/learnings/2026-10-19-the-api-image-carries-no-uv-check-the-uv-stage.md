@@ -21,8 +21,8 @@ v0.4.1 (TASK-270).
 - `docker run --entrypoint uv <api image>` and `docker run <uv stage> /uv --version`.
 
 ## Addendum — 2026-10-21
-**A newer patch can be left with no PR at all.** Dependabot rebased #162 from 0.13.1 to 0.13.4 while it waited
-(uv 0.13.2, 0.13.3 and 0.13.4 all shipped on 2026-10-20). It closed #162 when #175 (the by-hand 0.13.1) merged, so
+**A newer patch can be left with no PR at all.** Dependabot moved #162's target from 0.13.1 to 0.13.4 while it waited
+(uv 0.13.2 shipped on 2026-10-19, 0.13.3 and 0.13.4 on 2026-10-20). It closed #162 when #175 (the by-hand 0.13.1) merged, so
 nothing was open for 0.13.4. The list of open PRs is therefore not a list of pending uv bumps. After merging a
 by-hand uv PR, compare the pin with uv's latest release (`gh api repos/astral-sh/uv/releases --jq '.[0].tag_name'`),
 and look up a closed Dependabot PR's final title before calling its version handled. 0.13.4 was then done by hand
