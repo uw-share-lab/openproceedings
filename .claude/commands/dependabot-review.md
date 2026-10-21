@@ -414,8 +414,10 @@ from the PR branch's root, prints each mismatch and exits 1 if there is any, 0 w
 exact string. Edit `package-lock.json` only under Node 22; if a lock edit dropped `libc` fields anyway,
 `python3 $RUN/.claude/scripts/dependabot/restore_libc.py` puts them back in place (it prints each entry it
 repaired). Commit (`deps: keep <pkg> exact in the lock's workspace entry`), then run
-`npm_specs.py --root .` (exit 0) and `npm_lock.py` again until it exits 0, and `npm ci --ignore-scripts`. In the
-cloud make no commit (notify-only: nothing would be pushed): the summary line names the FIX lines for the local run.
+`npm_specs.py --root .` (exit 0) and `npm_lock.py` again until it exits 0 (or, under an owner's acceptance that no
+checker records, exits 1 with only the accepted PROBLEM line and no FIX line: §10, item 2), and
+`npm ci --ignore-scripts`. In the cloud make no commit (notify-only: nothing would be pushed): the summary line
+names the FIX lines for the local run.
 
 ## 4. Docs that state the version
 
@@ -731,12 +733,13 @@ login, so nothing on GitHub tells the owner's hand from an agent's; the record b
 not proof of who decided. Then:
 
 1. **Record it on the PR.** Post a comment as above stating the decision and its date, exactly what it covers
-   (the hard stop's PROBLEM line, check or Must; for a package, that one package at one version, naming its
-   publisher and provenance, and that it has no install script) and that every other check still applies; read
-   it back. Its URL (`https://github.com/uw-share-lab/openproceedings/pull/<n>#issuecomment-<id>`) is the
-   record: step 8's body cites it under **Supply chain** (or **Tests**, **Review**), and the summary (§11) lists
-   it. For a new npm package, `npm_lock.py`'s `OWNER_ACCEPTED` takes `"<name>@<version>": "<the comment URL>"`
-   through an ordinary PR into `dev`, never the Dependabot PR (whose shape check allows no tooling change). That
+   (the hard stop's PROBLEM line and the checker that printed it, the check, or the Must; for a package, that one
+   package at one version, naming its publisher and provenance, and that it has no install script) and that every
+   other check still applies; read it back. Its URL
+   (`https://github.com/uw-share-lab/openproceedings/pull/<n>#issuecomment-<id>`) is the record: step 8's body
+   cites it under **Supply chain** (or **Tests**, **Review**), and the summary (§11) lists it. For a new npm
+   package, `npm_lock.py`'s `OWNER_ACCEPTED` takes `"<name>@<version>": "<the comment URL>"` through an
+   ordinary PR into `dev`, never the Dependabot PR (whose shape check allows no tooling change). That
    PR's reviewers open the URL and confirm it is a comment on that Dependabot PR naming exactly that
    `name@version`. The acceptance never covers an install script: `npm_lock.py` reports one on an accepted package
    as a PROBLEM. Until that PR merges, `npm_lock.py` still prints the one PROBLEM line, and the comment covers that
@@ -744,8 +747,15 @@ not proof of who decided. Then:
    archive` line), since `$RUN` holds the copy taken at step 0.
 2. **Re-run the checks on the head to be attested.** The acceptance covers that one finding, so run the checker
    that reported it again on the head: every line but the accepted one must be clean (exit 0 once the package is
-   in `OWNER_ACCEPTED`). Then every step after the one that stopped runs as usual on that head, and step 5's tests
-   and step 6's reviewers run again if this run added a commit after they ran.
+   in `OWNER_ACCEPTED`). A finding no checker can record (`OWNER_ACCEPTED` lists only new npm packages), such as
+   a semver-major bump of a package already in the lock (`obug` 2.2.1 → 3.0.0 on #178, accepted in
+   https://github.com/uw-share-lab/openproceedings/pull/178#issuecomment-6318776903), takes no tooling PR, and
+   the checker keeps exiting 1. It passes only with exit 1, its one PROBLEM line the accepted one, character for
+   character, and no FIX line left (exit 2, a check that couldn't run, never passes). A FIX line is repaired as
+   usual (step 3's fix and commit; that makes a new head, so items 2 and 3 run again on it). The comment covers
+   that one line, so a second PROBLEM line is a hard stop again. Then every step after the one that stopped runs
+   as usual on that head, and step 5's tests and step 6's reviewers run again if this run added a commit after
+   they ran.
 3. **Attest only that head.** Steps 7 and 8 run for the head of item 2, and `--attest --pr <n>` names it alone.
    A new head (a fix, a Dependabot rebase) is a new run: the acceptance still holds only if the accepted package
    and version are unchanged on it, and items 2 and 3 run again.

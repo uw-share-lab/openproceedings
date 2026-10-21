@@ -26,7 +26,7 @@ tempted to bypass it.
    `pr-gates.yml`, `e2e.yml`, `bench.yml`, `nightly.yml` and `web-image.yml` (the advisory Docker build of
    `deploy/web.Dockerfile`, behind a `paths` filter, so it can't become required as is) exist today. The
    **six required checks** are the job names `lint`, `test`, `claude-tooling`, `attribution`, `learnings` and `review-attested` (`pr-gates` is a workflow holding the last three jobs, not a check); `pr-gates`' fourth job, `pr-base`, is required
-   on `main` only, once `main` is the default branch (decision-052).
+   on `main` only (since 2026-10-21, decision-052).
    **Never rename a required job** without updating branch protection in the same change and saying so in
    the PR. A workflow that produces a required check must also trigger on `merge_group`, or the merge
    queue waits forever for a check that never starts (spec 08 §Merge queue, decision-027).
