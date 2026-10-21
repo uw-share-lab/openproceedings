@@ -81,6 +81,10 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
    repeated group that must be followed by a delimiter it can never give back is written possessive
    (`(?:\.\d++)*+`): greedy, Python's `re` keeps state per repetition (63 MB on a 1 MB value, TASK-272), so
    bound the peak with `backend/tests/timing.py`'s `peak_bytes` (tracemalloc) beside the CPU check; bytes don't depend on the runner's cache.
+   A `search`/`finditer`/`sub` pattern that opens with a run (`(\\*)[{}]`) tries a match at every character of a
+   run that nothing ends, each attempt reading the rest of the run: quadratic. Anchor it where the run starts
+   (`(?<!\\)(\\*)[{}]`), which gives the same matches when no match ends inside a run, and show that with an
+   exhaustive comparison of the matches over every short string of the characters it reads (TASK-274).
 8. **A failure that appears in one checkout only is a stored example.** The `.hypothesis` database holds an input
    no `@example` covers. Extract the falsifying input and pin it as an `@example` before bisecting or calling it
    pre-existing (a database copied between checkouts stores choice sequences, so the bisect proves nothing; the

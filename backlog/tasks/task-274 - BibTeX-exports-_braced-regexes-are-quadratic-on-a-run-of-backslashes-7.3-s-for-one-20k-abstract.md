@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-20 15:18'
-updated_date: '2026-10-21 22:37'
+updated_date: '2026-10-21 22:43'
 labels:
   - export
   - security
@@ -24,8 +24,8 @@ Found by TASK-272's security sweep (2026-10-20), pre-existing: export.py _BRACE/
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 _braced's patterns start a match only at the start of a backslash run, with identical output (exhaustive short-string comparison)
-- [ ] #2 A CPU-growth test (tests/timing.py) on _braced over a long backslash run, failing on the old patterns
+- [x] #1 _braced's patterns start a match only at the start of a backslash run, with identical output (exhaustive short-string comparison)
+- [x] #2 A CPU-growth test (tests/timing.py) on _braced over a long backslash run, failing on the old patterns
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -38,3 +38,12 @@ Found by TASK-272's security sweep (2026-10-20), pre-existing: export.py _BRACE/
 5. Check DOI/url fields go through _braced; file anything left as a follow-up.
 6. Docs (bibtex-format skill, spec 04 if it describes escaping), learnings, review gate, finalize.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Fix: _BRACE, _SPECIAL and _AT anchored with (?<!\\) (export.py). Equivalence: a match never ends on a backslash, so the unanchored scan only ever matched at a run's start.
+AC #1 evidence: tests/unit/test_export_braced.py compares the three patterns' spans and groups, and _braced/_debraced/_balances (both modes), to the pre-TASK-274 patterns on all 299,593 strings of up to 6 characters over \\{}&%#@x; a Hypothesis property compares _braced on longer strings. One-off run beyond the suite: patterns identical on all 19,173,961 strings up to length 8; functions identical on all 2,396,745 up to length 7.
+AC #2 evidence: test_braced_is_linear_in_a_backslash_run (growth, n=1,000 vs 4,000, 8 calls a sample, limit 8). Old patterns: brace 15.80, special 15.98, at 15.80, all 15.94 (all: 16.5 ms -> 267 ms a call), all four fail. New: 3.88, 3.95, 3.82, 3.88 (all: 0.33 ms at 4,000). The task's abstract ('{' + 20,000 backslashes + 'x&@'): 6,620 ms CPU old, 1.6 ms new.
+DOI and url: both exported through _braced (export.py _bibtex: url, doi; abstract_source's url too), so the fix covers them. Remaining: record.py validates DOI and URL shape but caps no length (decision-026 caps only titles and abstracts; author names are uncapped too), so an export writes them whole: follow-up to file at the end of the branch.
+<!-- SECTION:NOTES:END -->

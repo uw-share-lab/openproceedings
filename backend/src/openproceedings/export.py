@@ -414,7 +414,11 @@ def bibtex_key(r: dict[str, Any]) -> str:
     return f"{last or 'anon'}{r['year']}{word.group() if word else 'untitled'}"
 
 
-_BRACE = re.compile(r"(\\*)[{}]")  # a brace and the backslash run before it
+# A brace and the whole backslash run before it. Each of the three backslash-run patterns here starts a match only
+# where a run starts (`(?<!\\)`): unanchored, every backslash of a run that no brace ends started an attempt that
+# read the rest of the run, so a run of n cost ~n²/2 steps (TASK-274: 7.3 s for one 20,000-character abstract). The
+# matches are the same: a match never ends on a backslash, so the unanchored scan reached every run at its start too.
+_BRACE = re.compile(r"(?<!\\)(\\*)[{}]")
 
 
 def _balances(text: str, *, escaped_count: bool) -> bool:
@@ -442,9 +446,9 @@ def _debraced(text: str) -> str:
 
 
 # a special character and the whole backslash run before it (the match starts at the run's first backslash,
-# `\\*` being greedy); an even run (or none) leaves the character bare, so it is escaped
-_SPECIAL = re.compile(r"(\\*)([&%#])")
-_AT = re.compile(r"(\\*)@")  # an `@` and the backslash run before it
+# `(?<!\\)` as in `_BRACE`); an even run (or none) leaves the character bare, so it is escaped
+_SPECIAL = re.compile(r"(?<!\\)(\\*)([&%#])")
+_AT = re.compile(r"(?<!\\)(\\*)@")  # an `@` and the whole backslash run before it
 _BARE_UNDERSCORE = re.compile(r"(?<!\\)_")
 
 
