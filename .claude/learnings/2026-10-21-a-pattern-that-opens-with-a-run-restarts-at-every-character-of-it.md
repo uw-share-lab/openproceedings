@@ -38,7 +38,7 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
   (shown exhaustively). A pattern whose matches can end inside a run would need its own proof, or a scanner.
 
 ## Follow-ups
-- [ ] Ingest length caps for DOI, URL and author fields (filed at the end of the branch)
+- [ ] task-279 — decide ingest length caps for DOI, URL and author fields (decision-026 caps only titles and abstracts)
 
 ## Propagated to
 - Skill: `.claude/skills/testing-standards/SKILL.md` §7 (anchor a run-opening pattern with a lookbehind and

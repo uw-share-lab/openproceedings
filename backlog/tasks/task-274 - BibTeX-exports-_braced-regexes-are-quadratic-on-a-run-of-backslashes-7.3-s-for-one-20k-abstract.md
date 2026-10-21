@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-20 15:18'
-updated_date: '2026-10-21 23:00'
+updated_date: '2026-10-21 23:01'
 labels:
   - export
   - security
@@ -48,4 +48,6 @@ AC #2 evidence: test_braced_is_linear_in_a_backslash_run (growth, n=1,000 vs 4,0
 DOI and url: both exported through _braced (export.py _bibtex: url, doi; abstract_source's url too), so the fix covers them. Remaining: record.py validates DOI and URL shape but caps no length (decision-026 caps only titles and abstracts; author names are uncapped too), so an export writes them whole: follow-up to file at the end of the branch.
 
 Mutation check of the equivalence tests: three wrong patterns (_SPECIAL with \\? for \\*, _BRACE matching only {, _AT refusing after x) each fail all three. Local: make test (9151 passed, 3 skipped; vitest 4954 passed), make lint, make tooling green; make mutate-changed: no mutants cover the diff. CHANGELOG: generated from merged PRs at release time (spec 08 §Release), nothing to run on a feature branch.
+
+Follow-up filed: TASK-279 (ingest length caps for DOI, URL and author fields).
 <!-- SECTION:NOTES:END -->
