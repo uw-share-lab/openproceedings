@@ -49,7 +49,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ needs.resolve.outputs.sha }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with: { version: "0.13.1" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
+        with: { version: "0.13.4" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
         run: uv sync --locked
       - name: Backend suite with properties at 2,000 examples (parallel)
@@ -92,7 +92,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ needs.resolve.outputs.sha }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with: { version: "0.13.1" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
+        with: { version: "0.13.4" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
         run: uv sync --locked
       - name: Exhaustive tokenizer check (every Unicode code point in 8 contexts, and its Unicode forms in 16; ~4 min)
@@ -131,7 +131,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ needs.resolve.outputs.sha }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with: { version: "0.13.1" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
+        with: { version: "0.13.4" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
         run: uv sync --locked
       - name: The year-edit property, 1/4 of 50,000 examples
@@ -169,7 +169,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ needs.resolve.outputs.sha }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with: { version: "0.13.1" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
+        with: { version: "0.13.4" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
         run: uv sync --locked
       - name: Differential suite, 1/12 of 50,000 examples, 4,166 or 4,167 (50-89 min a shard at 8 in 38141281560)
@@ -197,7 +197,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ needs.resolve.outputs.sha }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with: { version: "0.13.1" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
+        with: { version: "0.13.4" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
         id: sync
         run: uv sync --locked
@@ -250,7 +250,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ needs.resolve.outputs.sha }}", persist-credentials: false }
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with: { version: "0.13.1" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
+        with: { version: "0.13.4" } # deploy/api.Dockerfile's uv; make tooling checks it (TASK-252)
       - name: Sync workspace
         run: uv sync --locked
       - name: Every mutant can be run as written (all of them, in seconds; make tooling runs it too)
