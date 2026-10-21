@@ -30,7 +30,7 @@ File a task for the five high `npm audit` findings on `dev` after #178, assumed 
   and CI only. A braces release that fixes the advisory, or a Next plugin that drops this chain, reverses it.
 
 ## Follow-ups
-- [ ] FOLLOWUP_ID — pick up the braces fix once one is published
+- [ ] task-278 — pick up the braces fix once one is published
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — no: `/dependabot-review` already runs `npm audit --omit=dev` for what ships;
