@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-20 15:18'
-updated_date: '2026-10-21 23:01'
+updated_date: '2026-10-21 23:20'
 labels:
   - export
   - security
@@ -50,4 +50,6 @@ DOI and url: both exported through _braced (export.py _bibtex: url, doi; abstrac
 Mutation check of the equivalence tests: three wrong patterns (_SPECIAL with \\? for \\*, _BRACE matching only {, _AT refusing after x) each fail all three. Local: make test (9151 passed, 3 skipped; vitest 4954 passed), make lint, make tooling green; make mutate-changed: no mutants cover the diff. CHANGELOG: generated from merged PRs at release time (spec 08 §Release), nothing to run on a feature branch.
 
 Follow-up filed: TASK-279 (ingest length caps for DOI, URL and author fields).
+
+Correction (review rounds 1-2): the equivalence needs two conditions. (1) No match ends on a backslash, so the unanchored scan only ever started an attempt that could succeed at a run's start; (2) \\* can stop at any length of the run, so the attempt at the run's start tries the terminator wherever a later start would, and one that fails there fails at every later start. A parity pattern such as (?:\\\\)*@ breaks (2). Follow-up TASK-279 was widened to every uncapped stored string field (DOI, URLs, authors, keywords, venue_id_raw, and provenance claims' url and evidence).
 <!-- SECTION:NOTES:END -->

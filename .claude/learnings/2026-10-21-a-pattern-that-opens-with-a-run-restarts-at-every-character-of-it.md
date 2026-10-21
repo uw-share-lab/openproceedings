@@ -17,8 +17,8 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
   still start at every backslash. A lookbehind `(?<!\\)` makes every start inside a run fail in one step.
 - **Why the anchor is exact here.** Two things hold. No match ends on a backslash, so the unanchored scan never
   resumed inside a run: it reached each run at its first backslash, where the lookbehind allows a start. And
-  `\\*` can give the run back down to nothing, so an attempt that fails at the first backslash fails at every
-  later one. The second is not automatic: a parity pattern `(?:\\\\)*@` matches the last two backslashes and the `@` of `\\\@` (three backslashes), and
+  `\\*` can stop at any length of the run (it gives back one backslash at a time), so an attempt that fails at
+  the first backslash fails at every later one. The second is not automatic: a parity pattern `(?:\\\\)*@` matches the last two backslashes and the `@` of `\\\@` (three backslashes), and
   anchored it finds nothing (the docs review's counterexample).
   The test doesn't trust that argument. It compares the three patterns' `(span, groups)` lists, and
   `_braced`, `_debraced` and `_balances`, against the old patterns on all 299,593 strings of up to 6 characters
@@ -38,11 +38,11 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
 
 ## Decisions (and what would change them)
 - The lookbehind rather than a hand-written scanner. It is a one-token change that is exactly equivalent
-  (shown exhaustively). A pattern whose matches can end inside a run, or whose run can't shrink to nothing
-  (parity), needs its own proof, or a scanner.
+  (shown exhaustively). A pattern whose matches can end inside a run, or whose repeat can't stop at every length
+  of the run (parity), needs its own proof, or a scanner.
 
 ## Follow-ups
-- [ ] task-279 — decide ingest length caps for the uncapped stored string fields: DOI, URLs, authors, keywords, venue_id_raw (decision-026 caps only titles and abstracts)
+- [ ] task-279 — decide ingest length caps for the uncapped stored string fields: DOI, URLs, authors, keywords, venue_id_raw, claim url and evidence (decision-026 caps only titles and abstracts)
 
 ## Propagated to
 - Skill: `.claude/skills/testing-standards/SKILL.md` §7 (anchor a run-opening pattern with a lookbehind and
