@@ -17,7 +17,7 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
   spec 08 §Release), which requires green checks but **no mandatory approving review** under the
   solo-maintainer policy applied on 2026-10-03; `main` doesn't require `dev` up to date, so there is no
   back-merge (decision-046).
-- `main` is the default branch once v0.4.1 is tagged (decision-052), so `gh pr create` without `--base` targets
+- `main` has been the default branch since 2026-10-21 (decision-052), so `gh pr create` without `--base` targets
   `main`: always pass `--base dev` (`/open-pr` does). `pr-gates`' `pr-base` job fails any PR into `main` but the
   same-repo `dev → main` promotion; it is required on `main` only. Forks may open PRs, into `dev`. A maintainer
   reads a fork PR's diff as data first and never runs its code with their own credentials (CONTRIBUTING.md §Flow,
