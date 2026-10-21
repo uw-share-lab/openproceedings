@@ -3,11 +3,11 @@ id: TASK-274
 title: >-
   BibTeX export's _braced regexes are quadratic on a run of backslashes (7.3 s
   for one 20k abstract)
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-20 15:18'
-updated_date: '2026-10-21 23:20'
+updated_date: '2026-10-21 23:25'
 labels:
   - export
   - security
@@ -53,3 +53,9 @@ Follow-up filed: TASK-279 (ingest length caps for DOI, URL and author fields).
 
 Correction (review rounds 1-2): the equivalence needs two conditions. (1) No match ends on a backslash, so the unanchored scan only ever started an attempt that could succeed at a run's start; (2) \\* can stop at any length of the run, so the attempt at the run's start tries the terminator wherever a later start would, and one that fails there fails at every later start. A parity pattern such as (?:\\\\)*@ breaks (2). Follow-up TASK-279 was widened to every uncapped stored string field (DOI, URLs, authors, keywords, venue_id_raw, and provenance claims' url and evidence).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Anchored export.py's three backslash-run patterns at a run's start: _BRACE (?<!\\)(\\*)[{}], _SPECIAL (?<!\\)(\\*)([&%#]), _AT (?<!\\)(\\*)@. Unanchored, every backslash of a run that no brace, &%# or @ ends started an attempt that read the rest of the run, so _braced was quadratic in the run (the task's abstract, '{' + 20,000 backslashes + 'x&@': ~6.6 s CPU before, 1.6 ms after). Every BibTeX field goes through _braced, doi and url included, so the fix covers them. The matches are identical because (1) no match ends on a backslash, so the unanchored scan never resumed inside a run: it reached each run at its first backslash, where the lookbehind allows a start; and (2) \\* can stop at any length of the run, so an attempt that fails at the run's start fails at every later start (a parity pattern would break this). AC #1: test_export_braced.py compares the patterns' spans and groups, and _braced/_debraced/_balances, to the old patterns on all 299,593 strings of up to 6 characters over \\{}&%#@x (a one-off went to 19.2M strings at length 8 for the patterns, 2.4M at length 7 for the functions), plus a Hypothesis property; three wrong patterns each fail them. AC #2: a tests/timing.py growth test over a backslash run (1,000 vs 4,000, limit 8): old 15.8-16.0 on all four shapes, new 3.8-4.0. Docs: bibtex-format §Escaping, testing-standards §7, learnings entry. Verified: make test (9151 passed, 3 skipped; vitest 4954), make lint, make tooling. Review: three rounds; round 1 Should (state both conditions for the anchor) and round 2 Should (the second condition is stopping at any length) fixed, Nits fixed. Follow-up: TASK-279 (ingest length caps for the uncapped stored string fields).
+<!-- SECTION:FINAL_SUMMARY:END -->
