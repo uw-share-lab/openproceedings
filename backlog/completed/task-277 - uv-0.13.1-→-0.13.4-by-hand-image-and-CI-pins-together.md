@@ -1,10 +1,10 @@
 ---
 id: TASK-277
 title: uv 0.13.1 → 0.13.4 by hand (image and CI pins together)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-21 02:44'
-updated_date: '2026-10-21 02:52'
+updated_date: '2026-10-21 02:56'
 labels:
   - deps
   - ci
@@ -34,3 +34,9 @@ No Dependabot PR is open for uv 0.13.4: #162 had been moved to 0.13.4 but closed
 
 Review round 1: 0.13.4 is a security release (GHSA-hq85-5cpj-mr62), which is the reason for the waiver; 0.13.2 to 0.13.4 have no breaking or lockfile-format changes.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+uv 0.13.1 → 0.13.4 in deploy/api.Dockerfile (pinned by digest sha256:9f130421…, astral-sh attestation verified, the same signer as 0.13.1) and all 11 CI setup-uv steps, by hand because no Dependabot PR was open for it (#162 closed with #175). 0.13.4 is a security release (GHSA-hq85-5cpj-mr62); the owner waived the 7-day age on 2026-10-21. uv lock --check unchanged; the api image builds and its uv stage reports 0.13.4.
+<!-- SECTION:FINAL_SUMMARY:END -->
