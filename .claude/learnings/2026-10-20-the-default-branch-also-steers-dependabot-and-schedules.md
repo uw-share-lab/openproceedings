@@ -38,3 +38,11 @@ Make `main` the default branch for the open-source repo, keep `dev` as the integ
   `case "$sha" in *[!0123456789abcdef]* | "") sha=bad ;; esac`, then `[ "${#sha}" -ne 40 ]` (gate rounds 3-5).
 - Switching the default branch first and fixing the config "at the next release": until then, Dependabot
   targets `main` past the merge queue, and the nightly tests `main`.
+
+## Addendum — 2026-10-21
+The switch ran right after v0.4.1 was tagged, as two back-to-back API calls: `main`'s required checks first, then
+`default_branch=main`. `PATCH …/branches/main/protection/required_status_checks` **replaces** the whole `checks`
+list, so the request must resend all six existing checks with their `app_id: 15368` alongside `pr-base`. Sending only
+`pr-base` would have dropped the other six. Save the current list first (`gh api …/required_status_checks`), send
+the full list with `strict` unchanged (`false` on `main`, decision-046), and read the response's
+`checks[].context:app_id` before changing the default branch.
