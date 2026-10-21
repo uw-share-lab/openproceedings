@@ -9,7 +9,7 @@ name: nightly
 # blob. A long pytest step runs verbose (`-v` prints each test as it starts, and its result when it ends) and is
 # interrupted a few minutes before its job's limit, so an overrun fails with an ::error:: and the log shows which
 # test started with no result, rather than a bare cancellation.
-# A schedule runs from the default branch, `main` once decision-052 lands, so a scheduled run tests `dev`'s head
+# A schedule runs from the default branch, `main` since 2026-10-21 (decision-052), so a scheduled run tests `dev`'s head
 # (the `resolve` job below; the workflow file itself is still `main`'s: an edit here reaches the schedule at the
 # next release); a dispatched run tests the sha it was dispatched on (`--ref dev` for spec 08 §Release step 1).
 on:
