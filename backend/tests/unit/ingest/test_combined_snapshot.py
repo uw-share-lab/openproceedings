@@ -63,7 +63,9 @@ SNAPSHOT_HASH = "94c07048e05de79db6c622f6e266195ef698d1ac6a82bc68aab9cd7213168bd
 # to 7c20f8f9… (the value before; dev's CI at 0.3.0). SNAPSHOT_HASH is unchanged.
 # Release 0.4.1 changed only openproceedings_version, "0.4.0" to "0.4.1": with it set back to "0.4.0" the files hash
 # to f3df8cc9… (the value before; dev's CI at 0.4.0). SNAPSHOT_HASH is unchanged.
-FILES_HASH = "661ad7343899e92ccd4fd6bf5082c24808d47889067127d372c4ea0360940a40"
+# Release 0.4.2 changed only openproceedings_version, "0.4.1" to "0.4.2": with it set back to "0.4.1" the files hash
+# to 661ad734… (the value before; dev's CI at 0.4.1). SNAPSHOT_HASH is unchanged.
+FILES_HASH = "03e68379a0b74ee371dfb10c12e365006c2757792fad945a347ec5c023c62ac7"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:

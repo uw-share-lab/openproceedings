@@ -23,3 +23,22 @@ Bump the app version to 0.4.0 on `release/0.4.0`, as step 4 says: set `version` 
 ## Dead ends — don't repeat these
 - Committing whatever `uv lock` and `npm install --package-lock-only` produce, without reading the lockfile
   diff. Check that the diff is one version line per file before going on.
+
+## Addendum — 2026-10-21
+v0.4.2: the version bump also moves the combined-snapshot golden (`FILES_HASH` in
+`backend/tests/unit/ingest/test_combined_snapshot.py`), because the snapshot manifest records
+`openproceedings_version`. The release-manager agent asks for proof that only that field moved it, and this is how
+the proof was run:
+- **Patch the name the snapshot module bound.** `ingest/snapshot.py` does `from openproceedings import
+  __version__`, so the probe sets `monkeypatch.setattr(snapshot, "__version__", "0.4.1")`. Patching
+  `openproceedings.__version__` changes nothing after import.
+- **Put the probe under some checkout's `backend/tests/`.** It needs `tests.unit.ingest.test_combined_snapshot`'s `combined()`,
+  `files_hash()` and the session `conftest.py` (the network guard). Run on its own from the scratchpad, it fails
+  with `ModuleNotFoundError: tests`. This release copied it into the worktree, ran it and deleted it. The
+  `qa-auditor`'s route is better because it never dirties the worktree: `git archive HEAD backend pyproject.toml`
+  into a mktemp directory, put the probe under that copy's `backend/tests/`, and run it from the copy's root with the
+  worktree's `.venv` python (which still imports the worktree's code, so keep the worktree clean).
+- **Result.** With 0.4.1 the build hashed to `661ad734…`, the old value, and `SNAPSHOT_HASH` was unchanged. With
+  0.4.2 it hashed to `03e68379…`. So the new `FILES_HASH` and its provenance comment went in with the release commit.
+
+**Propagated to:** `.claude/agents/release-manager.md` (§How you work, step 2: how to run the in-memory check).
