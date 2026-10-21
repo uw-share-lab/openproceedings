@@ -414,8 +414,10 @@ from the PR branch's root, prints each mismatch and exits 1 if there is any, 0 w
 exact string. Edit `package-lock.json` only under Node 22; if a lock edit dropped `libc` fields anyway,
 `python3 $RUN/.claude/scripts/dependabot/restore_libc.py` puts them back in place (it prints each entry it
 repaired). Commit (`deps: keep <pkg> exact in the lock's workspace entry`), then run
-`npm_specs.py --root .` (exit 0) and `npm_lock.py` again until it exits 0, and `npm ci --ignore-scripts`. In the
-cloud make no commit (notify-only: nothing would be pushed): the summary line names the FIX lines for the local run.
+`npm_specs.py --root .` (exit 0) and `npm_lock.py` again until it exits 0 (or, under an owner's acceptance that no
+checker records, exits 1 with only the accepted PROBLEM line and no FIX line: §10, item 2), and
+`npm ci --ignore-scripts`. In the cloud make no commit (notify-only: nothing would be pushed): the summary line
+names the FIX lines for the local run.
 
 ## 4. Docs that state the version
 
@@ -735,8 +737,8 @@ not proof of who decided. Then:
    package at one version, naming its publisher and provenance, and that it has no install script) and that every
    other check still applies; read it back. Its URL
    (`https://github.com/uw-share-lab/openproceedings/pull/<n>#issuecomment-<id>`) is the record: step 8's body
-   cites it under **Supply chain** (or **Tests**, **Review**), and the summary (§11) lists it. For a new
-   npm package, `npm_lock.py`'s `OWNER_ACCEPTED` takes `"<name>@<version>": "<the comment URL>"` through an
+   cites it under **Supply chain** (or **Tests**, **Review**), and the summary (§11) lists it. For a new npm
+   package, `npm_lock.py`'s `OWNER_ACCEPTED` takes `"<name>@<version>": "<the comment URL>"` through an
    ordinary PR into `dev`, never the Dependabot PR (whose shape check allows no tooling change). That
    PR's reviewers open the URL and confirm it is a comment on that Dependabot PR naming exactly that
    `name@version`. The acceptance never covers an install script: `npm_lock.py` reports one on an accepted package
@@ -750,9 +752,10 @@ not proof of who decided. Then:
    https://github.com/uw-share-lab/openproceedings/pull/178#issuecomment-6318776903), takes no tooling PR, and
    the checker keeps exiting 1. It passes only with exit 1, its one PROBLEM line the accepted one, character for
    character, and no FIX line left (exit 2, a check that couldn't run, never passes). A FIX line is repaired as
-   usual (step 3: commit, then this item again on the new head, item 3). The comment covers that one line, so a
-   second PROBLEM line is a hard stop again. Then every step after the one that stopped runs as usual on that
-   head, and step 5's tests and step 6's reviewers run again if this run added a commit after they ran.
+   usual (step 3's fix and commit; that makes a new head, so items 2 and 3 run again on it). The comment covers
+   that one line, so a second PROBLEM line is a hard stop again. Then every step after the one that stopped runs
+   as usual on that head, and step 5's tests and step 6's reviewers run again if this run added a commit after
+   they ran.
 3. **Attest only that head.** Steps 7 and 8 run for the head of item 2, and `--attest --pr <n>` names it alone.
    A new head (a fix, a Dependabot rebase) is a new run: the acceptance still holds only if the accepted package
    and version are unchanged on it, and items 2 and 3 run again.
