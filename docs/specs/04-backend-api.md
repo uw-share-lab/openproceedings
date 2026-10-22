@@ -445,8 +445,8 @@ the archive) and `OpenAlex` (decision-049, milestone C: an abstract filled from 
   | JSONL | `abstract_source`: `{source, origin, url}` (the `/search` hit's object) or null; `abstract_withheld`: a boolean | `"abstract_source": {"origin": "pmlr", "source": "pmlr", "url": "https://proceedings.mlr.press/v202/okafor23a.html"}, "abstract_withheld": false` |
 
   TASK-136 appends one more CSV column and JSONL key, `abstract_withheld_reason` (below, **Withheld by a
-  takedown**). Milestone C appends a CSV column, `abstract_kind`: `official`, `openalex` or `none` (last until decision-054 appended `lists_cut`; JSONL the
-  same key on every record), read from the index's display record; a withheld record's is `none` in both, as in a
+  takedown**). Milestone C appends a CSV column, `abstract_kind`: `official`, `openalex` or `none`. It was the
+  last column until decision-054 appended `lists_cut`. JSONL has the same key on every record. Both are read from the index's display record; a withheld record's is `none` in both, as in a
   hit and a paper. An OpenAlex abstract's `abstract_source` is `openalex` and its `abstract_origin` is `openalex`.
 
   A record with no abstract, or whose abstract no claim holds (synthetic fixtures), names nothing: no `N1`, no

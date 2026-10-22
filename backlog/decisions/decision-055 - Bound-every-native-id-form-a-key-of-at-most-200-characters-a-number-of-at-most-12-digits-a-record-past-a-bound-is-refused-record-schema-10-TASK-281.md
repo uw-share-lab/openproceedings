@@ -52,7 +52,8 @@ Every native-id form is bounded, and a record past a bound is refused. The owner
   - The NeurIPS and ICLR hashes (32 hex digits) and OpenReview forum ids (4–64 characters) were bounded already.
 - **A record past a bound is invalid**, so each crawler refuses the entry as it refuses any invalid one:
   - PMLR and dblp ICML skip it and count it (`skipped.invalid`);
-  - the RIS importer skips it (`unresolved`; a PMLR volume past 12 digits names no volume, `no_id`);
+  - the RIS importer skips it (`unresolved`; a PMLR volume past 12 digits names no volume, so the entry is skipped
+    as any without a listing: `no_id` when scholarmend's PMLR index names it ICML, else `out_of_scope` or `unresolved`);
   - dblp AAAI and Crossref stop (`invalid_record`; a Crossref DOI past the bound is `odd_doi`);
   - `sources/ojs.py` stops on an OAI-PMH article id or volume past 12 digits after leading zeros (`oai_unreadable`), a
     `CrawlError` raised before `int`, never a bare `ValueError`.
@@ -64,8 +65,9 @@ Every native-id form is bounded, and a record past a bound is refused. The owner
   Python's digit limit. The model checks the form before it reads a PMLR volume as an int. The RIS importer also
   treats an evidence URL or `UR` line `urlparse` refuses (`http://[x`) as naming no listing or host, so the entry is
   skipped, never an aborted file; dedup's abstract attribution reads such an evidence URL as naming no site and no
-  paper (`dedup._site`, `_names_native`), and a PMLR or NeurIPS listing's link `urljoin` refuses is no link
-  (`html.joined`).
+  paper (`dedup._site`, `_names_native`). A PMLR, NeurIPS or ICLR archive listing link `urljoin` refuses is no
+  link (`html.joined`): a PMLR block with one is unlinked (it could be its forum link), and a NeurIPS see-also is kept
+  as written, so it is still reported unfollowed. An AAAI library redirect it refuses names no capture.
 - **Record schema 10.** The native-id forms changed, so `RECORD_SCHEMA_VERSION` goes from 9 to 10 (record-schema skill
   §Versions).
 - **decision-053's own-page rule is now always within the cap.** An address rebuilt from a bounded id is at most about
@@ -79,10 +81,12 @@ Every native-id form is bounded, and a record past a bound is refused. The owner
   `ingest/acm_table.py` (`DOI_DIGITS`, `paper_doi`), `ingest/urls.py` (`_NUMBER`), `ingest/ris.py` (`_int`,
   `_listing`, `_readable`), `ingest/sources/ojs.py` (`_number`), `ingest/sources/crossref.py` (the `odd_doi` message),
   `ingest/sources/pmlr.py` (`_VOLUME_PREFIX`, `_VOLUME_HEADING`), `ingest/sources/neurips.py` (`_COUNT`),
-  `ingest/sources/html.py` (`joined`), `ingest/dedup.py` (`_site`, `_names_native`), `ingest/caps.py` (`_claim`,
+  `ingest/sources/html.py` (`joined`), `ingest/sources/iclr.py` (`_paper_anchor`), `ingest/sources/aaai_library.py`
+  (`same_capture`), `ingest/dedup.py` (`_site`, `_names_native`), `ingest/caps.py` (`_claim`,
   `_names`, `_own_page`, `_page_only`), `engine/index.py` (its id-length guard stays, for any id ingest misses). Tests at the bound and one past it per form (`test_record.py`), and per crawler
   (`test_pmlr.py`, `test_dblp.py`, `test_dblp_aaai.py`, `test_ris.py`, `ojs/test_ojs_parse.py`, `test_neurips.py`,
-  `crossref/test_crossref_mine.py`, `test_urls.py`, `test_dedup.py`).
+  `crossref/test_crossref_mine.py`, `test_urls.py`, `test_dedup.py`, `test_iclr.py`,
+  `aaai_library/test_aaai_library.py`).
 - **Reproducibility.** Every record of 2026-10-16-03eab0ef56c4 validates under record schema 10 (`records=173518
   valid=173518`). So `records.jsonl`, `snapshot_hash` and `index_version` are unchanged. The next snapshot built
   writes `record_schema_version` `10` in its manifest, so its files hash changes

@@ -550,3 +550,10 @@ def test_a_link_urljoin_refuses_is_no_link_never_a_bare_value_error() -> None:
     # an unclosed IPv6 host (`http://[x`) makes `urljoin` raise; such a link names nothing, so the block is unlinked
     page = """<div class='paper'><p class='title'>T</p><p class='links'>[<a href='http://[x/v235/a24a.html'>abs</a>]</p></div>"""
     assert pmlr.parse_volume_index(page, "https://proceedings.mlr.press/v235/") == ([], 1)
+
+
+def test_a_block_with_any_link_urljoin_refuses_is_unlinked() -> None:
+    # the refused link could be its forum link (or a second one), so the block is not half-read without it
+    page = """<div class='paper'><p class='title'>T</p><p class='links'>[<a href='a24a.html'>abs</a>]
+      [<a href='http://[x/forum?id=9U29U3cDKq'>OpenReview</a>]</p></div>"""
+    assert pmlr.parse_volume_index(page, "https://proceedings.mlr.press/v235/") == ([], 1)

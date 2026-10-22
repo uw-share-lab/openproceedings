@@ -110,9 +110,12 @@ def parse_volume_index(text: str, base: str) -> tuple[list[Entry], int]:
     entries: list[Entry] = []
     unlinked = 0
     for block in (node for node in parse(text, canonical(base)).iter("div") if node.has_class("paper")):
-        hrefs = [
-            h for node in block.iter("a") if (h := joined(base, node.attributes.get("href", ""))) is not None
-        ]
+        joins = [joined(base, node.attributes.get("href", "")) for node in block.iter("a")]
+        # a link `urljoin` refuses could be its forum link or a second one, so the block is unlinked, never half-read
+        if None in joins:
+            unlinked += 1
+            continue
+        hrefs = [h for h in joins if h is not None]
         abs_url = next((h for h in hrefs if urlparse(h).path.endswith(".html") and urls.pmlr(h)), None)
         if abs_url is None:
             unlinked += 1
@@ -236,7 +239,8 @@ def mine_volume(
             record, missing, cleaned = _record(volume, native, entry, index, page)
         except (ValidationError, ValueError) as e:
             report.skipped["invalid"] += 1
-            log.debug(  # counted in the volume's one `listing_attention` WARNING; a key past its bound can be any length
+            # counted in the volume's one `listing_attention` WARNING; a key past its bound can be any length
+            log.debug(
                 "pmlr_record_invalid",
                 extra={
                     "volume": number,

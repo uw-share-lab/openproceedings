@@ -69,8 +69,8 @@ FIRST_YEAR = 1987  # decision-047: the first NIPS (vocab.CONFERENCES); the site 
 OPENREVIEW_FROM = 2021  # OpenReview hosts NeurIPS from 2021 (v1), so the proceedings confirm from then on
 PROGRESS_SECONDS = 30.0
 
-# a stated count of at most 16 characters, commas included (`9999999999999999`): a longer one states no count, never `int` past Python's
-# 4,300-digit limit (decision-055's reasoning)
+# a stated count of at most 16 characters, commas included (`9,999,999,999,999` is 17): a longer one states no
+# count, never `int` past Python's 4,300-digit limit (decision-055's reasoning)
 _COUNT = re.compile(r"^([0-9][0-9,]{0,15})\s+papers?$", re.I)
 
 
@@ -114,13 +114,14 @@ def parse_year_index(text: str, base: str) -> YearIndex:
     count_node = next((node for node in root.iter("span") if node.has_class("paper-count")), None)
     count_match = _COUNT.match(node_text(count_node)) if count_node else None
     stated = int(count_match.group(1).replace(",", "")) if count_match else None
-    see_also = [
-        url
+    # a link `urljoin` refuses is kept as written, so it is still reported unfollowed (`listing_see_also_unfollowed`)
+    hrefs = [
+        anchor.attributes.get("href", "")
         for paragraph in root.iter("p")
         if paragraph.has_class("book-see-also")
         for anchor in paragraph.iter("a")
-        if (url := joined(base, anchor.attributes.get("href", ""))) is not None
     ]
+    see_also = [joined(base, href) or href for href in hrefs]
     for item in block.iter("li") if block else []:
         anchor = next(
             (node for node in item.iter("a") if "-Abstract" in node.attributes.get("href", "")), None

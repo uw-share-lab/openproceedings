@@ -147,6 +147,6 @@ clause is `crawl_dates["*"]` from–to, both dates (a crawl spans days; spec 04)
 - **Cut author lists** (decision-054, TASK-280). A record keeps its first 500 authors and first 200 keywords. One whose
   author list was cut says so in every export (BibTeX `and others`, an RIS `N1`, the CSV/JSONL `lists_cut` with the
   source's count); a cut keyword list shows in CSV and JSONL only. Covidence shows screeners no `N1`: read the CSV's
-  `lists_cut` before import, and report any record whose author list was cut (count the non-empty `lists_cut` cells in
+  `lists_cut` before import, and report any record whose author list was cut (count the `lists_cut` cells naming `authors` in
   a CSV export of the screened set; no per-snapshot count exists). None was in snapshot 2026-10-16-03eab0ef56c4 (at
   most 95 authors; `docs/results/2026-10-22-list-counts-and-native-ids.md`).

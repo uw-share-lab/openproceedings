@@ -220,3 +220,10 @@ def test_a_listed_title_with_a_control_character_keeps_its_paper() -> None:
     assert record.title == "Induc tive Trust"
     [title] = record.claims("title")
     assert title.evidence is not None and title.evidence.endswith("(1 control character replaced by a space)")
+
+
+def test_a_link_urljoin_refuses_names_no_paper_never_a_bare_value_error() -> None:
+    # an unclosed IPv6 host (`http://[x`) makes `urljoin` raise: such a link is no paper's
+    page = """<p dir='ltr'><a href='http://[x/forum?id=abcd1234'>A Title</a></p><p dir='ltr'><i>One; Two</i></p>"""
+    iclr = source()
+    assert iclr.parse_index(2014, page, iclr.LISTINGS[2014]) == []

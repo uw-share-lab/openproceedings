@@ -1639,6 +1639,8 @@ def test_a_note_that_names_its_proceedings_paper_itself_is_crawled_evidence(titl
         "scholarmend:proceedings_page",  # no page named
         "scholarmend:openreview_api openreview:EfGh5678",  # a forum's abstract on a proceedings-id row
         "scholarmend:semanticscholar x",  # a route this code doesn't know
+        # a page `urlparse` refuses (an unclosed IPv6 host) names no paper, whatever its path says
+        f"scholarmend:proceedings_page http://[x/paper_files/paper/2025/hash/{H[1]}-Abstract-Conference.html",
         "",
     ],
 )

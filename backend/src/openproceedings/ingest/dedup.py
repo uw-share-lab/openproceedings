@@ -389,6 +389,7 @@ def attribution(
         # (`urls.names_native`: some evidence urls stop after the hash)
         page = rest.split(" ", 1)[0]
         said = _SITE_ORIGIN.get(_site(page) or "") if page else None
+        # `proceedings` is a validated record URL, so its guard is defensive only
         held = _SITE_ORIGIN.get(_site(proceedings) or "") if proceedings else None
         if held is not None and said in (None, held):
             return Attribution(source, held, proceedings)

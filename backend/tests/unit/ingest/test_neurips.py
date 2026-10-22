@@ -804,8 +804,9 @@ def test_a_stated_count_past_sixteen_characters_states_none(count: str, stated: 
 
 
 def test_a_link_urljoin_refuses_is_no_link_never_a_bare_value_error() -> None:
-    # an unclosed IPv6 host (`http://[x`) makes `urljoin` raise: that paper is unlinked and that see-also dropped
+    # an unclosed IPv6 host (`http://[x`) makes `urljoin` raise: that paper is unlinked, and that see-also is kept as
+    # written, so the crawl still reports it unfollowed
     page = """<span class='paper-count'>1 paper</span><p class='book-see-also'><a href='http://[x/'>x</a></p>
     <ul class='paper-list'><li><a href='http://[x/hash-Abstract-Conference.html'>T</a></li></ul>"""
     parsed = neurips.parse_year_index(page, "https://proceedings.neurips.cc/paper_files/paper/2025/")
-    assert (parsed.entries, parsed.unlinked, parsed.see_also) == ([], 1, [])
+    assert (parsed.entries, parsed.unlinked, parsed.see_also) == ([], 1, ["http://[x/"])

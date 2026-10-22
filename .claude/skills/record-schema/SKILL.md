@@ -64,14 +64,15 @@ imports that module); a forum id 4–64 characters, a `nips-`/`iclr-` hash 32 he
 2026-10-16-03eab0ef56c4 is 53 characters (its parts: a dblp key of 30, a PMLR key of 25, 7 digits on each side of a
 DOI, 5 of an OJS id, 3 of a PMLR volume). A record past a bound is invalid, so its crawler refuses the entry as it
 refuses any invalid one: PMLR and dblp ICML skip and count it (`skipped.invalid`, listed by `op eval coverage`), the RIS importer skips it
-(`unresolved`; a PMLR volume past 12 digits names no volume, `no_id`), dblp AAAI and Crossref stop
+(`unresolved`; a PMLR volume past 12 digits names no volume, so the entry is skipped as any without a listing: `no_id`
+when scholarmend's PMLR index names it ICML, else `out_of_scope` or `unresolved`), dblp AAAI and Crossref stop
 (`invalid_record`; a DOI past the bound is `odd_doi`), and `sources/ojs.py` stops on an OAI-PMH article id or volume
 past 12 digits after leading zeros (`oai_unreadable`, a `CrawlError` raised before `int`, never a bare `ValueError`
 past Python's 4,300-digit limit). Every other reader of those numbers counts digits after leading zeros and reads at
 most 12, so none meets that limit: `urls.pmlr` and `urls.ojs_article` (no URL names a number no id can hold), the RIS
 importer's volume claim (`ris._int`; an evidence URL or `UR` line `urlparse` refuses names no listing or host,
-`ris._readable`, and no site in dedup's attribution, `dedup._site`; a listing link `urljoin` refuses is no link,
-`html.joined`), a PMLR
+`ris._readable`, and no site in dedup's attribution, `dedup._site`; a PMLR, NeurIPS or ICLR archive listing link `urljoin` refuses is no link,
+`html.joined`; an AAAI library redirect it refuses names no capture), a PMLR
 page's `Volume N:` heading (`pmlr._VOLUME_PREFIX`: past 12 digits it is no heading, `heading_mismatch`), and a
 NeurIPS year page's stated count (`neurips._COUNT`, at most 16 characters, else none). The model checks the form
 before reading a PMLR volume as an int.

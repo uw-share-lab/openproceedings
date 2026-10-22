@@ -91,3 +91,16 @@ record past a bound refused, record schema 9 → 10.
   found no test for it until the "a PMLR volume of zeros" row.
 - **A bound in a regex can change which match wins.** Bounding `Volume N:` let a first heading with a huge number be
   skipped for a later one; `heading()` now lets the first heading of that shape decide (`_VOLUME_HEADING`).
+
+## Addendum — 2026-10-22 (review round 3)
+- **"Grep every caller" means every caller of the primitive, not of our wrapper.** Round 2 fixed `urljoin` in the PMLR
+  and NeurIPS listings, and round 3 found the same bare `urljoin` in the ICLR archive listing (`iclr._paper_anchor`)
+  and the AAAI library's redirect check (`aaai_library.same_capture`). Both now go through `html.joined` or a
+  `ValueError` guard. Evidence: `test_iclr.py::test_a_link_urljoin_refuses_names_no_paper_never_a_bare_value_error`,
+  `aaai_library/test_aaai_library.py::test_a_redirect_location_urlparse_refuses_names_no_capture`.
+- **A guard's return value needs a test, not just its existence.** The test that `_names_native` doesn't crash passed
+  with it returning `True`, which would let an unreadable page merge two papers. A row in
+  `test_an_abstract_that_is_not_the_imports_own_page_is_no_evidence` now pins `False`.
+- **Dropping an unreadable link can change what the rest means.** A PMLR block that loses an unreadable OpenReview
+  link would read as having no forum (or one forum, when it had two). The whole block is now unlinked instead; a
+  NeurIPS see-also is kept as written so the crawl still reports it unfollowed.

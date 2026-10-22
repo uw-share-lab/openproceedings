@@ -16,7 +16,6 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from urllib.parse import urljoin
 
 from openproceedings.ingest import urls
 from openproceedings.ingest.record import (
@@ -30,7 +29,7 @@ from openproceedings.ingest.record import (
     title_text,
 )
 from openproceedings.ingest.sources.common import ListingReport, MinerError, record_from_claims
-from openproceedings.ingest.sources.html import Element, collapse, node_text, parse, text_after
+from openproceedings.ingest.sources.html import Element, collapse, joined, node_text, parse, text_after
 from openproceedings.ingest.sources.http import Fetcher, canonical
 
 log = logging.getLogger(__name__)
@@ -61,8 +60,8 @@ class Entry:
 
 def _paper_anchor(node: Element, base: str) -> tuple[Element, str, str, str | None] | None:
     for anchor in [node] if node.tag == "a" else node.iter("a"):
-        target = urljoin(base, anchor.attributes.get("href", ""))
-        if not _PAPER_TARGET.match(target):
+        target = joined(base, anchor.attributes.get("href", ""))
+        if target is None or not _PAPER_TARGET.match(target):  # a link `urljoin` refuses names no paper
             continue
         identity = urls.iclr_archive_target(target)
         if identity is None:
