@@ -21,7 +21,7 @@ build.
 | `track` | enum | See the taxonomy below. Never defaults to `main`. Unknown stays `unknown`. |
 | `status` | enum | `accepted` \| `rejected` \| `withdrawn` \| `desk_rejected` \| `unknown` |
 | `presentation` | str \| null | `oral` / `spotlight` / `poster`, when the source states it (§Presentation). |
-| `venue_id_raw` | str \| null | OpenReview `content.venueid` verbatim, e.g. `NeurIPS.cc/2023/Track/Datasets_and_Benchmarks`. One over 500 characters is null after the snapshot build; its claim keeps it cut, as text (§Pipeline 2, decision-053). |
+| `venue_id_raw` | str \| null | OpenReview `content.venueid` verbatim, e.g. `NeurIPS.cc/2023/Track/Datasets_and_Benchmarks`. One over 500 characters never fills it after the snapshot build; its claim keeps it cut, as text (§Pipeline 2, decision-053). |
 | `urls` | object | `forum`, `pdf`, `proceedings`, `doi`, each optional. A URL over 2,048 characters or a DOI over 1,000 never fills its slot after the snapshot build; its claim keeps it cut, as text (§Pipeline 2, decision-053). |
 | `keywords` | list[str] | Stored and displayed, **not searched** (guarantee 2). The snapshot build caps each at 2,000 characters (§Pipeline 2, decision-053). |
 | `provenance` | list[Claim] | For each field: the source, URL, fetch time and evidence (scholarmend's claim/ledger pattern). Two claim fields are provenance only, never a record field (record schema 4, decision-029): `twin`, the ids of a v1 copy's linked twins (§Pipeline, TASK-159), and `invitation`, a v1 note's OpenReview submission invitation from scholarmend 0.1.5 (§Sources, RIS row; TASK-157). |
@@ -276,23 +276,27 @@ the OJS, AAAI 1980–2008, Crossref, FAccT site, OpenAlex and AAAI library rows 
    | a claim's `url` | 2,048 | 154 |
    | a claim's `evidence`, its notes included | 4,000 | 469 |
 
-   - The record's field and each of its claims are cut alike, counted and cut as a title is (NFKD, before the last
+   - Authors and keywords on the record, and every claim, are cut alike (the `urls` slots and `venue_id_raw` are
+     re-resolved, below), counted and cut as a title is (NFKD, before the last
      space that fits), then stripped of whitespace, in the same pass as the caps above (`caps.cap_record`).
    - A cut claim's evidence ends with `trimmed at ingest (decision-053): <what>`: the value cut from and to, how many
      names or keywords were cut, a claim url dropped, or the evidence cut. A cut evidence keeps its start and the
      notes within 4,000. The manifest's `trimmed` names the record too (§5).
-   - **A cut DOI, URL or venue id is no link and no id.** Its claim keeps the cut value as plain text, shown in the
+   - **A cut DOI, URL or venue id never fills the record.** Its claim keeps the cut value as plain text, shown in the
      paper page's provenance beside the note. The record's `urls` slot or `venue_id_raw` never takes it: dedup takes
      the next-ranked claim that wasn't cut, else null, so no link, export or DOI join (the OpenAlex fill) uses it. That
      record's exports then carry no DOI or URL from it; the paper page's provenance and the manifest's `trimmed` are
-     where the cut shows. A cut venue id (which can read as another track's id) is never Creative AI evidence. A
+     where the cut shows. A cut venue id (which can read as another track's id) is no id: it counts against Creative AI, as the whole id
+     would, and the record shows the next source's venue id, if any (display only: its track comes from the track claims). A
      claim's own `url` is only ever a link, so one over the cap is dropped.
    - **A cut URL names its paper only if the cut changed nothing it names.** When the cut value's proceedings id,
      forum id or page parts differ from the whole URL's (a forum URL's `id` cut short is a valid id of another
      paper), the note adds `not read as an id` and dedup reads no id from it (§Pipeline 4, the forum link). A long query
-     string cut after a proceedings page's path still names that page. When the whole URL named the record's own id
-     (the miner read the id from it), the note also says `it named its own record`, and dedup still takes the record
-     as naming itself, so a record whose own page URL is over the cap still builds.
+     string cut after a proceedings page's path still names that page. A URL that names the record's own id (the miner
+     read the id from it) and that a cut would unname is kept whole instead, flagged `kept whole, as it names its own
+     record`, as before the caps: that happens only when the id itself sits past the cap (TASK-281) or in an
+     `iclr_archive` target, whose id hashes the whole URL. It is decided from the value and the id, never from
+     evidence, so a record whose own page URL is over the cap still builds.
    - **Not capped:** `id` (identity: cutting it would rename the paper; the `pmlr-`, `dblp-`, `ojs-` and `doi-`
      forms have no length bound, TASK-281; the longest is 53), a `twin` claim's ids (each must be a record of the
      snapshot), the enums and `year`, and how many authors or keywords a record has (95 and 54 at most; TASK-280).

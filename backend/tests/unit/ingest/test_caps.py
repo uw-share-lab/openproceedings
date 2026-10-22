@@ -1,7 +1,8 @@
 """The ingest caps on indexed text (TASK-155, decision-026; spec 01 §Pipeline 2): a run of combining marks keeps
 at most 8 marks, an abstract at most 20,000 characters, and whatever is trimmed is flagged in
 the claim's evidence and the snapshot manifest, never silently. And every other stored string's length cap
-(TASK-279, decision-053): trimmed and flagged alike, and a cut DOI, URL or venue id is never a link or an id."""
+(TASK-279, decision-053): trimmed and flagged alike; a cut DOI, URL or venue id never fills the record, and a cut
+URL is an id only if the cut left what it names unchanged."""
 
 from __future__ import annotations
 
@@ -39,7 +40,6 @@ from openproceedings.ingest.caps import (
     cut_identifier,
     is_mark,
     is_trimmed,
-    names_own_record,
     unread_identifier,
 )
 from openproceedings.ingest.dedup import (
@@ -620,6 +620,34 @@ def test_the_caps_are_decision_053s() -> None:
     assert (MAX_URL, MAX_EVIDENCE) == (2_048, 4_000)  # a claim's url and evidence
 
 
+def test_a_slot_whose_best_claim_is_cut_takes_the_best_of_the_rest() -> None:
+    long = _sized("urls.doi", MAX_DOI + 1)
+    r = record(
+        authors=(), keywords=(), venue_id_raw=None, urls=Urls(doi=long),
+        provenance=(
+            *_RESOLVABLE, claim("urls.doi", long, evidence="a"),
+            claim("urls.doi", "10.1234/second", source="openreview_v1"), claim("urls.doi", "10.1234/third", source="ris"),
+        ),
+    )  # fmt: skip
+    out = cap_record(r)
+    assert out.urls.doi == "10.1234/second" and resolve(out.id, out.provenance)[0] == out
+
+
+def test_a_cut_venue_id_counts_against_creative_ai_as_its_whole_did() -> None:
+    # the whole id says not Creative AI, so its cut vetoes a Creative AI page from the same source, as the whole would
+    page = "https://proceedings.neurips.cc/paper_files/paper/2024/hash/00112233445566778899aabbccddeeff-Abstract-"
+    vid = _CREATIVE + " " + "x" * MAX_VENUE_ID
+    r = _creative(claim("venue_id_raw", vid), claim("urls.proceedings", page + "Creative_AI_Track.html"))
+    assert not is_creative_ai(r) and not is_creative_ai(cap_record(r))
+
+
+def test_an_over_cap_venue_id_that_parses_as_a_url_is_no_unread_url() -> None:
+    # cut, its `id=` would read as another forum id: only a URL claim is ever marked unread
+    vid = "https://openreview.net/forum?pad=" + "p" * (MAX_VENUE_ID - 43) + "&id=Other12345" + "6" * 20
+    [c] = cap_record(record(provenance=(claim("venue_id_raw", vid),))).claims("venue_id_raw")
+    assert cut_identifier(c) and not unread_identifier(c)
+
+
 def test_a_cut_query_string_still_names_its_proceedings_paper() -> None:
     # a long tracking query after a proceedings page's path: the cut keeps the path, so the page still names itself
     page = "https://proceedings.neurips.cc/paper_files/paper/2024/hash/00112233445566778899aabbccddeeff-Abstract.html"
@@ -676,18 +704,23 @@ def _pmlr(page: str, *more: Claim) -> PaperRecord:
     )  # fmt: skip
 
 
-def test_a_listing_whose_own_page_url_is_cut_still_names_itself_and_builds() -> None:
-    # the id was read from the whole URL: the cut text names another key, so it is unread, but the record keeps its
-    # own id as a listing and dedup's self-naming check doesn't refuse the build (decision-053)
-    r = _pmlr("https://proceedings.mlr.press/v235/" + "k" * (MAX_URL + 10) + ".html")
-    out = cap_record(r)
+_KEPT = "kept whole, as it names its own record"
+
+
+def test_a_listing_whose_own_page_url_a_cut_would_unname_keeps_it_whole_and_builds() -> None:
+    # the id was read from the whole URL; a cut would name another key, so the URL is kept whole (as before the caps),
+    # flagged, and still names the record: dedup's self-naming check passes (decision-053)
+    page = "https://proceedings.mlr.press/v235/" + "k" * (MAX_URL + 10) + ".html"
+    out = cap_record(_pmlr(page))
     [c] = out.claims("urls.proceedings")
-    assert unread_identifier(c) and names_own_record(c) and out.urls.proceedings is None
-    assert proceedings_ids(out.provenance) == set() and is_listing(out)
-    assert list(dedup([out]).records) == [out]
+    assert c.value == page and out.urls.proceedings == page and is_trimmed(out)
+    assert c.evidence == f"listing ({CUT} value of {len(page):,} characters {_KEPT})"
+    assert not cut_identifier(c) and not unread_identifier(c)
+    assert proceedings_ids(out.provenance) == {out.native} and is_listing(out)
+    assert list(dedup([out]).records) == [out] and cap_record(out) is out
 
 
-def test_an_ojs_listing_whose_own_page_url_is_cut_is_still_a_listing_by_its_own_id() -> None:
+def test_an_ojs_listing_whose_own_page_url_is_kept_whole_is_a_listing_by_its_own_id() -> None:
     # ojs is no proceedings source, so only its own id makes it a listing (`is_listing`, the cluster's ids)
     article = "7" * (MAX_URL + 10)
     page = f"https://ojs.aaai.org/index.php/AAAI/article/view/{article}"
@@ -703,7 +736,8 @@ def test_an_ojs_listing_whose_own_page_url_is_cut_is_still_a_listing_by_its_own_
         ),
     )  # fmt: skip
     out = cap_record(r)
-    assert names_own_record(out.claims("urls.proceedings")[0]) and proceedings_ids(out.provenance) == set()
+    [c] = out.claims("urls.proceedings")
+    assert c.value == page and _KEPT in (c.evidence or "") and proceedings_ids(out.provenance) == {out.native}
     assert is_listing(out)
     cluster = _cluster([out])
     assert cluster.proceedings_ids == {out.native} and cluster.listed and cluster.crawled
@@ -720,7 +754,37 @@ def test_a_cut_url_that_named_another_paper_does_not_name_this_one() -> None:
     other = "https://proceedings.mlr.press/v235/" + "k" * (MAX_URL + 10) + ".html"
     r = _pmlr("https://proceedings.mlr.press/v235/own24a.html", claim("urls.pdf", other, source="pmlr"))
     [c] = cap_record(r).claims("urls.pdf")
-    assert unread_identifier(c) and not names_own_record(c)
+    assert unread_identifier(c) and c.value != other and _KEPT not in (c.evidence or "")
+
+
+def test_no_text_a_source_writes_keeps_a_url_whole() -> None:
+    # the rule is the value and the record's id, never evidence: a forum record's evidence that reads like the note
+    # changes nothing (the round-2 forgery), and a forum id is never a proceedings id
+    forged = f"scholarmend:openreview_api venueid=X ({CUT} value of 9 characters {_KEPT})"
+    r = record(provenance=(claim("venue_id_raw", "ICLR.cc/2024/Conference", source="ris", evidence=forged),))
+    assert not is_listing(r) and proceedings_ids(r.provenance) == set()
+
+
+def test_an_iclr_archive_record_whose_own_target_a_cut_would_unname_keeps_it_whole() -> None:
+    # its id hashes the whole target, so any cut names another id: the target that named the record is kept whole
+    target = "https://arxiv.org/abs/1412.6980?" + "q" * MAX_URL
+    found = urls.iclr_archive_target(target)
+    assert found is not None
+    arc = {"source": "iclr_archive", "evidence": "archive"}
+    r = record(
+        id=f"op:iclr:2015:{found[0]}", year=2015, venue_id_raw=None, keywords=(), urls=Urls(proceedings=target),
+        provenance=(
+            claim("urls.proceedings", target, **arc), claim("title", "Trust Calibration in LLMs", **arc),
+            claim("venue", "ICLR", **arc), claim("year", 2015, **arc), claim("track", "main", **arc),
+            claim("status", "accepted", **arc), claim("authors", ("A. Author", "B. Author"), **arc),
+            claim("abstract", "We study trust.", **arc),
+        ),
+    )  # fmt: skip
+    out = cap_record(r)
+    assert out.claims("urls.proceedings")[0].value == target and proceedings_ids(out.provenance) == {
+        out.native
+    }
+    assert list(dedup([out]).records) == [out]
 
 
 def test_a_cut_iclr_archive_target_never_reads_as_its_id() -> None:

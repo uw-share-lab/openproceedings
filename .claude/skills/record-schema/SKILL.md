@@ -22,7 +22,7 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | `track` | `.claude/skills/track-taxonomy/SKILL.md`. No default value in the model. |
 | `status` | `accepted` \| `rejected` \| `withdrawn` \| `desk_rejected` \| `unknown`. No default. |
 | `presentation` | `oral` \| `spotlight` \| `poster` \| `null`, only when a source states it: a v1 decision note or venue string (`openreview_v1._PRESENTATION`); a v2 accepted, non-workshop note's `content.venue`, matched exactly per venue-year in `classify.V2_PRESENTATION` (an unlisted string is `null` and counted as `presentation_unmapped`; spec 01 §Presentation). Its claim's evidence is `content.venue=<string>`. `dedup.resolve` keeps it only when the resolved `status` is `accepted` (a reconcile-demoted `unknown` shows `null`; the claim stays). Never a track, never hashed. |
-| `venue_id_raw` | OpenReview `content.venueid` verbatim, else `null`. One over 500 characters is `null` after the snapshot build: its claim keeps it cut, as text (below). |
+| `venue_id_raw` | OpenReview `content.venueid` verbatim, else `null`. One over 500 characters never fills it after the snapshot build: its claim keeps it cut, as text (below). |
 | `urls` | `{forum, pdf, proceedings, doi}`, each optional. A URL over 2,048 characters or a DOI over 1,000 never fills its slot after the snapshot build: its claim keeps it cut, as text (below). |
 | `keywords` | Stored and shown, **never indexed as text** (guarantee 2). Each capped by the snapshot build at 2,000 characters (below). |
 | `provenance` | `list[Claim]`, see below. |
@@ -187,32 +187,36 @@ model, so an over-cap value is trimmed and flagged, never refused, and every rec
 | a claim's `url` | 2,048 | 154 |
 | a claim's `evidence`, its trim notes included | 4,000 | 469 |
 - **Counted and cut as a title is** (`caps.cut`: NFKD length, before the last space that fits, or the last base),
-  then stripped of whitespace. In the same pass as decision-026's caps (`cap_record`, in `snapshot.load_sources` and
+  then stripped of whitespace; authors and keywords on the record and every claim alike (the `urls` slots and
+  `venue_id_raw` are re-resolved, below). In the same pass as decision-026's caps (`cap_record`, in `snapshot.load_sources` and
   after the `aaai_library` and OpenAlex fills).
 - **Flagged** in the claim's evidence, after everything else: `trimmed at ingest (decision-053): <what>` (`caps.CUT`),
   `value cut from <n> to <m> characters`, `<k> values cut to at most <cap> characters` (names, keywords), `url of <n>
   characters dropped`, `evidence cut from <n> characters`. The manifest's `trimmed` lists the record too
   (`caps.is_trimmed` reads both notes). A cut evidence keeps its start (an RIS route and url) and the notes, within
   4,000.
-- **A cut DOI, URL or venue id is no link and no id** (`caps.cut_identifier`). The claim keeps the cut value, which
+- **A cut DOI, URL or venue id never fills the record** (`caps.cut_identifier`): never a link, and a cut venue id
+  is no id. The claim keeps the cut value, which
   the paper page's provenance shows as plain text beside the note; it need not be well formed (`10.1234/` is a
   possible cut DOI). `dedup.resolve` takes no `urls` slot or `venue_id_raw` from a cut claim (the next-ranked claim
   that wasn't cut does, else `null`), and `cap_record` sets the record's slots the same way
   (`dedup.resolved_value`), so the record still equals what its claims resolve to. So no page link, export or
   OpenAlex DOI join uses a cut value, and a cut venue id (which can read as another track's id, or exactly as the
-  Creative AI id) is never Creative AI evidence. A claim's own `url` is only ever a link, so over 2,048 it is dropped
+  Creative AI id) counts against Creative AI, as the whole id would. A claim's own `url` is only ever a link, so over 2,048 it is dropped
   (`null`).
 - **A cut URL is an id only if the cut changed nothing it names.** `caps.unread_identifier`: when the cut value's
   proceedings id, forum id or page parts (`urls.native`, `forum_id`, `proceedings_parts`; an `iclr_archive` target's
   id, which hashes the whole URL) differ from the whole URL's, the note adds `not read as an id`, and dedup's identity
   reads (`proceedings_ids`, `forum_ids`, Creative AI evidence) skip it. A forum URL's `id` cut short is a valid id of
   another paper. A long query string after a proceedings page's path is still that page's id.
-- **A cut URL that named its own record** (`caps.names_own_record`): when the whole URL named the record's own
-  proceedings id (the miner read the id from it), the note adds `it named its own record`. Dedup reads no id from the
-  cut text, but still takes the record as naming itself (`dedup._own_ids`: its self-naming check, `is_listing`, and its
-  cluster's proceedings ids), so a record whose own page URL is over 2,048 characters still builds.
-- **Reserved.** No miner or importer may end a claim's evidence with either note: `cut_identifier`,
-  `unread_identifier` and `names_own_record` read it.
+- **A URL that names its own record is kept whole when a cut would unname it.** When the whole URL names the
+  record's own proceedings id (`urls.native`, or an `iclr_archive` target's id: the miner read the id from it) and the
+  cut wouldn't, the claim keeps the whole value, flagged `value of <n> characters kept whole, as it names its own
+  record`, and still fills the slot, as before the caps. Only an id past character 2,048 (TASK-281) or an
+  `iclr_archive` target (its id hashes the whole URL) gets here. Decided from the value and the record's id, never
+  from evidence: round 2 of the review showed a note dedup read could be forged through RIS evidence.
+- **Reserved.** No miner or importer may end a claim's evidence with the `CUT` note: `cut_identifier` and
+  `unread_identifier` read it. A forged one only takes a value out of the slots or Creative AI evidence.
 - **Not capped:** `id` (an id is identity: cutting it would rename the paper; the `pmlr-`, `dblp-`, `ojs-` and `doi-`
   forms have no length bound, TASK-281; longest 53), a `twin` claim's ids (each must be a record of the snapshot),
   and the enums and `year`. Nor the number of authors or keywords per record (95 and 54 at most; TASK-280).

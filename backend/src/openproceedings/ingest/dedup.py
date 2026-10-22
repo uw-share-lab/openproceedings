@@ -76,7 +76,7 @@ from functools import cache
 from typing import Any, Literal, Protocol
 
 from openproceedings.ingest import classify, urls
-from openproceedings.ingest.caps import cut_identifier, names_own_record, unread_identifier
+from openproceedings.ingest.caps import cut_identifier, unread_identifier
 from openproceedings.ingest.record import Claim, ClaimField, PaperRecord, Source, Urls
 from openproceedings.query.normalize import normalize
 
@@ -410,8 +410,8 @@ def _one_per_field_and_source(record_id: str, claims: Iterable[Claim]) -> tuple[
 
 def resolve(record_id: str, claims: Iterable[Claim]) -> tuple[PaperRecord, list[Conflict]]:
     """The record the claims describe, each field from its best-ranked source (PRECEDENCE). A DOI, URL or venue id
-    the ingest caps cut is text, never a link or an id (`caps.cut_identifier`, decision-053): it fills no `urls`
-    slot and no `venue_id_raw`, and the next-ranked claim that wasn't cut does, if any."""
+    the ingest caps cut is text, never a link (`caps.cut_identifier`, decision-053): it fills no `urls` slot and no
+    `venue_id_raw`, and the next-ranked claim that wasn't cut does, if any."""
     kept, conflicts = _one_per_field_and_source(record_id, claims)
     best: dict[str, Claim] = {}
     for fld, order in PRECEDENCE.items():
@@ -528,13 +528,6 @@ def proceedings_ids(claims: Iterable[Claim]) -> set[str]:
     return found
 
 
-def _own_ids(record: PaperRecord) -> set[str]:
-    """The record's own proceedings id when a URL claim of it named that id whole and the ingest caps cut it so that
-    it no longer reads (`caps.names_own_record`, decision-053): the id was read from the whole URL, so the record
-    still names itself, though no id is read from the cut text."""
-    return {record.native} if any(names_own_record(c) for c in record.provenance) else set()
-
-
 def forum_ids(record: PaperRecord) -> frozenset[str]:
     """The record's own forum id and every forum id its kept `urls.forum` claims name (never one a cut changed,
     `caps.unread_identifier`)."""
@@ -555,7 +548,7 @@ def _listed(pids: Iterable[str], sources: Iterable[str]) -> bool:
 def is_listing(record: PaperRecord) -> bool:
     """A listing, as dedup judges one: a proceedings source's claim (an absence claim is none), or a
     proceedings id in a `urls.proceedings`/`urls.pdf` claim. Reconcile judges by the same rule."""
-    return _listed(_own_ids(record) | proceedings_ids(record.provenance), _sources([record]))
+    return _listed(proceedings_ids(record.provenance), _sources([record]))
 
 
 def _names_creative_ai(claims: Sequence[Claim], year: int) -> bool:
@@ -599,17 +592,13 @@ def _cluster(members: Sequence[PaperRecord], rid: str | None = None) -> _Cluster
     rid = rid or members[0].id
     summary, _ = resolve(rid, [c for r in members for c in r.provenance])  # rows come from the final resolve
     claims = summary.provenance  # kept claims only: the output record carries nothing else
-    own = [(r.native, c.source) for r in members for c in r.provenance if names_own_record(c)]  # decision-053
-    pids = proceedings_ids(claims) | {n for n, _ in own}
+    pids = proceedings_ids(claims)
     sources = _sources(members)
     return _Cluster(
         id=rid, members=tuple(members), summary=summary, sources=sources,
         keys=frozenset(k for c in summary.provenance if c.field == "title" and (k := title_key(_text(c.value)))),
         proceedings_ids=frozenset(pids), listed=_listed(pids, sources),
-        crawled=_listed(
-            proceedings_ids(c for c in claims if c.source not in IMPORTED) | {n for n, s in own if s not in IMPORTED},
-            sources,
-        ),
+        crawled=_listed(proceedings_ids(c for c in claims if c.source not in IMPORTED), sources),
         forum_ids=forum_ids(summary),
     )  # fmt: skip
 
@@ -727,7 +716,7 @@ def _dedup(records: Iterable[PaperRecord]) -> DedupResult:
         again, _ = resolve(r.id, r.provenance)
         if again != r:
             raise ValueError(f"{r.id}: fields don't match its own claims; dedup would silently change it")
-        if r.forum_id is None and r.native not in _own_ids(r) | proceedings_ids(r.provenance):
+        if r.forum_id is None and r.native not in proceedings_ids(r.provenance):
             raise ValueError(f"{r.id}: a proceedings record must name itself in a urls.proceedings/pdf claim")
 
     # Step 1: identical id: the same forum id in the same venue and year, or the same proceedings id.

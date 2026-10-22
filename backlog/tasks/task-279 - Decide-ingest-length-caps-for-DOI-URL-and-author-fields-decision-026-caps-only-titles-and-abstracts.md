@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-21 23:01'
-updated_date: '2026-10-22 05:33'
+updated_date: '2026-10-22 06:44'
 labels:
   - ingest
   - security
@@ -45,4 +45,6 @@ Follow-up from TASK-274. decision-026 (ingest/caps.py, CAPPED = title, abstract)
 Measured over snapshot 2026-10-16-03eab0ef56c4 (173,518 records, every claim): DOI 34, URL 154 (claim url 154), author 81, keyword 733 (an abstract split into keywords, ICLR 2025 d8hURACo0P), venue_id_raw 65, invitation none, evidence 469, id 53; at most 95 authors and 54 keywords per record. Caps: DOI 1,000, URL and claim url 2,048, author 1,000, keyword 2,000, venue_id_raw and invitation 500, evidence 4,000 (notes included). cap_record over every record of that snapshot returned each unchanged (changed=0; the 26 decision-026 already lists stay), so records.jsonl, snapshot_hash and index_version are unchanged: no RECORD_SCHEMA_VERSION, TOKENIZER_VERSION or SCHEMA_VERSION bump (the caps belong to the build, as decision-026's do). A cut URL whose cut changed what it names is not read as an id (unread_identifier); one whose cut left it alone still names its paper, so a long query string never refuses the build at dedup's self-naming check. Local: make test (9205 passed, 3 skipped; frontend 4954 passed), make lint, make tooling green; mutate-changed: no mutants cover the diff. Follow-up (file at the end): cap the number of authors and keywords per record.
 
 decision-053 records the caps, the trim-and-flag rule and the handling of a cut DOI or URL (no link; an id only if the cut left what it names unchanged). Follow-up filed: TASK-280 (cap the number of authors and keywords per record).
+
+Review round 1 (code, docs, observability, dedup, track-classifier, security, methodologist, qa): a cut venue id is an identifier too (it never fills venue_id_raw and counts against Creative AI); cap_record sets the urls slots and venue_id_raw with dedup.resolved_value (resolve's own rule: the next uncut claim, else null); caps._names survives an OJS id past Python's int digit limit; scholar_compare never joins on a cut DOI; a record whose own page URL was cut inside its own id refused the build at dedup's self-naming check. Round 2: round 1's fix for that (a note dedup read, 'it named its own record') was forgeable through RIS venue id evidence and credited the wrong record after a merge, so it was replaced: a URL that names its own record whole and that a cut would unname is kept whole, flagged, decided from the value and the record's id only. Measurements committed as docs/results/2026-10-22-stored-string-lengths.md (+ its check script; rerun at the round-1 code: records=173518 changed=0 flagged=26). Follow-up TASK-281 filed (bound native id length; and ojs.py's int() past the digit limit).
 <!-- SECTION:NOTES:END -->

@@ -41,13 +41,14 @@ one is written whole into every snapshot, export and API response. `FIELD_CAPS` 
 2,048, an author name 1,000, a keyword 2,000, a `venue_id_raw` or `invitation` 500, each counted and cut as a title is
 (`_cut`), and a claim's url 2,048 and its evidence 4,000. Each is at least 2.7 times the longest value in the
 2026-10-16 snapshot, so they trim no record of it. An over-cap value is trimmed and flagged in its claim's evidence
-(`CUT`), never refused, so every record stays whole. A cut DOI, URL or venue id is no valid link or id, so it is kept
-only as text for people to read: the claim keeps the cut value (the paper page shows it as text, flagged), and no `urls`
+(`CUT`), never refused, so every record stays whole. A cut DOI, URL or venue id is no valid link (nor a venue id an
+id), so it is kept only as text for people to read: the claim keeps the cut value (the paper page shows it as text, flagged), and no `urls`
 slot or `venue_id_raw` is taken from it (`cut_identifier`: `dedup.resolve`, and `cap_record` by the same rule). A
 claim's own url, which is only ever a link, is dropped when it is over its cap. Dedup still reads a cut URL as naming
 its paper when the cut left what it names unchanged (a long query string after a proceedings page's path), and reads
 nothing from one whose cut changed it (`unread_identifier`: a forum URL's `id` cut short is a valid id of another
-paper). A record whose id was read from such a URL whole still names itself by it (`names_own_record`).
+paper). A URL that names its own record whole (its id was read from it) is kept whole when a cut would stop it naming
+the record, as it was before these caps: the id it names is as long (TASK-281 would bound both).
 """
 
 from __future__ import annotations
@@ -98,7 +99,9 @@ CUT = "trimmed at ingest (decision-053):"  # how a claim's evidence says one of 
 _CUT_NOTE = re.compile(rf"(?:^|\s\(){re.escape(CUT)} ([0-9a-z ,;]+)\)?\Z")
 _VALUE_CUT = "value cut from "
 _UNREAD = "not read as an id"  # a cut URL that no longer names what it named whole
-_OWN = "it named its own record"  # ... where the whole URL named the record's own id (`names_own_record`)
+_KEPT = (
+    "kept whole, as it names its own record"  # a URL a cut would unname, whose whole names the record's id
+)
 _URL_SLOTS = ("urls.forum", "urls.pdf", "urls.proceedings", "urls.doi")
 
 
@@ -306,22 +309,25 @@ def _names(c: Claim, url: str) -> tuple[object, ...]:
 def _claim(c: Claim, own: str | None = None) -> Claim:
     """`c` under every cap: its title or abstract (`cap`), its value or each item of it (`FIELD_CAPS`), its url and
     its evidence, flagged in its evidence (`c` itself when nothing changes). `own` is the record's own proceedings
-    id: a cut URL that named it whole says so (`names_own_record`)."""
+    id: a URL that names it whole is kept whole when a cut would stop it naming it (decision-053). That is decided
+    from the value and the id alone, so no text a source writes can claim it."""
     value, url, notes, said = c.value, c.url, [], []
     if c.field in CAPPED and isinstance(value, str):
         value, note = cap(c.field, value)
         notes += [note] if note else []
     most = FIELD_CAPS.get(c.field)
     if most is not None and isinstance(value, str) and (kept := cut(value, most)) is not None:
-        said.append(f"{_VALUE_CUT}{len(value):,} to {len(kept):,} characters")
         whole = _names(c, value)
-        # a URL whose prefix names another paper, or none, is no id (a venue id that long is none either)
-        if c.field in _URL_SLOTS and _names(c, kept) != whole:
-            said.append(_UNREAD)
-            # the record's id was read from the whole URL, so the record still names itself by it
-            if own is not None and own in whole:
-                said.append(_OWN)
-        value = kept
+        if c.field in _URL_SLOTS and _names(c, kept) != whole:  # its prefix names another paper, or none
+            if own is not None and own in (whole[0], whole[-1]):  # the record's own id was read from it
+                if _KEPT not in _cut_parts(c):  # flagged once: a second pass (after the fills) adds nothing
+                    said.append(f"value of {len(value):,} characters {_KEPT}")
+            else:
+                said += [f"{_VALUE_CUT}{len(value):,} to {len(kept):,} characters", _UNREAD]
+                value = kept
+        else:
+            said.append(f"{_VALUE_CUT}{len(value):,} to {len(kept):,} characters")
+            value = kept
     elif most is not None and isinstance(value, tuple):
         value, n = _items(value, most)
         said += [f"{n} value{'' if n == 1 else 's'} cut to at most {most:,} characters"] if n else []
@@ -356,13 +362,6 @@ def unread_identifier(c: Claim) -> bool:
     parts that the whole URL didn't name, or none where it named one? Dedup then reads no id from it. A cut that
     left what it names alone (a long query string after a proceedings page's path) still names its paper."""
     return _UNREAD in _cut_parts(c)
-
-
-def names_own_record(c: Claim) -> bool:
-    """Is `c` an unread URL claim (`unread_identifier`) whose whole value named the record's own proceedings id? The
-    record's id was read from that URL before the cut, so dedup still takes the record as naming itself (its
-    self-naming check, and its listing's proceedings ids), though it reads no id from the cut text."""
-    return _OWN in _cut_parts(c)
 
 
 def cap_record(record: PaperRecord) -> PaperRecord:

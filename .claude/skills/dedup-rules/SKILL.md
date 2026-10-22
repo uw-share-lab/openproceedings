@@ -19,9 +19,9 @@ over-merge silently deletes a paper from someone's systematic review.
    every forum id a kept `urls.forum` claim names (`urls.forum_id()`: `openreview.net/forum?id=<id>`, one
    `id`). A URL the ingest caps cut so that it names something else names nothing here (`caps.unread_identifier`,
    decision-053): its `id` cut short could be another paper's. The same holds for proceedings ids and Creative AI
-   evidence (a cut venue id is never Creative AI evidence), and `resolve` takes no `urls` slot or `venue_id_raw` from
-   any cut DOI, URL or venue id (`caps.cut_identifier`). A record whose own page URL was cut still names its own id
-   (`caps.names_own_record`, `dedup._own_ids`). PMLR's index links each paper's forum from ICML 2023 (recorded for
+   evidence (a cut venue id counts against Creative AI), and `resolve` takes no `urls` slot or `venue_id_raw` from
+   any cut DOI, URL or venue id (`caps.cut_identifier`). A URL that names its own record and that a cut would unname
+   is kept whole, so the record still names itself. PMLR's index links each paper's forum from ICML 2023 (recorded for
    v202, v235 and v267; v28 has no link). Clusters that share a forum id
    in the same venue and year merge **whatever their titles say**, before any title match. The link is
    refused (a `conflicts.csv` row with `field = forum_id`, never a merge) when the forum id's records are

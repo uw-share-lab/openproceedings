@@ -1,9 +1,9 @@
 # A URL cut to a length cap can name another paper, so a cut identifier stays out of links and ids
 
-**Key lesson:** When a length cap trims an identifier (a DOI or URL), keep the cut text only as display text: clear the record's link slot, make dedup fill no slot from it, and stop identity reads from using it whenever the cut changed what it names. A cut that leaves the id alone must still count, or a record that names itself only by that URL stops the whole build.
+**Key lesson:** When a length cap trims an identifier (a DOI or URL), keep the cut text only as display text: never fill the record's link slot from it (the next uncut claim does, else none), and stop identity reads from using it whenever the cut changed what it names. A cut that leaves the id alone must still count, or a record that names itself only by that URL stops the whole build.
 
 - **Date:** 2026-10-22 · **Task:** task-279 · **Area:** ingest
-- **Artifacts:** `backend/src/openproceedings/ingest/caps.py` (`FIELD_CAPS`, `cut_identifier`, `unread_identifier`), `backend/src/openproceedings/ingest/dedup.py` (`resolve`, `proceedings_ids`, `forum_ids`, `_names_creative_ai`), `backend/tests/unit/ingest/test_caps.py`, decision-053
+- **Artifacts:** `backend/src/openproceedings/ingest/caps.py` (`FIELD_CAPS`, `cut_identifier`, `unread_identifier`, `names_own_record`), `backend/src/openproceedings/ingest/dedup.py` (`resolve`, `resolved_value`, `proceedings_ids`, `forum_ids`, `_own_ids`, `_names_creative_ai`), `docs/results/2026-10-22-stored-string-lengths.md`, `backend/tests/unit/ingest/test_caps.py`, decision-053
 
 ## What we set out to do
 Cap every stored string field that decision-026 left uncapped (DOI, URLs, author names, keywords, venue_id_raw,
@@ -85,3 +85,16 @@ refused.
   forms both parsed to nothing, so removing the guard left it green. The replacement makes the cut land exactly after
   `.html`, so the cut text is a Creative AI page the whole never was. A hand mutation pass (removing each new guard,
   `>` to `>=`, dropping `strip()`, the evidence budget off by one) now fails a test for each.
+
+## Addendum — 2026-10-22 (review round 2)
+- **The round-1 own-record note was forgeable, so it went.** Code, dedup and security review each showed that
+  `it named its own record` could be written by a source: RIS evidence repeats a venue id
+  (`scholarmend:openreview_api venueid=…`), so a venue id ending in the note made any record a listing (reconcile's
+  absence demotion skipped, a correct forum-link merge refused). After a merge the note also named the survivor, not
+  the listing it came from. The replacement reads no evidence: a URL that names its own record whole (decided from the
+  value and the record's id) and that a cut would unname is kept whole, flagged, as before the caps. Lesson: a note
+  in evidence may only ever move a value toward "used less" (out of a slot, out of evidence for a merge); a note that
+  grants anything (listing status, an id) is a channel for any source that writes evidence text.
+- **Check what each source puts in evidence before trusting a suffix.** Crawlers write fixed evidence, but RIS
+  evidence holds raw values (a URL, a venue id). The `_url` validator keeps whitespace out of URLs, so only the venue
+  id carried a forgery; adding `venue_id_raw` to the identifier fields opened that channel in round 1.
