@@ -224,9 +224,10 @@ model, so an over-cap value is trimmed and flagged, never refused, and every rec
   through RIS evidence, an automated security review that keeping such a URL whole had no bound, and round 3 that
   cutting it just past the id failed for pages whose form goes on past the id.
 - **Reserved.** No miner or importer may end a claim's evidence with the `CUT` note: `cut_identifier` and
-  `unread_identifier` read it. A forged `value cut` note only takes a value out of the slots or Creative AI evidence; a
+  `unread_identifier` read it. A forged `value cut` note only takes a value out of the slots or Creative AI evidence (and lists
+  the record in the manifest's `trimmed`: `is_trimmed` reads it on any claim); a
   forged `not read as an id` would hide a URL's ids from dedup's identity reads, but no claim can carry one today (a
-  URL holds no whitespace, so RIS URL evidence can't end in a note, and crawlers write fixed evidence).
+  URL holds no whitespace, so RIS URL evidence can't end in a note, and every crawler ends its URL claims' evidence with fixed text the note can't match).
 - **Not capped:** `id` (an id is identity: cutting it would rename the paper; the `pmlr-`, `dblp-`, `ojs-` and `doi-`
   forms have no length bound, TASK-281; longest 53), a `twin` claim's ids (each must be a record of the snapshot),
   and the enums and `year`. Nor the number of authors or keywords per record (95 and 54 at most; TASK-280).

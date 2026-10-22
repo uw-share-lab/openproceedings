@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-22 06:01'
-updated_date: '2026-10-22 07:27'
+updated_date: '2026-10-22 08:07'
 labels:
   - ingest
   - security
@@ -18,7 +18,7 @@ ordinal: 187000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Follow-up from the TASK-279 security review. The native part of a record id is validated per form (record.PROCEEDINGS_NATIVE, the forum-id rule), but the pmlr-v<N>-<key>, dblp-<key>, ojs-<id> and doi-<toc>.<n> forms have no length bound: a hostile PMLR index entry with a 2,100-character key, or an OJS article id of thousands of digits, gives a record whose id (stored in records.jsonl, every export and API response, and the URL /paper/<id>) is as long. decision-053 caps every other stored string and deliberately leaves the id alone, since cutting an id would rename the paper; since TASK-279 such a record still builds, because a URL the record's own id was read from becomes that id's page address, rebuilt from the id (so that URL, too, is as long as the id plus a fixed host and path). Also in scope: sources/ojs.py's int() on an OAI header's article id raises a bare ValueError past Python's 4,300-digit limit, aborting the crawl rather than refusing the entry (the TASK-279 review, round 2). The longest id in snapshot 2026-10-16-03eab0ef56c4 is 53 characters. Bounding the forms (e.g. a key of at most 200 characters, an OJS id of at most 12 digits) makes the record invalid, so its crawler skips it as it skips any invalid entry: that is a refusal, so it needs the owner's decision, and it changes the native-id forms, so RECORD_SCHEMA_VERSION would be bumped (record-schema skill §Versions), which changes the manifest of the next snapshot built.
+Follow-up from the TASK-279 security review. The native part of a record id is validated per form (record.PROCEEDINGS_NATIVE, the forum-id rule), but the pmlr-v<N>-<key>, dblp-<key>, ojs-<id> and doi-<toc>.<n> forms have no length bound: a hostile PMLR index entry with a 2,100-character key, or an OJS article id of thousands of digits, gives a record whose id (stored in records.jsonl, every export and API response, and the URL /paper/<id>) is as long. decision-053 caps every other stored string and deliberately leaves the id alone, since cutting an id would rename the paper; since TASK-279 such a record still builds, because a URL the record's own id was read from becomes an address of that id's page, rebuilt from the id (so that URL, too, is as long as the id plus a fixed host and path). Also in scope: sources/ojs.py's int() on an OAI header's article id raises a bare ValueError past Python's 4,300-digit limit, aborting the crawl rather than refusing the entry (the TASK-279 review, round 2). The longest id in snapshot 2026-10-16-03eab0ef56c4 is 53 characters. Bounding the forms (e.g. a key of at most 200 characters, an OJS id of at most 12 digits) makes the record invalid, so its crawler skips it as it skips any invalid entry: that is a refusal, so it needs the owner's decision, and it changes the native-id forms, so RECORD_SCHEMA_VERSION would be bumped (record-schema skill §Versions), which changes the manifest of the next snapshot built.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

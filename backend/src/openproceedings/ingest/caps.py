@@ -47,8 +47,9 @@ slot or `venue_id_raw` is taken from it (`cut_identifier`: `dedup.resolve`, and 
 claim's own url, which is only ever a link, is dropped when it is over its cap. Dedup still reads a cut URL as naming
 its paper when the cut left what it names unchanged (a long query string after a proceedings page's path), and reads
 nothing from one whose cut changed it (`unread_identifier`: a forum URL's `id` cut short is a valid id of another
-paper). A URL the record's own id was read from, which a cut at the cap would unname, is replaced by that id's page
-address rebuilt from the id (`_own_page`), so it still names the record and only the id bounds it (TASK-281). An
+paper). A URL whose cut would change what it names first drops its query, parameters and fragment (`_page_only`) when
+that fits and names all the whole did; else one the record's own id was read from becomes an address of that id's
+page, rebuilt from the id (`_own_page`), so it still names the record and only the id bounds it (TASK-281). An
 `iclr_archive` target, whose id hashes the whole URL, is cut and unread like any other (`dedup` accepts that record as
 standing for itself, by the crawler's own claim only).
 """
@@ -351,7 +352,8 @@ def _page_only(c: Claim, url: str, most: int) -> str | None:
 def _claim(c: Claim, own: str | None = None) -> Claim:
     """`c` under every cap: its title or abstract (`cap`), its value or each item of it (`FIELD_CAPS`), its url and
     its evidence, flagged in its evidence (`c` itself when nothing changes). `own` is the record's own proceedings
-    id: a URL the id was read from, which a cut at the cap would unname, becomes the id's page address instead
+    id: a URL whose cut would change what it names first drops its tail (`_page_only`); else one the id was read
+    from becomes an address of the id's page instead
     (`_own_page`, decision-053). That is decided from the value and the id alone, so no text a source writes can
     claim it."""
     value, url, notes, said = c.value, c.url, [], []

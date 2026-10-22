@@ -95,7 +95,7 @@ refused.
   value and the record's id) and that a cut would unname is kept whole, flagged, as before the caps. Lesson: a note
   in evidence may only ever move a value toward "used less" (out of a slot, out of evidence for a merge); a note that
   grants anything (listing status, an id) is a channel for any source that writes evidence text.
-- **Check what each source puts in evidence before trusting a suffix.** Crawlers write fixed evidence, but RIS
+- **Check what each source puts in evidence before trusting a suffix.** Crawlers end URL claims' evidence with fixed text, but RIS
   evidence holds raw values (a URL, a venue id). The `_url` validator keeps whitespace out of URLs, so only the venue
   id carried a forgery; adding `venue_id_raw` to the identifier fields opened that channel in round 1.
 

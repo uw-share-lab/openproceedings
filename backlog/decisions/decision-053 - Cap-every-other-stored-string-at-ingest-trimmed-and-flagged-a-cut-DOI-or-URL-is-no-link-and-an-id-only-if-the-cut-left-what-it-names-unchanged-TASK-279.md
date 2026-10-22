@@ -140,11 +140,12 @@ Each cap is at least 2.7 times the longest value held, so no record of the curre
   keeps it apart from another ICLR paper with the same title.
 - **Reserved.** No miner or importer may end a claim's evidence with the `CUT` note. `cut_identifier` and
   `unread_identifier` read it, as `dedup.is_absence` reads `not listed:`. A forged `value cut` note only takes a value
-  out of the record's slots or Creative AI evidence. A forged `not read as an id` note would also hide that URL's ids
+  out of the record's slots or Creative AI evidence, and lists the record in the manifest's `trimmed` (`is_trimmed`
+  reads the note on any claim, since an evidence cut can land on any field). A forged `not read as an id` note would also hide that URL's ids
   from dedup's identity reads (listing, the self-naming check, the never-merge guards), so it matters which claims can
   carry one: none can today. A URL holds no whitespace (`record._url`), so an RIS URL claim's evidence
-  (`scholarmend:<route> <url>`) can't end in a note, which needs ` (` before it, and every crawler writes fixed
-  evidence on its URL claims. The forgery round 2 found was on a venue id, which is no URL and only ever leaves the slot.
+  (`scholarmend:<route> <url>`) can't end in a note, which needs ` (` before it, and every crawler ends its URL
+  claims' evidence with fixed text the note can't match. The forgery round 2 found was on a venue id, which is no URL and only ever leaves the slot.
 - **Not capped:**
   - `id`. An id is identity: cutting it would rename the paper. Its native part is validated per form, but the
     `pmlr-`, `dblp-`, `ojs-` and `doi-` forms have no length bound; bounding them is a refusal and a record schema
@@ -182,8 +183,8 @@ Each cap is at least 2.7 times the longest value held, so no record of the curre
     snapshot hash, as any content change does. `op snapshot diff` shows it.
 - **Exactness.** A trimmed DOI or URL is wrong, as the owner accepted. It is never presented as a working link, and
   never used as an id that names a paper it didn't name whole.
-  - **No refusal, and no unbounded value.** A record whose own page URL a cut at the cap would unname gets its id's
-    page address, and an `iclr_archive` record stands for itself with its target cut, so dedup's input check passes.
+  - **No refusal, and no unbounded value.** A record whose own page URL a cut at the cap would unname gets an address
+    of its id's page, and an `iclr_archive` record stands for itself with its target cut, so dedup's input check passes.
     No URL is longer than its cap but by the id it names: the one stored string still unbounded is the id itself
     (TASK-281).
   - **A hidden id.** An unread cut URL hides what the whole URL named from the never-merge guards too (two distinct
