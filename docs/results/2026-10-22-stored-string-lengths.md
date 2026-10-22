@@ -10,7 +10,7 @@ measurements, with at least 2.7 times the longest value held, so that the caps t
 |---|---|
 | Snapshot | `2026-10-16-03eab0ef56c4` (`snapshot_hash` `03eab0ef56c4d768ca25c1942207d1c9eaf14a1d852bd276a05e013ae17210c7`), 173,518 records, record schema 9, tokenizer 3 |
 | Script | [`2026-10-22-stored-string-lengths-check.py`](2026-10-22-stored-string-lengths-check.py): `uv run python docs/results/2026-10-22-stored-string-lengths-check.py <snapshot>`, from the main checkout (where `data/` lives) or with the snapshot's absolute path (about 110 s) |
-| Code | the TASK-279 branch at `9e0af863` (decision-053's caps as the branch ships them); an earlier run at the round-1 code gave the same result |
+| Code | the TASK-279 branch at `b97abc82` (decision-053's caps after review round 3); earlier runs at the round-1 code and at `9e0af863` gave the same result |
 | Counted | in NFKD, as `ingest/caps.py` counts; every claim, losing claims included |
 
 ## The longest value of each field
