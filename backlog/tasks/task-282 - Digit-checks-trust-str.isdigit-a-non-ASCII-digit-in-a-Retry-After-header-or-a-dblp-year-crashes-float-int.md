@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-22 22:23'
-updated_date: '2026-10-22 22:25'
+updated_date: '2026-10-22 22:29'
 labels:
   - ingest
   - security
@@ -23,6 +23,12 @@ Found by the TASK-281 review and the closing docs review (2026-10-22). str.isdig
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 http._seconds reads only ASCII digits (one optional '.'); a non-ASCII value is no hint, never an exception, with a retry_after test for a latin-1 '²' header on a 429
-- [ ] #2 Both dblp year readers take a year only from ASCII digits, anything else is no year, with tests for a superscript and an Arabic-Indic year
+- [ ] #1 Both dblp year readers take a year only from ASCII digits, anything else is no year, with tests for a superscript and an Arabic-Indic year
+- [ ] #2 http._seconds reads only ASCII digits (one optional '.'); a non-ASCII value is no hint, never an exception, with tests for a latin-1 '²' in Retry-After on a 429 and in ratelimit-remaining on a 200 (_respect_budget, called outside the fetch try)
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Code review (2026-10-22): _respect_budget (http.py:538-543) reads ratelimit-remaining and ratelimit-reset through _seconds on every 200 response, outside the transport's try (line 462), so the 200 path aborts a crawl too, not only 429/5xx.
+<!-- SECTION:NOTES:END -->
