@@ -58,3 +58,24 @@ the proof was run:
 
 **Propagated to:** none new. `release-manager` §How you work already says to promote and tag on one UTC day, and
 `2026-09-27-npm-workspace-hoists-node-modules-to-the-root.md` covers the root `node_modules/` gate.
+
+## Addendum — 2026-10-22 (v0.5.0)
+- **MINOR vs PATCH is the release manager's call; `changelog.py` doesn't make it.** Since v0.4.3, `dev` gained #192
+  (`feat(ingest)`, TASK-279, decision-053) and Dependabot #187/#188, with `TOKENIZER_VERSION` 3, `SCHEMA_VERSION` 4,
+  `QUERY_VERSION` 2 and Tantivy 0.26.2 unchanged. Spec 08 §Release versioning says MINOR for new features, so this
+  is 0.5.0, not 0.4.4. `changelog.py` refuses a PATCH only when one of those four versions changes
+  (`... : not a patch release`, around line 393); a `feat` PR in the Added section does not stop a PATCH. Read the
+  release's Added section (or the titles in `git log --first-parent origin/main..origin/dev`) before choosing the
+  number: a `feat` title means MINOR before 1.0.0.
+- **A parallel reviewer must not use the main checkout.** The security review (spec 08 §Release step 2) ran as a
+  background agent while step 3 (golden and contract suites, parity, coverage) ran in the main checkout. The
+  reviewer ran `git checkout --detach origin/main` there by mistake, and went back to `dev` seconds later. Step 3
+  might have read v0.4.3's tracked files in that window, so step 3 was re-run on a confirmed-clean `dev`
+  2e99d3be: 2,669 passed, 1 skipped; parity 0 differences over 173,518 records; coverage `--check` exit 0, M4 PASS
+  81 of 82. Brief a release's reviewer to read other trees with `git show <ref>:<path>` or `git diff`, or in a
+  `git worktree add --detach` of its own, never with a checkout in the shared one.
+- **The `git archive` probe route worked again.** With `__version__` patched to 0.4.3 the copy hashed to
+  `b2cfbda7…` (the value before), `SNAPSHOT_HASH` unchanged; the new `FILES_HASH` is `e6906934…`.
+
+**Propagated to:** `.claude/agents/release-manager.md` (§How you work, step 1: the security reviewer keeps off the
+shared checkout; step 2: choose MINOR or PATCH from the release's Added section, not from `changelog.py`).
