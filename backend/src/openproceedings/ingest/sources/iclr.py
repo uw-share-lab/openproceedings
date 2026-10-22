@@ -59,9 +59,13 @@ class Entry:
 
 
 def _paper_anchor(node: Element, base: str) -> tuple[Element, str, str, str | None] | None:
-    for anchor in [node] if node.tag == "a" else node.iter("a"):
-        target = joined(base, anchor.attributes.get("href", ""))
-        if target is None or not _PAPER_TARGET.match(target):  # a link `urljoin` refuses names no paper
+    anchors = [node] if node.tag == "a" else list(node.iter("a"))
+    targets = [joined(base, anchor.attributes.get("href", "")) for anchor in anchors]
+    # a link `urljoin` refuses could be the item's forum link, so the item names no paper rather than another link's
+    if None in targets:
+        return None
+    for anchor, target in zip(anchors, targets, strict=True):
+        if target is None or not _PAPER_TARGET.match(target):  # (None only narrows the type)
             continue
         identity = urls.iclr_archive_target(target)
         if identity is None:

@@ -115,7 +115,7 @@ def parse_volume_index(text: str, base: str) -> tuple[list[Entry], int]:
         if None in joins:
             unlinked += 1
             continue
-        hrefs = [h for h in joins if h is not None]
+        hrefs = [h for h in joins if h is not None]  # drops nothing now: it narrows the type
         abs_url = next((h for h in hrefs if urlparse(h).path.endswith(".html") and urls.pmlr(h)), None)
         if abs_url is None:
             unlinked += 1

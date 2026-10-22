@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-22 06:01'
-updated_date: '2026-10-22 20:54'
+updated_date: '2026-10-22 21:25'
 labels:
   - ingest
   - security
@@ -49,4 +49,6 @@ Review round 1: ris._int converts the zero-stripped digits (a zero-padded volume
 Review round 2: dedup._site/_names_native read an evidence URL urlparse refuses as naming nothing; ris._readable covers UR lines; html.joined drops a listing link urljoin refuses (PMLR, NeurIPS); pmlr.heading decided by the first Volume heading (_VOLUME_HEADING); tests for each.
 
 Review round 3: iclr._paper_anchor and aaai_library.same_capture guarded (html.joined / ValueError); a PMLR block with an unreadable link is unlinked; a NeurIPS see-also is kept as written; a test pins _names_native's False.
+
+Review round 4: iclr._paper_anchor names no paper when any of an item's links is unreadable (no half-read, as PMLR); RIS no_id wording corrected in spec 01, record-schema, decision-055.
 <!-- SECTION:NOTES:END -->

@@ -104,3 +104,9 @@ record past a bound refused, record schema 9 → 10.
 - **Dropping an unreadable link can change what the rest means.** A PMLR block that loses an unreadable OpenReview
   link would read as having no forum (or one forum, when it had two). The whole block is now unlinked instead; a
   NeurIPS see-also is kept as written so the crawl still reports it unfollowed.
+
+## Addendum — 2026-10-22 (review round 4)
+- **The half-read rule applies to every listing that tries several links.** The ICLR 2015-2016 list items try each
+  anchor in turn, so an unreadable OpenReview link let the item be read from its arXiv link, without the forum.
+  `iclr._paper_anchor` now names no paper when any of its links is unreadable, as `pmlr.parse_volume_index` does
+  (`test_iclr.py::test_a_link_urljoin_refuses_names_no_paper_never_a_bare_value_error`).

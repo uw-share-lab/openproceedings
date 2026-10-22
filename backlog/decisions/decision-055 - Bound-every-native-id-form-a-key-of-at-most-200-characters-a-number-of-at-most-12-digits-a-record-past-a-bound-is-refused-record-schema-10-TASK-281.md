@@ -52,8 +52,9 @@ Every native-id form is bounded, and a record past a bound is refused. The owner
   - The NeurIPS and ICLR hashes (32 hex digits) and OpenReview forum ids (4–64 characters) were bounded already.
 - **A record past a bound is invalid**, so each crawler refuses the entry as it refuses any invalid one:
   - PMLR and dblp ICML skip it and count it (`skipped.invalid`);
-  - the RIS importer skips it (`unresolved`; a PMLR volume past 12 digits names no volume, so the entry is skipped
-    as any without a listing: `no_id` when scholarmend's PMLR index names it ICML, else `out_of_scope` or `unresolved`);
+  - the RIS importer skips it (`unresolved`; a PMLR volume past 12 digits names no volume, so the entry is identified
+    as any without a listing: by its OpenReview forum when it has a venueid, else skipped, `no_id` when scholarmend's
+    PMLR index names it ICML, else `unresolved` or `out_of_scope` by its links);
   - dblp AAAI and Crossref stop (`invalid_record`; a Crossref DOI past the bound is `odd_doi`);
   - `sources/ojs.py` stops on an OAI-PMH article id or volume past 12 digits after leading zeros (`oai_unreadable`), a
     `CrawlError` raised before `int`, never a bare `ValueError`.
