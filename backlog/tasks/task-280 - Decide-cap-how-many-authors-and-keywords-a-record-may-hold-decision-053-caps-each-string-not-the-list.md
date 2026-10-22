@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-22 05:32'
-updated_date: '2026-10-22 19:01'
+updated_date: '2026-10-22 19:35'
 labels:
   - ingest
   - security
@@ -24,8 +24,8 @@ Follow-up from TASK-279. decision-053 caps the length of each author name (1,000
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A decision record says whether the number of authors and keywords per record is capped, at what counts, and how an over-cap list is handled and flagged, or why it is left uncapped
-- [ ] #2 If capped: ingest/caps.py applies it with tests at count-1, count and count+1, and spec 01 and the record-schema skill describe it
+- [x] #1 A decision record says whether the number of authors and keywords per record is capped, at what counts, and how an over-cap list is handled and flagged, or why it is left uncapped
+- [x] #2 If capped: ingest/caps.py applies it with tests at count-1, count and count+1, and spec 01 and the record-schema skill describe it
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -37,3 +37,9 @@ Follow-up from TASK-279. decision-053 caps the length of each author name (1,000
 4. Tests at count-1, count, count+1 for both; export tests.
 5. decision-054, spec 01, spec 04, record-schema/bibtex/ris skills; results doc with the read-only check over 2026-10-16-03eab0ef56c4.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+decision-054 (owner, 2026-10-22: cap + trim at 500 authors / 200 keywords). caps.LIST_CAPS cuts the list before its items, on the record and every claim; the COUNT note goes before any decision-053 note; is_trimmed reads it. snapshot.RecordFile.lists_cut (from caps.listed_total) feeds the exports: BibTeX 'and others', one RIS N1, CSV last column lists_cut, JSONL lists_cut only on a cut record. Tests at count-1/count/count+1 (test_caps.py) and per export format (contract/test_lists_cut.py). Read-only check over 2026-10-16-03eab0ef56c4: most 95 authors / 54 keywords; changed=0 (docs/results/2026-10-22-list-counts-and-native-ids.md). openapi.json unchanged.
+<!-- SECTION:NOTES:END -->

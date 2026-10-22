@@ -49,9 +49,16 @@ its paper when the cut left what it names unchanged (a long query string after a
 nothing from one whose cut changed it (`unread_identifier`: a forum URL's `id` cut short is a valid id of another
 paper). A URL whose cut would change what it names first drops its query, parameters and fragment (`_page_only`) when
 that fits and names all the whole did; else one the record's own id was read from becomes an address of that id's
-page, rebuilt from the id (`_own_page`), so it still names the record and only the id bounds it (TASK-281). An
+page, rebuilt from the id (`_own_page`), so it still names the record; the native-id bounds (decision-055, TASK-281)
+keep that page well within the URL cap. An
 `iclr_archive` target, whose id hashes the whole URL, is cut and unread like any other (`dedup` accepts that record as
 standing for itself, by the crawler's own claim only).
+
+A list has a count cap too (decision-054, TASK-280): a record keeps its first `MAX_AUTHORS` authors and its first
+`MAX_KEYWORDS` keywords, on the record and every claim alike, cut before its items are (`_claim`, `cap_record`). An
+over-cap list is kept, trimmed and flagged (`COUNT`: `kept the first <n> of <m> values`, before any `CUT` note), and
+the manifest's `trimmed` names the record. The exports say the list was cut (`listed_total`, read by
+`snapshot.RecordFile.lists_cut`: BibTeX's `and others`, an RIS `N1`, the CSV/JSONL `lists_cut`).
 """
 
 from __future__ import annotations
@@ -106,6 +113,20 @@ _UNREAD = "not read as an id"  # a cut URL that no longer names what it named wh
 # a URL replaced by an address of its page rebuilt from the record's id, so that it still names the record (`_own_page`)
 _OWN = "rebuilt as the page of the record id it names"
 _URL_SLOTS = ("urls.forum", "urls.pdf", "urls.proceedings", "urls.doi")
+
+# How many values a list keeps (decision-054, TASK-280; the owner, 2026-10-22): the first `MAX_AUTHORS` authors and
+# the first `MAX_KEYWORDS` keywords, on the record and every claim alike. The most in snapshot 2026-10-16-03eab0ef56c4:
+# 95 authors and 54 keywords on one record.
+MAX_AUTHORS = 500
+MAX_KEYWORDS = 200
+LIST_CAPS: dict[str, int] = {"authors": MAX_AUTHORS, "keywords": MAX_KEYWORDS}
+COUNT = "trimmed at ingest (decision-054):"  # how a claim's evidence says its list was cut
+# the note as `_claim` writes it: before any `CUT` note (which stays last), else ending the evidence; it says how
+# many values the source listed (`listed_total`)
+_COUNT_NOTE = re.compile(
+    rf"(?:^|\s\(){re.escape(COUNT)} kept the first ([0-9,]+) of ([0-9,]+) values\)?"
+    rf"(?:\s\({re.escape(CUT)} [0-9a-z ,;]+\))?\Z"
+)
 
 
 @lru_cache(maxsize=4096)
@@ -296,8 +317,9 @@ def _evidence(evidence: str | None, notes: list[str]) -> str | None:
 def _names(c: Claim, url: str) -> tuple[object, ...]:
     """What dedup reads `url` as naming when `c` claims it: a proceedings id (`urls.native`; an `iclr_archive`
     target's, whose id hashes the whole URL), a forum id, and a proceedings page's parts (`dedup.proceedings_ids`,
-    `forum_ids`, `_names_creative_ai`). A URL no parser can read (an OJS article id past Python's int digit limit)
-    names nothing anyone can match: a fresh object, unequal to any other."""
+    `forum_ids`, `_names_creative_ai`). A URL no parser can read (a malformed host such as `http://[x`) names
+    nothing anyone can match: a fresh object, unequal to any other. A number past `MAX_NATIVE_DIGITS` (an OJS article
+    id, a PMLR volume) is no id at all (decision-055), so such a URL names none whole or cut."""
     try:
         archive = (
             urls.iclr_archive_target(url)
@@ -317,8 +339,11 @@ def _own_page(c: Claim, url: str, own: str) -> str | None:
     are gone: `…/paper_files/paper/<year>/hash/<hash>-Abstract.html` on a NeurIPS or ICLR host, a PMLR paper
     `proceedings.mlr.press/v<N>/<key>.html`, a dblp record page, an OJS article on its journal, a doi.org link. Kept
     only if it names `own` too. An `iclr_archive` id hashes the whole URL and is never `urls.native`'s, so nothing is
-    built for it."""
-    parsed = urlparse(url)
+    built for it. A URL `urlparse` refuses (`http://[x`) names no id, so nothing is built for it either."""
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
     page: str | None = None
     # a NeurIPS or ICLR page's path is fixed but for its track token, so only a long token gets here; the 2021 D&B
     # host's paths are fixed-length (its token is the round), so a page there always fits once its query is gone
@@ -342,15 +367,18 @@ def _page_only(c: Claim, url: str, most: int) -> str | None:
     """`url` without its query, parameters and fragment, when that fits `most` and names all the whole URL names
     (`_names`: a proceedings page's track token included); else None. Every parser reads the page from the path
     alone (a forum id aside, which the comparison keeps out), so a long tail after a page is dropped whole, never cut
-    into the page (a tail of only symbols would cut inside `.html`)."""
-    parsed = urlparse(url)
+    into the page (a tail of only symbols would cut inside `.html`). A URL `urlparse` refuses has no page: None."""
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
     page = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
     return page if _length(page) <= most and _names(c, page) == _names(c, url) else None
 
 
 def _claim(c: Claim, own: str | None = None) -> Claim:
-    """`c` under every cap: its title or abstract (`cap`), its value or each item of it (`FIELD_CAPS`), its url and
-    its evidence, flagged in its evidence (`c` itself when nothing changes). `own` is the record's own proceedings
+    """`c` under every cap: its title or abstract (`cap`), its value or each item of it (`FIELD_CAPS`), a list's count
+    (`LIST_CAPS`, first), its url and its evidence, flagged in its evidence (`c` itself when nothing changes). `own` is the record's own proceedings
     id: a URL whose cut would change what it names first drops its tail (`_page_only`); else one the id was read
     from becomes an address of the id's page instead
     (`_own_page`, decision-053). That is decided from the value and the id alone, so no text a source writes can
@@ -372,13 +400,11 @@ def _claim(c: Claim, own: str | None = None) -> Claim:
             )  # its page, the tail dropped
             value = page
         elif c.field in _URL_SLOTS and _names(c, kept) != whole:  # its prefix names another paper, or none
+            # an address of its page, rebuilt from the id: it names the record still. Never the value itself, which is
+            # over the cap, while the page is within it (the id's bounds, decision-055)
             if own is not None and (to_own := _own_page(c, value, own)) is not None:
-                if to_own != value:  # an address of its page, rebuilt from the id: it names the record still
-                    said.append(f"{_VALUE_CUT}{len(value):,} to {len(to_own):,} characters, {_OWN}")
-                    value = to_own
-                # it already is that address: kept whole, still a valid link, flagged once (not on a second pass)
-                elif _OWN not in _cut_parts(c):
-                    said.append(f"value of {len(value):,} characters kept, {_OWN}")
+                said.append(f"{_VALUE_CUT}{len(value):,} to {len(to_own):,} characters, {_OWN}")
+                value = to_own
             else:
                 said += [f"{_VALUE_CUT}{len(value):,} to {len(kept):,} characters", _UNREAD]
                 value = kept
@@ -386,6 +412,11 @@ def _claim(c: Claim, own: str | None = None) -> Claim:
             said.append(f"{_VALUE_CUT}{len(value):,} to {len(kept):,} characters")
             value = kept
     elif most is not None and isinstance(value, tuple):
+        if (keep := LIST_CAPS.get(c.field)) is not None and len(
+            value
+        ) > keep:  # the list first, then its items
+            notes.append(f"{COUNT} kept the first {keep:,} of {len(value):,} values")
+            value = value[:keep]
         value, n = _items(value, most)
         said += [f"{n} value{'' if n == 1 else 's'} cut to at most {most:,} characters"] if n else []
     if (
@@ -422,7 +453,8 @@ def unread_identifier(c: Claim) -> bool:
 
 
 def cap_record(record: PaperRecord) -> PaperRecord:
-    """`record` with every capped field and every claim capped alike (`record` itself when none changes). A `urls`
+    """`record` with every capped field and every claim capped alike (`record` itself when none changes): an author or
+    keyword list keeps its first `LIST_CAPS` values, as its claims do. A `urls`
     slot or `venue_id_raw` over its cap, or whose claims the caps cut, holds what `dedup.resolve` takes from the
     claims (`dedup.resolved_value`: never a cut one), so the record still equals what its claims resolve to."""
     from openproceedings.ingest import dedup  # here: dedup imports this module
@@ -435,8 +467,11 @@ def cap_record(record: PaperRecord) -> PaperRecord:
         if text is not None and (capped := cap(field, text))[1] is not None:
             update[field] = capped[0]
     for field, most in (("authors", MAX_AUTHOR), ("keywords", MAX_KEYWORD)):
-        if (items := _items(getattr(record, field), most))[1]:
-            update[field] = items[0]
+        held = getattr(record, field)
+        kept = held[: LIST_CAPS[field]]
+        items, n = _items(kept, most)
+        if n or len(kept) < len(held):
+            update[field] = items
     slots: dict[str, str | None] = {}
     for field in IDENTIFIERS:
         held = (
@@ -465,8 +500,31 @@ def cap_records(records: Iterable[PaperRecord]) -> list[PaperRecord]:
 
 def is_trimmed(record: PaperRecord) -> bool:
     """Was any of `record`'s claims trimmed at ingest (the manifest's `trimmed`): a title or abstract
-    (decision-026), or any other capped value, url or evidence (decision-053)?"""
+    (decision-026), any other capped value, url or evidence (decision-053), or a list of authors or keywords
+    (decision-054)?"""
     return any(
-        _CUT_NOTE.search(c.evidence or "") or (c.field in CAPPED and _NOTE.search(c.evidence or ""))
+        _CUT_NOTE.search(c.evidence or "")
+        or (c.field in CAPPED and _NOTE.search(c.evidence or ""))
+        or (c.field in LIST_CAPS and _COUNT_NOTE.search(c.evidence or ""))
         for c in record.provenance
     )
+
+
+def listed_total(field: str, value: object, evidence: str | None) -> int | None:
+    """How many values the source listed for a claim's `field` (`authors`, `keywords`), when the caps cut its list
+    (decision-054), else None. Only the note as `_claim` writes it counts, and only on a list it left exactly at the
+    cap, so a source's evidence that merely reads like the note says nothing of a shorter list. The exports read it
+    off the claim the record's list came from (`snapshot.RecordFile.lists_cut`), to say the list was cut."""
+    keep = LIST_CAPS.get(field)
+    if (
+        keep is None
+        or not isinstance(value, (list, tuple))
+        or len(value) != keep
+        or COUNT not in (evidence or "")
+    ):
+        return None
+    m = _COUNT_NOTE.search(evidence or "")
+    if m is None or int(m.group(1).replace(",", "")) != keep:
+        return None
+    total = int(m.group(2).replace(",", ""))
+    return total if total > keep else None

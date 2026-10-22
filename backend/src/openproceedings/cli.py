@@ -1717,7 +1717,7 @@ def _reference(ns: argparse.Namespace, index: Path, tokenizer: str) -> Reference
 def _export(ns: argparse.Namespace) -> int:
     from openproceedings.api.state import snapshot_records
     from openproceedings.engine.tantivy_engine import TantivyEngine
-    from openproceedings.export import Provenance, Sources, Twins, check_count, utc_date, write
+    from openproceedings.export import ListsCut, Provenance, Sources, Twins, check_count, utc_date, write
     from openproceedings.ingest.snapshot import SnapshotError, any_withheld, merges_on_disk
     from openproceedings.logs import reason_of
     from openproceedings.takedowns import list_path, same_paper
@@ -1744,10 +1744,12 @@ def _export(ns: argparse.Namespace) -> int:
     # without it every abstract is withheld and each record says so (decision-021), with a warning
     sources: Sources | None
     twins: Twins | None = None  # each record's twins (TASK-162), from the same verified snapshot
+    lists_cut: ListsCut | None = None  # and the lists the ingest caps cut (decision-054)
     withheld = listed
     try:
         records = snapshot_records(ns.data_dir, path, engine.index_version)
         sources, withheld, twins = records.attributions, listed | records.withheld, records.twins
+        lists_cut = records.lists_cut
     except (SnapshotError, OSError) as e:
         sources = None
         log.warning(
@@ -1792,7 +1794,10 @@ def _export(ns: argparse.Namespace) -> int:
     if ns.out is None:  # UTF-8 and untranslated newlines whatever the terminal's locale (spec 04)
         out = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="", write_through=True)
         try:
-            n = write(ns.format, documents, provenance, out, sources=sources, withheld=withheld, twins=twins)
+            n = write(
+                ns.format, documents, provenance, out, sources=sources, withheld=withheld, twins=twins,
+                lists_cut=lists_cut,
+            )  # fmt: skip
         finally:
             out.detach()  # leave sys.stdout usable
         check_count(n, total)
@@ -1805,8 +1810,9 @@ def _export(ns: argparse.Namespace) -> int:
                 os.fchmod(fd, ns.out.stat().st_mode & 0o777)
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as stream:
                 n = write(
-                    ns.format, documents, provenance, stream, sources=sources, withheld=withheld, twins=twins
-                )
+                    ns.format, documents, provenance, stream, sources=sources, withheld=withheld, twins=twins,
+                    lists_cut=lists_cut,
+                )  # fmt: skip
             check_count(n, total)
             partial.replace(ns.out)
         finally:

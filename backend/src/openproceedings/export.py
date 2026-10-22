@@ -8,7 +8,8 @@ openproceedings id, so an export round-trips to the ids it came from.
 
 - RIS (for Covidence): `TY  - CPAPER`, TI, AB, one AU per author, PY, T2 (the conference and that year's acronym), UR (forum,
   then pdf, then proceedings), DO, ID, KW (the track, then `status:<status>`), N1 (for a paper not accepted,
-  first `Submitted to <venue>; status: <status in words> (not in its proceedings).`), N1 (`See also: <twin
+  first `Submitted to <venue>; status: <status in words> (not in its proceedings).`), N1 (`Author list cut: …`,
+  `authors_cut`, only for a record whose author list the ingest caps cut, decision-054), N1 (`See also: <twin
   ids> (…)`, only for a record with a twin, TASK-162), N1 (`Abstract source: <site> <url>`, when the abstract
   has one; or the withheld sentence), N1 (`Submission-time abstract: …`, `SUBMISSION_NOTE`, when the abstract is
   one, TASK-210), N1 (provenance), ER. RIS is line-based, so line breaks inside a value
@@ -18,10 +19,12 @@ openproceedings id, so an export round-trips to the ids it came from.
   `abstract_url`, then `abstract_withheld` (`true`/`false`), then `abstract_withheld_reason` (`takedown`,
   `source_unavailable` or empty), then `twins` (the record's twins' ids, empty for most; TASK-162), then
   `abstract_note` (`SUBMISSION_NOTE` or empty; TASK-210), then `abstract_kind` (`official`, `openalex` or `none`;
-  decision-049), UTF-8 with a BOM (Excel). Lists (authors, keywords,
-  twins) are joined with "; ".
+  decision-049), then `lists_cut` (each list the ingest caps cut, with how many values its source listed:
+  `authors 612`, `authors 612; keywords 250`, or empty; decision-054), UTF-8 with a BOM (Excel). Lists (authors,
+  keywords, twins) are joined with "; ".
 - BibTeX: `@inproceedings` for an accepted paper, `@unpublished` (no `booktitle`; `note` starts "Submitted to
-  <venue>, status: <status in words>.") for any other; keyed `<first author's last name><year><first title
+  <venue>, status: <status in words>.") for any other; `author` ends `and others` when the ingest caps cut the
+  author list (decision-054); keyed `<first author's last name><year><first title
   word>` (ASCII, lower-case), a repeat key suffixed a, b, … (decision-007); `keywords` holds the track and
   `status:<status>`, `abstract_source` the abstract's source (`<site> <url>`), `abstract_note` the
   submission-time sentence (only for such an abstract, TASK-210), `abstract_withheld` the withheld sentence (only
@@ -32,7 +35,15 @@ openproceedings id, so an export round-trips to the ids it came from.
   `abstract_withheld` (a boolean) and `abstract_withheld_reason` (`takedown`, `source_unavailable` or null), and
   `twins` (a list of ids) only on a record with a twin (TASK-162), and `abstract_note` (`SUBMISSION_NOTE`) only
   on a record whose abstract is a submission-time one (TASK-210); every record carries `abstract_kind` (the
-  display record's own, decision-049).
+  display record's own, decision-049); `lists_cut` (`{"authors": 612}`) only on a record with a list the ingest
+  caps cut (decision-054).
+
+A record's author or keyword list the ingest caps cut (decision-054, TASK-280: the first 500 authors, the first 200
+keywords) says so in every format, from the snapshot's `RecordFile.lists_cut` (`lists_cut`; `None`, as for twins,
+when the snapshot can't be verified): BibTeX's `and others` after the last kept author, an RIS `N1` (RIS has no et
+al. tag, and an `AU` line that isn't a person would be imported as an author), the CSV/JSONL `lists_cut`. RIS and
+BibTeX export no record keywords, so a cut keyword list shows in CSV and JSONL only. A record with no cut list
+exports byte for byte as before in RIS, BibTeX and JSONL; CSV gains one empty last cell.
 
 A submission-time abstract (TASK-210: an ICML 1997 or 1998 abstract read from the conference's submission pages,
 TASK-207) says so beside its source in every format, in the one sentence the API sends as `abstract_note`
@@ -79,7 +90,7 @@ from openproceedings.takedowns import NONE, Withheld
 from openproceedings.vocab import venue_name
 
 __all__ = [
-    "CSV_COLUMNS", "FORMATS", "ORIGIN_NAMES", "SENTENCES", "TAKEDOWN", "WITHHELD", "WITHHELD_REASONS", "Provenance", "Sources", "Twins", "bibtex_key", "check_count",
+    "CSV_COLUMNS", "FORMATS", "ORIGIN_NAMES", "SENTENCES", "TAKEDOWN", "WITHHELD", "WITHHELD_REASONS", "ListsCut", "Provenance", "Sources", "Twins", "authors_cut", "bibtex_key", "check_count",
     "credit", "entries", "header", "see_also", "utc_date", "write",
 ]  # fmt: skip
 
@@ -89,14 +100,17 @@ CSV_COLUMNS = (
     "venue_id_raw", "forum", "pdf", "proceedings", "doi", "keywords", "index_version", "canonical_hash",
     "exported_at", "record_id", "searched_at", "abstract_source", "abstract_origin", "abstract_url",
     "abstract_withheld", "abstract_withheld_reason", "twins", "abstract_note",
-    "abstract_kind",
+    "abstract_kind", "lists_cut",
 )  # fmt: skip
 # (TASK-138's four abstract columns, then TASK-136's reason, then TASK-162's twins, then TASK-210's note, then
-# decision-049's kind, are appended last: every earlier column keeps its position)
+# decision-049's kind, then decision-054's cut lists, are appended last: every earlier column keeps its position)
 # each record id → its abstract's attribution (`RecordFile.attributions`, computed at snapshot load)
 type Sources = Mapping[str, Attribution | None]
 # each record id with a twin → its twins' ids (`RecordFile.twins`: its `twin` claims, decision-029, TASK-162)
 type Twins = Mapping[str, tuple[str, ...]]
+# each record id with a list the ingest caps cut → that list (`authors`, `keywords`) → how many values its source
+# listed (`RecordFile.lists_cut`, decision-054, TASK-280)
+type ListsCut = Mapping[str, Mapping[str, int]]
 # the site that published an abstract, in words: the results list's names (`hit-item.tsx`'s ORIGIN_NAMES)
 ORIGIN_NAMES = {
     "openreview": "OpenReview",
@@ -115,6 +129,9 @@ _SOURCE = "abstract_source"  # the key `entries` adds to each record it hands a 
 _WITHHELD = "abstract_withheld"  # likewise: True when the record's abstract is withheld
 _REASON = "abstract_withheld_reason"  # likewise: why (`WITHHELD_REASONS`), None when it isn't
 _TWINS = "twins"  # likewise: the record's twins' ids, () when it has none (TASK-162)
+_CUT = (
+    "lists_cut"  # likewise: each list the ingest caps cut → how many values its source listed ({} for most)
+)
 
 # what a record says when its abstract is withheld (decision-021): RIS `N1`, BibTeX `abstract_withheld`
 WITHHELD = (
@@ -130,6 +147,12 @@ TAKEDOWN = (
 # (TASK-136), or an export whose snapshot can't attribute it (decision-021)
 SENTENCES = {"takedown": TAKEDOWN, "source_unavailable": WITHHELD}
 WITHHELD_REASONS = tuple(SENTENCES)
+
+
+def authors_cut(kept: int, total: int) -> str:
+    """What a record whose author list the ingest caps cut says of it (RIS `N1`; decision-054): RIS has no tag for
+    "and others", and an `AU` line that isn't a person would be imported as one, so a note says it instead."""
+    return f"Author list cut: the first {kept:,} of the {total:,} authors its source lists are given (decision-054)."
 
 
 def see_also(twins: tuple[str, ...]) -> str:
@@ -190,40 +213,47 @@ def entries(
     sources: Sources | None,
     withheld: Withheld = NONE,
     twins: Twins | None = None,
+    lists_cut: ListsCut | None = None,
 ) -> Iterator[str]:
     """One string per record of `records`, as `fmt` writes it (after `header(fmt)`), each naming its abstract's
     source from `sources` (the snapshot's `RecordFile.attributions`); `None` withholds every abstract, each
     record saying so (the attribution is unavailable, decision-021). Each record whose id is in `withheld` (a
     takedown, TASK-136) goes out without its abstract, saying so. Each record `twins` holds names its twins
-    (TASK-162); `None` (the snapshot can't be verified) names none."""
+    (TASK-162); `None` (the snapshot can't be verified) names none. Each record `lists_cut` holds says which of its
+    lists the ingest caps cut (decision-054: BibTeX's `and others`, an RIS `N1`, the CSV/JSONL `lists_cut`); `None`
+    says none."""
     if fmt not in FORMATS:
         raise ValueError(f"unknown export format {fmt!r}")
     writer = {"ris": _ris, "csv": _csv, "bibtex": _bibtex, "jsonl": _jsonl}[fmt]
-    return writer(_attributed(records, sources, withheld, twins or {}), provenance)
+    return writer(_attributed(records, sources, withheld, twins or {}, lists_cut or {}), provenance)
 
 
 def _attributed(
-    records: Iterable[dict[str, Any]], sources: Sources | None, withheld: Withheld, twins: Twins
+    records: Iterable[dict[str, Any]],
+    sources: Sources | None,
+    withheld: Withheld,
+    twins: Twins,
+    lists_cut: ListsCut,
 ) -> Iterator[dict[str, Any]]:
     """Each record with its abstract's attribution under `abstract_source`. A record `sources` doesn't hold is
     an invariant broken (the index and its snapshot disagree): EngineInternalError, as on `GET /search`.
     Without `sources`, each record's abstract is dropped and it is marked withheld; so is a record `withheld`
     lists, whatever `sources` says (its reason `takedown`). A withheld record's `abstract_kind` is `none`, as a
-    hit's and a paper's."""
+    hit's and a paper's. Each record carries its cut lists (`lists_cut`, {} for most) under `_CUT`."""
     for r in records:
         if sources is not None and r["id"] not in sources:  # checked for every record, withheld or not
             raise EngineInternalError(
                 DiagnosticCode.API_INTERNAL, "a paper the index holds is missing from its snapshot"
             )
-        linked = twins.get(r["id"], ())
+        linked, cut = twins.get(r["id"], ()), lists_cut.get(r["id"], {})
         if r["id"] in withheld:
             yield {**r, "abstract": None, "abstract_kind": "none", _SOURCE: None, _WITHHELD: True,
-                   _REASON: "takedown", _TWINS: linked}  # fmt: skip
+                   _REASON: "takedown", _TWINS: linked, _CUT: cut}  # fmt: skip
         elif sources is None:
             yield {**r, "abstract": None, "abstract_kind": "none", _SOURCE: None, _WITHHELD: True,
-                   _REASON: "source_unavailable", _TWINS: linked}  # fmt: skip
+                   _REASON: "source_unavailable", _TWINS: linked, _CUT: cut}  # fmt: skip
         else:
-            yield {**r, _SOURCE: sources[r["id"]], _WITHHELD: False, _REASON: None, _TWINS: linked}
+            yield {**r, _SOURCE: sources[r["id"]], _WITHHELD: False, _REASON: None, _TWINS: linked, _CUT: cut}
 
 
 def write(
@@ -235,12 +265,15 @@ def write(
     sources: Sources | None,
     withheld: Withheld = NONE,
     twins: Twins | None = None,
+    lists_cut: ListsCut | None = None,
 ) -> int:
     """Stream `records` to `out` as `fmt`; the number written. `op export` writes a file or stdout with
     it; `GET /api/v1/export` streams the same `header` and `entries`, so both give the same bytes."""
     out.write(header(fmt))
     n = 0
-    for chunk in entries(fmt, records, provenance, sources=sources, withheld=withheld, twins=twins):
+    for chunk in entries(
+        fmt, records, provenance, sources=sources, withheld=withheld, twins=twins, lists_cut=lists_cut
+    ):
         out.write(chunk)
         n += 1
     return n
@@ -317,6 +350,10 @@ def _ris(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         lines += [("ID", r["id"]), ("KW", r["track"]), ("KW", f"status:{status}")]
         if status != "accepted":
             lines.append(("N1", _not_accepted(venue_name(r["venue"], r["year"]), status)))
+        if (
+            total := (r.get(_CUT) or {}).get("authors")
+        ) is not None:  # after the status sentence (decision-054)
+            lines.append(("N1", authors_cut(len(r.get("authors") or ()), total)))
         if r.get(_TWINS):  # after the status sentence, before the abstract's line (TASK-162)
             lines.append(("N1", see_also(r[_TWINS])))
         if (source := _credit_of(r)) is not None:  # after the status sentence, before the provenance line
@@ -358,6 +395,7 @@ def _csv(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             "twins": "; ".join(r.get(_TWINS) or ()),
             "abstract_note": source.note if source else None,
             "abstract_kind": r.get("abstract_kind"),
+            "lists_cut": "; ".join(f"{k} {n}" for k, n in sorted((r.get(_CUT) or {}).items())),
         }
         yield _csv_row(csv_cell(row[c]) for c in CSV_COLUMNS)
 
@@ -495,6 +533,10 @@ def _bibtex(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         # each name brace-free before it's protected, so one stray brace can't unbrace the others
         # (and no trailing backslash, which would escape the brace `_name` may close it with)
         names = [_name(n) for n in (_debraced(a).rstrip("\\ ") for a in r.get("authors") or []) if n]
+        if names and "authors" in (
+            r.get(_CUT) or {}
+        ):  # the list the ingest caps cut: BibTeX's et al. (decision-054)
+            names.append("others")
         if names:
             fields.append(("author", _braced(" and ".join(names))))
         # only an accepted paper is cited as in its conference; any other status (rejected, withdrawn,
@@ -552,8 +594,11 @@ def _jsonl(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
     for r in records:
         source = _credit_of(r)
         row = {
-            **{k: v for k, v in r.items() if k != _TWINS},
+            **{k: v for k, v in r.items() if k not in (_TWINS, _CUT)},
             **({_TWINS: list(r[_TWINS])} if r.get(_TWINS) else {}),  # only on a record with a twin (TASK-162)
+            **(
+                {_CUT: dict(r[_CUT])} if r.get(_CUT) else {}
+            ),  # only on a record with a cut list (decision-054)
             # only on a submission-time abstract (TASK-210)
             **({"abstract_note": source.note} if source is not None and source.note is not None else {}),
             _SOURCE: None

@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from openproceedings.ingest.record import PaperRecord
+from openproceedings.ingest.record import MAX_NATIVE_KEY, PaperRecord
 from openproceedings.ingest.ris import (
     QUERY_DATE_OFFSETS,
     SKIP_REASONS,
@@ -337,6 +337,12 @@ def test_pmlr_url_forms(tmp_path: Path, url: str) -> None:
     assert PMLR in by_id
 
 
+def test_a_pmlr_key_at_the_native_id_bound_imports(tmp_path: Path) -> None:
+    key = "k" * MAX_NATIVE_KEY  # decision-055: the longest key an id may hold
+    by_id, _ = run(tmp_path, pmlr_urls(f"https://proceedings.mlr.press/v202/{key}.html"))
+    assert f"op:icml:2023:pmlr-v202-{key}" in by_id
+
+
 def test_icml_volumes_with_position_papers_give_unknown_track(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -525,6 +531,18 @@ def listing_year(year: str, host: str | None = None) -> Callable[[Entries], None
         ("an ICLR listing year before 2013", listing_year("2012", "proceedings.iclr.cc"), "unresolved"),
         ("a listing year past 2099", listing_year("9999"), "unresolved"),
         ("an unparseable PMLR URL", pmlr_urls("https://proceedings.mlr.press/v202/"), "unresolved"),
+        # decision-055: a key past 200 characters is no record's id, so the entry is skipped, never a failed file
+        (
+            "a PMLR key past the native-id bound",
+            pmlr_urls(f"https://proceedings.mlr.press/v202/{'k' * 201}.html"),
+            "unresolved",
+        ),
+        # a volume past 12 digits names no volume, so the entry has no id (never `int` past Python's digit limit)
+        (
+            "a PMLR volume past the bound",
+            pmlr_urls("https://proceedings.mlr.press/v" + "9" * 5_000 + "/a23a.html"),
+            "no_id",
+        ),
         ("a venueid of another conference", set_venueid("AAAI.org/2025/Workshop/X"), "out_of_scope"),
         ("a malformed in-scope venueid", set_venueid("ICML.cc/2026//X"), "unresolved"),
         ("a venueid without a forum id", lambda e: e[1]["claims"].pop(0), "no_id"),

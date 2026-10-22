@@ -1,4 +1,5 @@
 import pytest
+from openproceedings.ingest.record import MAX_NATIVE_DIGITS
 from openproceedings.ingest.sources import ojs
 from openproceedings.ingest.sources.common import CrawlError
 
@@ -195,3 +196,47 @@ def test_get_record_answering_a_deleted_header_stops() -> None:
     with pytest.raises(CrawlError, match=r"article 28000 answered with a deleted record") as e:
         ojs.parse_record(text, 28000)
     assert e.value.reason == "deleted_on_get_record"
+
+
+def _with_article(xml: str, digits: str) -> str:
+    """`xml` (a record or header for article 1) naming article `digits` instead: a string, since an int past 4,300
+    digits can't even be built."""
+    return xml.replace("oai:ojs.aaai.org:article/1<", f"oai:ojs.aaai.org:article/{digits}<", 1)
+
+
+@pytest.mark.parametrize("make", [oai.record, oai.deleted])
+def test_an_article_id_at_the_bound_is_read(make) -> None:
+    (r,), _ = ojs.parse_page(oai.page(_with_article(make(1), "9" * MAX_NATIVE_DIGITS)))
+    assert r.article == int("9" * MAX_NATIVE_DIGITS)
+
+
+@pytest.mark.parametrize("make", [oai.record, oai.deleted])
+@pytest.mark.parametrize(
+    "digits", [MAX_NATIVE_DIGITS + 1, 5_000]
+)  # one past the bound; past int's digit limit
+def test_an_article_id_past_the_bound_is_a_crawl_error_never_a_bare_value_error(make, digits: int) -> None:
+    # decision-055: no record could hold it (`ojs-` ids are at most 12 digits), and `int` would raise past 4,300
+    with pytest.raises(CrawlError, match=rf"article id has {digits:,} digits") as e:
+        ojs.parse_page(oai.page(_with_article(make(1), "9" * digits)))
+    assert e.value.reason == "oai_unreadable"
+
+
+def test_an_inventory_header_past_the_bound_is_a_crawl_error() -> None:
+    page = oai.identifiers_page((1, False, "AAAI:AISI")).replace(
+        "oai:ojs.aaai.org:article/1<", "oai:ojs.aaai.org:article/" + "9" * 5_000 + "<"
+    )
+    with pytest.raises(CrawlError, match="article id has 5,000 digits") as e:
+        ojs.parse_identifiers(page)
+    assert e.value.reason == "oai_unreadable"
+
+
+@pytest.mark.parametrize(
+    ("digits", "ok"), [(MAX_NATIVE_DIGITS, True), (MAX_NATIVE_DIGITS + 1, False), (5_000, False)]
+)
+def test_a_volume_is_held_to_the_same_bound(digits: int, ok: bool) -> None:
+    text = oai.page(oai.record(1, volume=f"Vol. {'3' * digits} No. 01: AAAI-20 Technical Tracks 1"))
+    if ok:
+        assert ojs.parse_page(text)[0][0].volume == int("3" * digits)
+    else:
+        with pytest.raises(CrawlError, match=rf"volume has {digits:,} digits"):
+            ojs.parse_page(text)

@@ -37,7 +37,7 @@ attribution's `note`, `ingest/dedup.py::SUBMISSION_NOTE` for an ICML 1997/1998 s
 `none`; on `/papers/{id}` a derived field of `paper`; `facets.abstract_kind` is **nullable** (null on a schema-3 index,
 which holds no such field, so a client draws the Abstract facet only when it is not null); `/meta` `values.abstract_kind`
 lists the values; a query naming `abstract_kind:` on a schema-3 index is 422 `FIELD_NOT_INDEXED` on every route that runs
-it, while `/parse` accepts it; CSV's last column `abstract_kind` and a JSONL key, `none` for a withheld record as in a hit;
+it, while `/parse` accepts it; a CSV column `abstract_kind` (last until decision-054 appended `lists_cut`) and a JSONL key, `none` for a withheld record as in a hit;
 `abstract_source.origin` gains `openalex`, `ojs`, `crossref` and `facct_site`, an open set; TASK-232 adds
 `aaai_library`, and the claim source enum gains it too). `/coverage` gains, additively,
 `abstract_official` and `abstract_openalex` (totals, venue-years and tracks, 0 included) and each track's `gate_note` and
@@ -133,7 +133,11 @@ record without one exports byte for byte as before except CSV's one more empty c
 (the hit's `abstract_note`, TASK-210) says so in every export in that one sentence (RIS one more `N1` right after
 `Abstract source:`, BibTeX `abstract_note` after `abstract_source`, a last CSV column `abstract_note`, a JSONL
 `abstract_note` key only on such a record); every other record is byte for byte what it was, but CSV's one more
-empty cell.
+empty cell. A record whose author or keyword list the ingest caps cut (decision-054, TASK-280: the first 500 authors,
+the first 200 keywords; `RecordFile.lists_cut`) says so in every export (RIS one `N1  - Author list cut: …` right
+after the status sentence, BibTeX `and others` after the last kept author, a last CSV column `lists_cut`, a JSONL
+`lists_cut` object only on such a record); every other record is byte for byte what it was, but CSV's one more empty
+cell. The API responses are unchanged: the paper page's provenance shows the claim's note.
 
 ## A file as a request body (`POST /compare`, TASK-177)
 The one route that takes a file takes it as the raw body, never a form: no multipart parser runs (Starlette's

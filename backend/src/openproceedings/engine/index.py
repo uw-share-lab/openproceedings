@@ -230,7 +230,8 @@ def _document(
 
 
 def _check_tokens(r: PaperRecord, fields: dict[str, list[str]], exact: tantivy.TextAnalyzer) -> None:
-    if len(r.id.encode("utf-8")) > MAX_TOKEN_BYTES:  # the `raw` id is one term (a pmlr key is unbounded)
+    # the `raw` id is one term; ingest bounds every native id (decision-055), and this guard stays for any id it misses
+    if len(r.id.encode("utf-8")) > MAX_TOKEN_BYTES:
         raise IndexBuildError(
             f"{r.id[:80]}…: the id is over {MAX_TOKEN_BYTES} bytes, which Tantivy would drop"
         )

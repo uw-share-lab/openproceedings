@@ -69,6 +69,8 @@ from openproceedings.ingest.classify import (
 )
 from openproceedings.ingest.record import (
     FORUM_ID,
+    MAX_NATIVE_DIGITS,
+    MAX_NATIVE_KEY,
     Claim,
     ClaimField,
     ClaimValue,
@@ -250,13 +252,21 @@ def _listing(
     if len({p for _, p in icml}) > 1:
         return "ambiguous"
     url, (vol, key) = icml[0]
+    if (
+        len(key) > MAX_NATIVE_KEY
+    ):  # no record could hold the id (decision-055): skipped, never an aborted file
+        return "unresolved"
     year, track = ICML_PMLR_VOLUMES[vol]
     return ("ICML", year, f"pmlr-v{vol}-{key}", Classification(track, "accepted", "ICML", year),
             ("pmlr_url", url), sorted({u for u, _ in icml}))  # fmt: skip
 
 
 def _int(value: object) -> int | None:
-    return int(value) if isinstance(value, str) and value.isdigit() else None
+    """A volume claim's value as a number: ASCII digits, at most `MAX_NATIVE_DIGITS` past leading zeros (decision-055),
+    so `int` never meets Python's digit limit or a non-ASCII digit (`²`); else None."""
+    if not isinstance(value, str) or not value.isascii() or not value.isdigit():
+        return None
+    return int(value) if len(value.lstrip("0")) <= MAX_NATIVE_DIGITS else None
 
 
 def _url_fields(urls: list[str], source: str) -> tuple[tuple[ClaimField, str, str], ...]:

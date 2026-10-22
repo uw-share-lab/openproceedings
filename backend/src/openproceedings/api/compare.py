@@ -936,11 +936,17 @@ def _added_ris(
     """The papers the query adds, as `GET /export` writes RIS: the same writer over the same display records,
     attributions and withheld abstracts, in id order, counted against the list. Nothing of the file is in it."""
     engine = served.engine
-    sources, withheld, twins = sources_of(request, served, engine)
+    sources, withheld, twins, lists_cut = sources_of(request, served, engine)
     provenance = Provenance(engine.index_version, canonical_hash, utc_date())
     written: list[str] = []
     for entry in entries(
-        "ris", stored_documents(engine, ids), provenance, sources=sources, withheld=withheld, twins=twins
+        "ris",
+        stored_documents(engine, ids),
+        provenance,
+        sources=sources,
+        withheld=withheld,
+        twins=twins,
+        lists_cut=lists_cut,
     ):
         tick()
         budget(_sent(entry))

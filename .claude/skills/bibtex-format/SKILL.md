@@ -60,7 +60,11 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
   `abstract_note`). A field of its own for the reason `abstract_source` is: `note` keeps exactly the provenance
   line (decision-021). Every other entry is byte for byte what it was.
 - `author`: `Last, First` joined by ` and `. Brace a name that contains the word `and` or a comma, or
-  that is an organisation (`{OpenAI Team}`).
+  that is an organisation (`{OpenAI Team}`); a name that is `others` is braced too, so it isn't read as et al.
+- **A cut author list ends `and others`** (decision-054, TASK-280): the ingest caps keep a record's first 500 authors,
+  and when they cut its list (`RecordFile.lists_cut`, passed to the writers as `lists_cut`) a bare `others` follows
+  the last kept name, BibTeX's own et al., which styles print as "et al.". Every other entry is byte for byte what it
+  was. The contract test reads it back with refaudit (`tests/contract/test_lists_cut.py`).
 
 ## Key scheme
 `<firstauthorlast><year><firsttitleword>`, for example `doe2024scaling`.

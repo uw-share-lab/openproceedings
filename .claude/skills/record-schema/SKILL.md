@@ -16,15 +16,15 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | `id` | `op:<venue>:<year>:<native>`, with venue lower-cased: `op:iclr:2024:iilhN2MycO`. Never changes once a snapshot has shipped it. |
 | `title` | Raw, whitespace-collapsed. **No** search normalization here (spec 03 owns it). Capped by the snapshot build at 1,000 characters and 8 combining marks per run (the ingest caps, below); the model doesn't check it. |
 | `abstract` | Raw text or `null` (never an empty or whitespace-only string). For an AAAI 1980–2008 dblp record, AAAI's own paper page (an Internet Archive capture of the old aaai.org page, pinned by digest) supplies it after dedup (an `aaai_library` claim, official; decision-051). For an AAAI, AIES or FAccT record no official source gives one, the OpenAlex fill supplies it after that (an `openalex` claim; `abstract_kind` says so; spec 01 §Sources). Reject a value that starts or ends with `…`: that's a Scholar snippet. An ellipsis inside a real abstract (`x₁, …, x_n`) is allowed. HTML stripped, LaTeX kept verbatim. Capped by the snapshot build at 20,000 characters and 8 combining marks per run (the ingest caps, below); the model doesn't check it. |
-| `authors` | Display order, as the source gives them. Each name capped by the snapshot build at 1,000 characters (the ingest caps, below). |
+| `authors` | Display order, as the source gives them. Each name capped by the snapshot build at 1,000 characters, and the first 500 names kept (the ingest caps, below; decision-054). |
 | `venue` | `NeurIPS` \| `ICLR` \| `ICML` \| `AAAI` \| `AIES` \| `FAccT` \| `IASEAI` (`vocab.VENUES`; decision-049; extensible later). Every venue has a source: AAAI 1980–2008 (`dblp`) and 2010+ (`ojs`), AIES 2018–2023 (`crossref`) and 2024+ (`ojs`), FAccT 2018 (`pmlr`, v81) and 2019+ (`crossref`), IASEAI 2026 (`ojs`). |
 | `year` | Conference year. Never the arXiv or PDF year. Required: a record with no year is not a valid `PaperRecord`, nor is one for a year its venue was not held under its name (NeurIPS before 1987, ICLR before 2013, ICML before 1988, AAAI before 1980, AIES and FAccT before 2018, IASEAI before 2025; `vocab.CONFERENCES`, spec 04 §Exports). |
 | `track` | `.claude/skills/track-taxonomy/SKILL.md`. No default value in the model. |
 | `status` | `accepted` \| `rejected` \| `withdrawn` \| `desk_rejected` \| `unknown`. No default. |
 | `presentation` | `oral` \| `spotlight` \| `poster` \| `null`, only when a source states it: a v1 decision note or venue string (`openreview_v1._PRESENTATION`); a v2 accepted, non-workshop note's `content.venue`, matched exactly per venue-year in `classify.V2_PRESENTATION` (an unlisted string is `null` and counted as `presentation_unmapped`; spec 01 §Presentation). Its claim's evidence is `content.venue=<string>`. `dedup.resolve` keeps it only when the resolved `status` is `accepted` (a reconcile-demoted `unknown` shows `null`; the claim stays). Never a track, never hashed. |
 | `venue_id_raw` | OpenReview `content.venueid` verbatim, else `null`. One over 500 characters never fills it after the snapshot build: its claim keeps it cut, as text (below). |
-| `urls` | `{forum, pdf, proceedings, doi}`, each optional. A URL over 2,048 characters or a DOI over 1,000 never fills its slot after the snapshot build (its claim keeps it cut, as text), unless the URL already is the page of the record's own id: then it is kept whole and flagged, bounded only by the id (TASK-281; below). |
-| `keywords` | Stored and shown, **never indexed as text** (guarantee 2). Each capped by the snapshot build at 2,000 characters (below). |
+| `urls` | `{forum, pdf, proceedings, doi}`, each optional. A URL over 2,048 characters or a DOI over 1,000 never fills its slot after the snapshot build (its claim keeps it cut, as text), unless the record's own id was read from it: then it becomes an address of that id's page, rebuilt from the id, which the native-id bounds keep within the cap (decision-055; below). |
+| `keywords` | Stored and shown, **never indexed as text** (guarantee 2). Each capped by the snapshot build at 2,000 characters, and the first 200 kept (below; decision-054). |
 | `provenance` | `list[Claim]`, see below. |
 | `content_hash` | See below. |
 | `venue_name` | **Derived, never stored** (TASK-112): `vocab.venue_name(venue, year)`, a computed field. Sent with the record (`GET /papers/{id}`); `record.DERIVED` names it, and `snapshot.record_line` and `model_copy` dump with `exclude={*DERIVED}` (a set: mypy's `IncEx` refuses the frozenset itself). Stored data naming it is refused (`extra="forbid"`), so a dump you validate again must exclude it too. |
@@ -56,6 +56,20 @@ one only within its venue-year (TASK-067, measured: a NeurIPS hash is md5 of a p
 in the 2026-09-23 one; the 2014–2016 archive's sha256 ids share the form, so they are treated the same). Only
 the first two link two ids by their native part, and so do `ojs-` and `doi-` ids, and a `dblp-` id scoped by its venue (`takedowns.global_native`: the rekey rule of
 `snapshot.withhold` and `snapshot.diff`, and the takedown list's `same_paper`).
+
+**Bounds** (decision-055, TASK-281; the owner, 2026-10-22). Every form is bounded in `record.PROCEEDINGS_NATIVE`: a
+PMLR or dblp key at most 200 characters (`MAX_NATIVE_KEY`), an OJS article id, a PMLR volume and each side of
+`doi-<toc>.<n>` at most 12 digits (`MAX_NATIVE_DIGITS`; `acm_table.DOI_DIGITS` is the same bound, since `record`
+imports that module); a forum id 4–64 characters, a `nips-`/`iclr-` hash 32 hex digits. The longest id in
+2026-10-16-03eab0ef56c4 is 53 characters (its parts: a dblp key of 30, a PMLR key of 25, 7 digits on each side of a
+DOI, 5 of an OJS id, 3 of a PMLR volume). A record past a bound is invalid, so its crawler refuses the entry as it
+refuses any invalid one: PMLR and dblp ICML skip and count it (`skipped.invalid`), the RIS importer skips it
+(`unresolved`; a PMLR volume past 12 digits names no volume, `no_id`), dblp AAAI and Crossref stop
+(`invalid_record`; a DOI past the bound is `odd_doi`), and `sources/ojs.py` stops on an OAI-PMH article id or volume
+past 12 digits (`oai_unreadable`, a `CrawlError` raised before `int`, never a bare `ValueError` past Python's
+4,300-digit limit). `urls.pmlr` and `urls.ojs_article` read a volume or article number only within 12 digits past
+leading zeros, so no URL names a number no id can hold. The model checks the form before reading a PMLR volume as an
+int.
 
 When records merge (`.claude/skills/dedup-rules/SKILL.md`), the surviving id uses the OpenReview forum id
 if either side has one. A proceedings record's `urls.forum` claim (PMLR v235's link) is identity evidence
@@ -102,7 +116,8 @@ in Scholar. The abstract is never Scholar's (`null` instead).
 
 ## Versions
 `RECORD_SCHEMA_VERSION` (`record.py`) names this shape: the fields, native-id forms and content_hash
-rule. It is `9` since TASK-232 added the `aaai_library` source (an `abstract` claim only, on AAAI 1980–2008 dblp records only: the model refuses it on any other field, venue or native id; decision-051); it was `8` from milestone C of decision-049, which added the `openalex` source (an `abstract` claim only, on AAAI, AIES and FAccT only: the model refuses it on any other field or venue, `record.OPENALEX_VENUES`) and the derived `abstract_kind`; it was `7` from milestone B of decision-049 added the `crossref` and `facct_site` sources, the `doi-<toc>.<n>` native id (FAccT and AIES) and `dblp-` ids for AAAI 1980–2008; it was `6` from decision-049's milestone A, which added the AAAI, AIES, FAccT and IASEAI venues, the tracks `student_abstract`, `consortium`, `demo`, `iaai` and `eaai`, the `ojs` source and the `ojs-<id>` native id (`iaai` and `eaai` are AAAI-only: `record.VENUE_ONLY_TRACKS`); it was `5` from TASK-205/206, which added the `dblp` and `icml_site` sources and the `dblp-<key>` native id (decision-047);
+rule. It is `10` since TASK-281 bounded the native-id forms (a key of at most 200 characters, a number of at most 12
+digits; decision-055: a record past a bound is refused, so the forms changed); it was `9` from TASK-232, which added the `aaai_library` source (an `abstract` claim only, on AAAI 1980–2008 dblp records only: the model refuses it on any other field, venue or native id; decision-051); it was `8` from milestone C of decision-049, which added the `openalex` source (an `abstract` claim only, on AAAI, AIES and FAccT only: the model refuses it on any other field or venue, `record.OPENALEX_VENUES`) and the derived `abstract_kind`; it was `7` from milestone B of decision-049 added the `crossref` and `facct_site` sources, the `doi-<toc>.<n>` native id (FAccT and AIES) and `dblp-` ids for AAAI 1980–2008; it was `6` from decision-049's milestone A, which added the AAAI, AIES, FAccT and IASEAI venues, the tracks `student_abstract`, `consortium`, `demo`, `iaai` and `eaai`, the `ojs` source and the `ojs-<id>` native id (`iaai` and `eaai` are AAAI-only: `record.VENUE_ONLY_TRACKS`); it was `5` from TASK-205/206, which added the `dblp` and `icml_site` sources and the `dblp-<key>` native id (decision-047);
 it was `4` from TASK-159/157, which added two provenance-only claim fields, `twin` (a v1 copy's linked twins, a tuple of
 record ids, decision-029) and `invitation` (scholarmend 0.1.5's v1 submission invitation); it was `3` from TASK-118,
 which added the round-qualified `nips-<hash>-round1`/`-round2` form, and `2` from TASK-096, which added the
@@ -214,9 +229,10 @@ model, so an over-cap value is trimmed and flagged, never refused, and every rec
 - **A URL the record's own id was read from becomes an address of that id's page** when neither keeps it naming its
   id (`caps._own_page`: rebuilt from the parsed id per form, naming the id though not always the address served, NeurIPS/ICLR, PMLR, dblp, OJS, DOI; kept only if it names the
   same id), flagged `value cut from <n> to <m> characters, rebuilt as the page of the record id it names`. It fills no
-  slot but still names the record, so dedup's self-naming check passes. A URL that already is that page is kept, a
-  valid link, flagged once. Only the id's own length (TASK-281) takes such a value past the cap; leading zeros and text
-  past the id are gone. An `iclr_archive` target (its id hashes the whole URL) is cut and unread like any other;
+  slot but still names the record, so dedup's self-naming check passes. The native-id bounds (decision-055: a key of
+  at most 200 characters, a number of at most 12 digits) keep that address well within the cap (the longest, a PMLR
+  page, is about 250 characters), so a URL past the cap is never kept whole; leading zeros and text past the id are
+  gone. An `iclr_archive` target (its id hashes the whole URL) is cut and unread like any other;
   `dedup._archive_target_cut` lets that record stand for itself, and `_cluster` keeps its own id among the cluster's
   proceedings ids, but only for the crawler's own `iclr_archive` claim on an `iclr-` id. The page is decided from the
   value and the id alone, and the archive exception reads the `not read as an id` note on the crawler's own claim
@@ -228,6 +244,23 @@ model, so an over-cap value is trimmed and flagged, never refused, and every rec
   the record in the manifest's `trimmed`: `is_trimmed` reads it on any claim); a
   forged `not read as an id` would hide a URL's ids from dedup's identity reads, but no claim can carry one today (a
   URL holds no whitespace, so RIS URL evidence can't end in a note, and every crawler ends its URL claims' evidence with fixed text the note can't match).
-- **Not capped:** `id` (an id is identity: cutting it would rename the paper; the `pmlr-`, `dblp-`, `ojs-` and `doi-`
-  forms have no length bound, TASK-281; longest 53), a `twin` claim's ids (each must be a record of the snapshot),
-  and the enums and `year`. Nor the number of authors or keywords per record (95 and 54 at most; TASK-280).
+- **Not capped:** `id` (an id is identity: cutting it would rename the paper; each native form is bounded instead,
+  and a record past a bound is refused, decision-055, §Native ids; longest 53), a `twin` claim's ids (each must be a
+  record of the snapshot), and the enums and `year`.
+
+**How many authors and keywords** (`caps.LIST_CAPS`, decision-054, TASK-280; the owner, 2026-10-22: "cap + trim").
+- A record keeps its first 500 authors (`MAX_AUTHORS`) and its first 200 keywords (`MAX_KEYWORDS`), on the record and
+  every claim alike, in `cap_record`'s pass. The most in 2026-10-16-03eab0ef56c4: 95 and 54, on a record or a claim
+  (`docs/results/2026-10-22-list-counts-and-native-ids.md`), so no record changes.
+- The list is cut before its items are, so a long name past the kept ones is dropped with them, never counted as cut.
+- **Flagged** in the claim's evidence: `trimmed at ingest (decision-054): kept the first <n> of <m> values`
+  (`caps.COUNT`), before any decision-053 note (the `CUT` note stays last, so `cut_identifier` and the evidence cut
+  read it as before). `is_trimmed` reads it, so the manifest's `trimmed` names the record.
+- **Exports say so** (spec 04 §Exports): `caps.listed_total` reads how many values the source listed off a claim
+  that holds the record's own list, and only the note's own form on a list exactly at the cap, so evidence that merely
+  reads like the note says nothing of a shorter list. `snapshot.RecordFile.lists_cut` keeps it per record, and the
+  exporters write BibTeX's `and others`, one RIS `N1` and the CSV/JSONL `lists_cut`.
+- **Reserved.** No miner or importer may end a list claim's evidence with the `COUNT` note. A forged one could only add
+  `and others` to a record whose list is exactly at the cap, and list it in `trimmed`. None can today: every source's
+  authors and keywords evidence ends in fixed text, or (an OpenReview v1 author list it split) in the raw value as
+  JSON, closed by a quote or bracket the note can't end with.

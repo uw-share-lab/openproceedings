@@ -11,12 +11,14 @@ from typing import Any
 import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
+from openproceedings.ingest import acm_table, volumes
 from openproceedings.ingest import record as record_module
-from openproceedings.ingest import volumes
 from openproceedings.ingest.record import (
     DBLP_YEARS,
     DERIVED,
     DOI_YEARS,
+    MAX_NATIVE_DIGITS,
+    MAX_NATIVE_KEY,
     RECORD_SCHEMA_VERSION,
     Claim,
     PaperRecord,
@@ -640,8 +642,52 @@ def _rec(rid: str, venue: str, year: int, track: str = "main") -> PaperRecord:
                              year=year, track=track, status="accepted")  # fmt: skip
 
 
-def test_schema_is_9() -> None:
-    assert RECORD_SCHEMA_VERSION == "9"
+def test_schema_is_10() -> None:
+    assert RECORD_SCHEMA_VERSION == "10"  # 10: the native-id bounds (decision-055, TASK-281)
+
+
+# The native-id bounds (decision-055, TASK-281): a key of at most 200 characters, a number of at most 12 digits; each
+# form at the bound builds and one past it is refused, so its crawler skips (or refuses) the entry as any invalid one
+_AT, _PAST = "k" * MAX_NATIVE_KEY, "k" * (MAX_NATIVE_KEY + 1)
+_DIGITS_AT, _DIGITS_PAST = "7" * MAX_NATIVE_DIGITS, "7" * (MAX_NATIVE_DIGITS + 1)
+
+
+@pytest.mark.parametrize(
+    ("venue", "year", "at", "past"),
+    [
+        ("ICML", 2024, f"pmlr-v235-{_AT}", f"pmlr-v235-{_PAST}"),  # the key
+        ("ICML", 2024, f"pmlr-v{_DIGITS_AT}-a24a", f"pmlr-v{_DIGITS_PAST}-a24a"),  # the volume (unlisted: any ICML)
+        ("ICML", 2009, f"dblp-{_AT}", f"dblp-{_PAST}"),
+        ("AAAI", 2005, f"dblp-{_AT}", f"dblp-{_PAST}"),
+        ("AAAI", 2020, f"ojs-{_DIGITS_AT}", f"ojs-{_DIGITS_PAST}"),
+        ("AIES", 2018, f"doi-3278721.{_DIGITS_AT}", f"doi-3278721.{_DIGITS_PAST}"),  # the paper number
+    ],
+)  # fmt: skip
+def test_a_native_id_at_its_bound_builds_and_one_past_it_is_refused(
+    venue: str, year: int, at: str, past: str
+) -> None:
+    assert _rec(f"op:{venue.lower()}:{year}:{at}", venue, year).native == at
+    with pytest.raises(ValidationError, match="native id"):
+        _rec(f"op:{venue.lower()}:{year}:{past}", venue, year)
+
+
+def test_a_doi_ids_toc_past_the_bound_is_refused() -> None:
+    # the toc must also be a row of acm_proceedings.toml, so past 12 digits it is refused by the form first
+    with pytest.raises(ValidationError, match="not a valid"):
+        _rec(f"op:aies:2018:doi-{_DIGITS_PAST}.1", "AIES", 2018)
+
+
+def test_a_native_id_past_the_int_digit_limit_is_refused_without_reading_it() -> None:
+    # the form is checked before the PMLR volume is read as an int, so 5,000 digits never reach `int`
+    with pytest.raises(ValidationError, match="native id"):
+        _rec("op:icml:2024:pmlr-v" + "9" * 5_000 + "-a24a", "ICML", 2024)
+
+
+def test_the_acm_tables_doi_bound_is_the_native_ids() -> None:
+    assert acm_table.DOI_DIGITS == MAX_NATIVE_DIGITS
+    assert acm_table.paper_doi(f"10.1145/3278721.{_DIGITS_AT}") == ("3278721", _DIGITS_AT)
+    assert acm_table.paper_doi(f"10.1145/3278721.{_DIGITS_PAST}") is None
+    assert acm_table.paper_doi(f"10.1145/{_DIGITS_PAST}.1") is None
 
 
 @pytest.mark.parametrize(

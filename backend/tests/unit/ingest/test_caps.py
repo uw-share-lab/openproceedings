@@ -19,14 +19,17 @@ from hypothesis import strategies as st
 from openproceedings.ingest import urls
 from openproceedings.ingest.caps import (
     CAPPED,
+    COUNT,
     CUT,
     FIELD_CAPS,
     IDENTIFIERS,
     MAX_ABSTRACT,
     MAX_AUTHOR,
+    MAX_AUTHORS,
     MAX_DOI,
     MAX_EVIDENCE,
     MAX_KEYWORD,
+    MAX_KEYWORDS,
     MAX_MARKS,
     MAX_TITLE,
     MAX_URL,
@@ -41,6 +44,7 @@ from openproceedings.ingest.caps import (
     cut_identifier,
     is_mark,
     is_trimmed,
+    listed_total,
     unread_identifier,
 )
 from openproceedings.ingest.dedup import (
@@ -54,7 +58,7 @@ from openproceedings.ingest.dedup import (
     resolve,
     title_key,
 )
-from openproceedings.ingest.record import Claim, PaperRecord, Urls
+from openproceedings.ingest.record import MAX_NATIVE_DIGITS, MAX_NATIVE_KEY, Claim, PaperRecord, Urls
 from openproceedings.ingest.snapshot import build, ingest_ris, load_records
 from openproceedings.query.normalize import tokenize
 
@@ -709,12 +713,12 @@ _OWN = "rebuilt as the page of the record id it names"
 
 
 def test_a_listing_whose_own_page_url_a_cut_would_unname_becomes_its_page_and_builds() -> None:
-    # the id was read from the URL; a cut at the cap would name another key, so the value becomes the id's own page
-    # address instead: it still names the record (dedup's self-naming check passes), and only the id bounds it
-    key = "k" * (MAX_URL + 10)
+    # the id was read from the URL; a cut at the cap would fall in the volume's leading zeros and name no paper, so the
+    # value becomes the id's own page address instead: it still names the record (dedup's self-naming check passes)
+    key = "k" * MAX_NATIVE_KEY  # the longest key an id may hold (decision-055)
     page = (
-        f"https://proceedings.mlr.press/v235/{key}/" + "j" * (20 * MAX_URL) + f"/{key}"
-    )  # junk, the id twice
+        f"https://proceedings.mlr.press/v{'0' * MAX_URL}235/{key}/" + "j" * MAX_URL + f"/{key}"
+    )  # the id twice
     out = cap_record(_pmlr(page))
     [c] = out.claims("urls.proceedings")
     assert c.value == f"https://proceedings.mlr.press/v235/{key}.html" and out.urls.proceedings is None
@@ -727,14 +731,14 @@ def test_a_listing_whose_own_page_url_a_cut_would_unname_becomes_its_page_and_bu
     assert list(dedup([out]).records) == [out] and cap_record(out) is out
 
 
-def test_a_url_that_is_already_its_ids_page_past_the_cap_is_kept_and_flagged_once() -> None:
-    # only an id longer than the cap (TASK-281) makes its own page longer than the cap: kept whole, a valid link
-    page = "https://proceedings.mlr.press/v235/" + "k" * (MAX_URL + 10) + ".html"
+def test_a_url_past_the_cap_after_its_longest_id_is_cut_and_still_names_it() -> None:
+    # with the id bounded, a cut at the cap falls past it: a plain prefix, still naming the record (decision-055)
+    key = "k" * MAX_NATIVE_KEY
+    page = f"https://proceedings.mlr.press/v235/{key}/" + "j" * MAX_URL
     out = cap_record(_pmlr(page))
     [c] = out.claims("urls.proceedings")
-    assert c.value == page and out.urls.proceedings == page and not cut_identifier(c)
-    assert c.evidence == f"listing ({CUT} value of {len(page):,} characters kept, {_OWN})" and is_trimmed(out)
-    assert cap_record(out) is out and list(dedup([out]).records) == [out]
+    assert c.value == page[:MAX_URL] and _OWN not in (c.evidence or "") and not unread_identifier(c)
+    assert proceedings_ids(out.provenance) == {out.native} and list(dedup([out]).records) == [out]
 
 
 @pytest.mark.parametrize(
@@ -804,25 +808,23 @@ def test_a_proceedings_page_with_a_long_token_is_rebuilt_from_its_id_and_builds(
     assert list(dedup([out]).records) == [out] and cap_record(out) is out
 
 
-_LONG = "7" * (MAX_URL + 50)  # an id past the cap (TASK-281): its page is rebuilt from it, no longer
+_KEY = "K" + "7" * (MAX_NATIVE_KEY - 1)  # the longest key an id may hold (decision-055)
+_NUMBER = "7" * MAX_NATIVE_DIGITS  # likewise the longest article id or DOI number
+_ZEROS = "0" * MAX_URL  # leading zeros, which name no id and push a URL past its cap
 
 
 @pytest.mark.parametrize(
     ("rid", "venue", "year", "page", "rebuilt", "source"),
     [
-        (f"op:aaai:2005:dblp-K{_LONG}", "AAAI", 2005, f"https://dblp.org/rec/conf/aaai/K{_LONG}.html",
-         f"https://dblp.org/rec/conf/aaai/K{_LONG}", "dblp"),
-        (f"op:icml:2009:dblp-K{_LONG}", "ICML", 2009, f"http://DBLP.org/rec/conf/icml/K{_LONG}.html",
-         f"https://dblp.org/rec/conf/icml/K{_LONG}", "dblp"),
-        (f"op:aies:2024:ojs-{_LONG}", "AIES", 2024, f"https://ojs.aaai.org/index.php/AIES/article/view/{_LONG}/9",
-         f"https://ojs.aaai.org/index.php/AIES/article/view/{_LONG}", "ojs"),
-        (f"op:iaseai:2026:ojs-{_LONG}", "IASEAI", 2026,
-         f"https://ojs.aaai.org/index.php/IASEAI/article/view/{_LONG}/9",
-         f"https://ojs.aaai.org/index.php/IASEAI/article/view/{_LONG}", "ojs"),
-        (f"op:aies:2018:doi-3278721.{_LONG}", "AIES", 2018, f"https://dx.doi.org/10.1145/3278721.{_LONG}",
-         f"https://doi.org/10.1145/3278721.{_LONG}", "crossref"),
-        (f"op:aies:2018:doi-3278721.{_LONG}", "AIES", 2018, f"https://doi.org/10.1145%2F3278721.{_LONG}",
-         f"https://doi.org/10.1145/3278721.{_LONG}", "crossref"),
+        (f"op:aies:2024:ojs-{_NUMBER}", "AIES", 2024,
+         f"https://ojs.aaai.org/index.php/AIES/article/view/{_ZEROS}{_NUMBER}/9",
+         f"https://ojs.aaai.org/index.php/AIES/article/view/{_NUMBER}", "ojs"),
+        (f"op:iaseai:2026:ojs-{_NUMBER}", "IASEAI", 2026,
+         f"https://ojs.aaai.org/index.php/IASEAI/article/view/{_ZEROS}{_NUMBER}/9",
+         f"https://ojs.aaai.org/index.php/IASEAI/article/view/{_NUMBER}", "ojs"),
+        (f"op:icml:2024:pmlr-v235-{_KEY}", "ICML", 2024,
+         f"https://raw.githubusercontent.com/mlresearch/v{_ZEROS}235/x/assets/{_KEY}/a.pdf",
+         f"https://proceedings.mlr.press/v235/{_KEY}.html", "pmlr"),
         (f"op:neurips:2024:nips-{_HASH}", "NeurIPS", 2024,
          f"http://PROCEEDINGS.NEURIPS.CC/paper/2024/hash/{_HASH}-Paper-Conference{'x' * MAX_URL}.pdf",
          f"https://proceedings.neurips.cc/paper_files/paper/2024/hash/{_HASH}-Abstract.html", "neurips_proceedings"),
@@ -835,12 +837,35 @@ _LONG = "7" * (MAX_URL + 50)  # an id past the cap (TASK-281): its page is rebui
 def test_each_form_of_an_own_page_is_rebuilt_from_its_id_and_builds(
     rid: str, venue: str, year: int, page: str, rebuilt: str, source: str
 ) -> None:
-    out = cap_record(_listing(rid, venue, year, "urls.proceedings", page, source))
-    [c] = out.claims("urls.proceedings")
+    field = "urls.pdf" if "githubusercontent" in page else "urls.proceedings"
+    out = cap_record(_listing(rid, venue, year, field, page, source))
+    [c] = out.claims(field)
     assert (
         c.value == rebuilt and _OWN in (c.evidence or "") and proceedings_ids(out.provenance) == {out.native}
     )
     assert list(dedup([out]).records) == [out] and cap_record(out) is out
+
+
+@pytest.mark.parametrize(
+    ("own", "url", "rebuilt"),
+    [
+        (f"dblp-{_KEY}", f"https://dblp.org/rec/conf/aaai/{_KEY}.html", f"https://dblp.org/rec/conf/aaai/{_KEY}"),
+        (f"dblp-{_KEY}", f"http://DBLP.org/rec/conf/icml/{_KEY}.html", f"https://dblp.org/rec/conf/icml/{_KEY}"),
+        (f"doi-3278721.{_NUMBER}", f"https://dx.doi.org/10.1145/3278721.{_NUMBER}",
+         f"https://doi.org/10.1145/3278721.{_NUMBER}"),
+        (f"doi-3278721.{_NUMBER}", f"https://doi.org/10.1145%2F3278721.{_NUMBER}",
+         f"https://doi.org/10.1145/3278721.{_NUMBER}"),
+        (f"ojs-{_NUMBER}", f"https://ojs.aaai.org/index.php/AAAI/article/view/{_ZEROS}{_NUMBER}/9",
+         f"https://ojs.aaai.org/index.php/AAAI/article/view/{_NUMBER}"),
+        (f"pmlr-v235-{_KEY}", f"https://proceedings.mlr.press/v{_ZEROS}235/{_KEY}.pdf",
+         f"https://proceedings.mlr.press/v235/{_KEY}.html"),
+    ],
+)  # fmt: skip
+def test_every_forms_own_page_at_the_id_bound_is_within_the_url_cap(own: str, url: str, rebuilt: str) -> None:
+    # a dblp or doi.org page can't pass the cap with a bounded id, so `_own_page` is checked on its own: the page of
+    # the longest id of each form is rebuilt from the id and fits the cap, so no URL is ever kept past it
+    c = claim("urls.proceedings", "x", source="ris")
+    assert _own_page(c, url, own) == rebuilt and len(rebuilt) <= MAX_URL
 
 
 def test_a_page_with_a_tail_of_symbols_keeps_its_page_and_its_track_token() -> None:
@@ -908,8 +933,8 @@ def test_a_pmlr_github_asset_with_a_long_segment_is_rebuilt_as_its_page_and_buil
 
 def test_an_ojs_listing_whose_own_page_url_is_cut_past_its_id_is_a_listing_by_it() -> None:
     # ojs is no proceedings source, so only its own id makes it a listing (`is_listing`, the cluster's ids)
-    article = "7" * (MAX_URL + 10)
-    page = f"https://ojs.aaai.org/index.php/AAAI/article/view/{article}/99"  # a galley link past the id
+    article = _NUMBER
+    page = f"https://ojs.aaai.org/index.php/AAAI/article/view/{_ZEROS}{article}/99"  # zeros, a galley link
     ojs = {"source": "ojs", "evidence": "dc:identifier"}
     r = record(
         id=f"op:aaai:2020:ojs-{article}", venue="AAAI", year=2020, venue_id_raw=None, keywords=(),
@@ -923,7 +948,9 @@ def test_an_ojs_listing_whose_own_page_url_is_cut_past_its_id_is_a_listing_by_it
     )  # fmt: skip
     out = cap_record(r)
     [c] = out.claims("urls.proceedings")
-    assert c.value == page.removesuffix("/99") and _OWN in (c.evidence or "")
+    assert c.value == f"https://ojs.aaai.org/index.php/AAAI/article/view/{article}" and _OWN in (
+        c.evidence or ""
+    )
     assert proceedings_ids(out.provenance) == {out.native}
     assert is_listing(out)
     cluster = _cluster([out])
@@ -1063,7 +1090,16 @@ def test_a_cut_iclr_archive_target_never_reads_as_its_id() -> None:
 
 
 def test_an_ojs_url_past_the_int_digit_limit_is_cut_without_error() -> None:
+    # an article id past 12 digits is no id (decision-055), so the URL names none, whole or cut: a plain cut
     whole = "https://ojs.aaai.org/index.php/AAAI/article/view/" + "7" * 5_000
+    r = record(provenance=(claim("urls.proceedings", whole, source="ojs", evidence="dc:identifier"),))
+    [c] = cap_record(r).claims("urls.proceedings")
+    assert cut_identifier(c) and not unread_identifier(c) and len(str(c.value)) <= MAX_URL
+    assert proceedings_ids((c,)) == set()
+
+
+def test_a_url_no_parser_can_read_is_cut_and_never_read_as_an_id() -> None:
+    whole = "http://[x/" + "a" * MAX_URL  # urlparse raises on the host
     r = record(provenance=(claim("urls.proceedings", whole, source="ojs", evidence="dc:identifier"),))
     [c] = cap_record(r).claims("urls.proceedings")
     assert unread_identifier(c) and len(str(c.value)) <= MAX_URL
@@ -1176,3 +1212,102 @@ def test_a_snapshot_cuts_a_long_author_name_and_names_its_record(
         ("snapshot_trimmed", "WARNING", 1), ("snapshot_built", "INFO", 1),
     ]  # fmt: skip
     assert not any(REJECTED in str(r.__dict__) or long_name in str(r.__dict__) for r in caplog.records)
+
+
+# --- how many authors and keywords a record keeps (decision-054, TASK-280) -------------------------------------------
+
+
+@pytest.mark.parametrize(("field", "keep"), [("authors", MAX_AUTHORS), ("keywords", MAX_KEYWORDS)])
+@pytest.mark.parametrize("delta", [-1, 0, 1])
+def test_a_list_keeps_its_first_values_up_to_the_cap_and_is_flagged_past_it(
+    field: str, keep: int, delta: int
+) -> None:
+    items = tuple(f"Value {i}" for i in range(keep + delta))
+    r = record(**{field: items}, provenance=(claim(field, items, evidence="content." + field),))
+    out = cap_record(r)
+    [c] = out.claims(field)
+    if delta <= 0:
+        assert out is r and listed_total(field, c.value, c.evidence) is None
+        return
+    assert getattr(out, field) == items[:keep] and c.value == items[:keep]  # the record and its claim alike
+    assert c.evidence == f"content.{field} ({COUNT} kept the first {keep:,} of {keep + 1:,} values)"
+    assert is_trimmed(out) and not cut_identifier(c) and cap_record(out) is out
+    assert listed_total(field, c.value, c.evidence) == keep + 1
+
+
+def test_a_cut_list_with_a_cut_name_keeps_both_notes_the_count_first() -> None:
+    names = (
+        "N" * (MAX_AUTHOR + 1),
+        *(f"Author {i}" for i in range(MAX_AUTHORS)),
+    )  # one long name, 501 in all
+    r = record(authors=names, provenance=(claim("authors", names, evidence="content.authors"),))
+    out = cap_record(r)
+    [c] = out.claims("authors")
+    assert out.authors == ("N" * MAX_AUTHOR, *names[1:MAX_AUTHORS]) and len(out.authors) == MAX_AUTHORS
+    assert c.evidence == (
+        f"content.authors ({COUNT} kept the first {MAX_AUTHORS:,} of {MAX_AUTHORS + 1:,} values) "
+        f"({CUT} 1 value cut to at most {MAX_AUTHOR:,} characters)"
+    )
+    assert is_trimmed(out) and listed_total("authors", c.value, c.evidence) == MAX_AUTHORS + 1
+    assert cap_record(out) is out
+
+
+def test_only_the_names_a_list_keeps_are_cut() -> None:
+    # the list is cut first: a long name past the kept ones is dropped with them, never counted as cut
+    names = (*(f"Author {i}" for i in range(MAX_AUTHORS)), "N" * (MAX_AUTHOR + 1))
+    r = record(authors=names, provenance=(claim("authors", names, evidence="content.authors"),))
+    [c] = cap_record(r).claims("authors")
+    assert (
+        c.evidence
+        == f"content.authors ({COUNT} kept the first {MAX_AUTHORS:,} of {MAX_AUTHORS + 1:,} values)"
+    )
+
+
+def test_a_cut_lists_note_with_no_source_evidence_is_the_whole_evidence() -> None:
+    names = tuple(f"Author {i}" for i in range(MAX_AUTHORS + 2))
+    r = record(authors=names, provenance=(claim("authors", names),))
+    [c] = cap_record(r).claims("authors")
+    assert c.evidence == f"{COUNT} kept the first {MAX_AUTHORS:,} of {MAX_AUTHORS + 2:,} values"
+    assert listed_total("authors", c.value, c.evidence) == MAX_AUTHORS + 2
+
+
+def test_a_long_evidence_is_cut_after_a_lists_note_and_both_notes_stay_within_the_cap() -> None:
+    names = tuple(f"Author {i}" for i in range(MAX_AUTHORS + 1))
+    r = record(authors=names, provenance=(claim("authors", names, evidence="e" * MAX_EVIDENCE),))
+    [c] = cap_record(r).claims("authors")
+    assert len(c.evidence or "") <= MAX_EVIDENCE and (c.evidence or "").endswith(
+        f"({COUNT} kept the first {MAX_AUTHORS:,} of {MAX_AUTHORS + 1:,} values) "
+        f"({CUT} evidence cut from {MAX_EVIDENCE:,} characters)"
+    )
+    assert listed_total("authors", c.value, c.evidence) == MAX_AUTHORS + 1
+
+
+@pytest.mark.parametrize(
+    ("value", "evidence"),
+    [
+        # a list shorter than the cap: a source's evidence that reads like the note says nothing
+        (("A. Author",), f"x ({COUNT} kept the first 1 of 9 values)"),
+        (("A. Author",), f"x ({COUNT} kept the first {MAX_AUTHORS:,} of 9,999 values)"),
+        # at the cap, but the note names another count or none past it
+        (tuple("a" * MAX_AUTHORS), f"x ({COUNT} kept the first 499 of 9,999 values)"),
+        (tuple("a" * MAX_AUTHORS), f"x ({COUNT} kept the first {MAX_AUTHORS:,} of {MAX_AUTHORS:,} values)"),
+        # the note must end the evidence (or come just before the CUT note)
+        (tuple("a" * MAX_AUTHORS), f"x ({COUNT} kept the first {MAX_AUTHORS:,} of 600 values) tail"),
+        (tuple("a" * MAX_AUTHORS), None),
+    ],
+)  # fmt: skip
+def test_only_the_count_notes_own_form_on_a_list_at_the_cap_says_it_was_cut(
+    value: tuple[str, ...], evidence: str | None
+) -> None:
+    assert listed_total("authors", value, evidence) is None
+
+
+def test_a_snapshot_keeps_the_first_authors_of_a_long_list_and_names_its_record(tmp_path: Path) -> None:
+    many = "".join(f"AU  - Author, A{i}\n" for i in range(MAX_AUTHORS + 1))
+    ingest_ris([source(tmp_path, edit=lambda t: t.replace("AU  - Noe, N\n", many))], tmp_path / "c")
+    result = build(tmp_path / "c", tmp_path / "snapshots", BUILT)
+    trimmed = load_records(result.path)[REJECTED]
+    assert len(trimmed.authors) == MAX_AUTHORS and trimmed.authors[-1] == f"Author, A{MAX_AUTHORS - 1}"
+    assert all(COUNT in (c.evidence or "") for c in trimmed.claims("authors"))
+    manifest = json.loads((result.path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["trimmed"] == [REJECTED]

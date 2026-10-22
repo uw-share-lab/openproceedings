@@ -48,7 +48,8 @@ from openproceedings.vocab import AbstractKind, Status, Track, Venue, venue_name
 # AIES, FAccT and IASEAI venues, five tracks, the `ojs` source and the `ojs-<article id>` native id
 # (decision-049); 5: the `dblp` and `icml_site` sources and the `dblp-<key>` native id (TASK-205/206, decision-047);
 # 4: the `twin` and `invitation` claim fields (TASK-159, TASK-157; decision-029)
-RECORD_SCHEMA_VERSION = "9"
+# 10: the native-id forms' length bounds (`MAX_NATIVE_KEY`, `MAX_NATIVE_DIGITS`; decision-055, TASK-281)
+RECORD_SCHEMA_VERSION = "10"
 # Sent with a record, never stored: computed from its fields, so a snapshot line never holds it (`record_line`)
 # and the shape above is unchanged (TASK-112). Output only: a dump that is validated again excludes it.
 DERIVED = frozenset({"venue_name", "abstract_kind"})
@@ -100,9 +101,18 @@ ClaimField = Literal[
 ]  # fmt: skip
 
 _ID = re.compile(r"op:(neurips|iclr|icml|aaai|aies|facct|iaseai):([0-9]{4}):(\S+)")
+# The length bounds of the native-id forms (the owner, 2026-10-22; decision-055, TASK-281): a key (PMLR's, dblp's) is
+# at most `MAX_NATIVE_KEY` characters, and a number (an OJS article id, a PMLR volume, either side of an ACM DOI's
+# `<toc>.<n>`) at most `MAX_NATIVE_DIGITS` digits. A record past one is invalid, so its crawler refuses the entry as it
+# refuses any invalid one. The longest id in snapshot 2026-10-16-03eab0ef56c4 is 53 characters. The NeurIPS, ICLR and
+# forum-id forms were already bounded (32 hex digits; 4-64 characters).
+MAX_NATIVE_KEY = 200
+MAX_NATIVE_DIGITS = 12
+_KEY = rf"[A-Za-z0-9_-]{{1,{MAX_NATIVE_KEY}}}"
+_DIGITS = rf"[0-9]{{1,{MAX_NATIVE_DIGITS}}}"
 # Native ids (record-schema skill): an OpenReview forum id, or a proceedings form tied to its venue.
 PROCEEDINGS_NATIVE: dict[str, tuple[re.Pattern[str], frozenset[str]]] = {
-    "pmlr": (re.compile(r"pmlr-v[0-9]+-[A-Za-z0-9_-]+"), frozenset({"ICML", "FAccT"})),
+    "pmlr": (re.compile(rf"pmlr-v{_DIGITS}-{_KEY}"), frozenset({"ICML", "FAccT"})),
     # `-round1`/`-round2`: the 2021 D&B host, which numbers each round separately (urls.proceedings_native)
     "nips": (
         re.compile(rf"nips-[0-9a-f]{{32}}(?:-(?:{'|'.join(sorted(NEURIPS_DB_2021_ROUNDS))}))?"),
@@ -111,11 +121,11 @@ PROCEEDINGS_NATIVE: dict[str, tuple[re.Pattern[str], frozenset[str]]] = {
     "iclr": (re.compile(r"iclr-[0-9a-f]{32}"), frozenset({"ICLR"})),
     # the dblp key after `conf/icml/` (ICML 1988-2012) or `conf/aaai/` (AAAI 1980-2008) in the pinned dblp release
     # (sources/dblp.py, decision-047, decision-049)
-    "dblp": (re.compile(r"dblp-[A-Za-z0-9_-]+"), frozenset({"ICML", "AAAI"})),
+    "dblp": (re.compile(rf"dblp-{_KEY}"), frozenset({"ICML", "AAAI"})),
     # an ojs.aaai.org article id (`oai:ojs.aaai.org:article/<id>`), unique across its journals (sources/ojs.py)
-    "ojs": (re.compile(r"ojs-[0-9]+"), frozenset({"AAAI", "AIES", "IASEAI"})),
+    "ojs": (re.compile(rf"ojs-{_DIGITS}"), frozenset({"AAAI", "AIES", "IASEAI"})),
     # an ACM paper DOI's suffix, `10.1145/<toc>.<n>` → `doi-<toc>.<n>` (FAccT, AIES; sources/crossref.py)
-    "doi": (re.compile(r"doi-[0-9]+\.[0-9]+"), frozenset({"FAccT", "AIES"})),
+    "doi": (re.compile(rf"doi-{_DIGITS}\.{_DIGITS}"), frozenset({"FAccT", "AIES"})),
 }
 # tracks only one venue has (decision-049): IAAI and EAAI are printed in the AAAI volumes alone
 VENUE_ONLY_TRACKS: Mapping[str, str] = MappingProxyType({"iaai": "AAAI", "eaai": "AAAI"})

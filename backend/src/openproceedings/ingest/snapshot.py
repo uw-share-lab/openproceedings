@@ -48,7 +48,7 @@ from typing import Any, NamedTuple
 from pydantic import ValidationError
 
 from openproceedings import __version__, storage
-from openproceedings.ingest.caps import cap_records, is_trimmed
+from openproceedings.ingest.caps import LIST_CAPS, cap_records, is_trimmed, listed_total
 from openproceedings.ingest.dedup import Attribution, Conflict, DedupResult, Merge, attribution, dedup
 from openproceedings.ingest.reconcile import crawled, reconcile
 from openproceedings.ingest.record import DERIVED, RECORD_SCHEMA_VERSION, PaperRecord, abstract_kind_of
@@ -880,7 +880,8 @@ class RecordFile:
     the claim sources per (venue, year, track), and keeps the manifest it read, so `GET /coverage` checks the
     manifest's counts against the records; and each record's abstract attribution (`attributions`, TASK-134),
     which `GET /search` reads per hit with no file I/O; likewise each record's twin ids (`twins`, the ids its
-    `twin` claims name: decision-029, TASK-162). The ids the manifest names as `withheld` (a takedown,
+    `twin` claims name: decision-029, TASK-162), and each record's lists the ingest caps cut (`lists_cut`: field →
+    how many values its source listed, decision-054, TASK-280). The ids the manifest names as `withheld` (a takedown,
     TASK-136) must each be a record with no abstract and no abstract claim; they are counted per venue-year and
     per track as withheld, never as missing. A lookup reads its one line and
     validates it as a `PaperRecord`, which re-checks its `content_hash`. Snapshots are sealed read-only, so
@@ -903,6 +904,9 @@ class RecordFile:
         self.track_openalex: Counter[tuple[str, int, str]] = Counter()
         # id → the ids its `twin` claims name (decision-029; TASK-162, TASK-163), only for a record that has one
         self.twins: dict[str, tuple[str, ...]] = {}
+        # id → each list the ingest caps cut (`authors`, `keywords`) → how many values its source listed (decision-054),
+        # only for a record with one: read off a claim that holds the record's own list, for the exports to say so
+        self.lists_cut: dict[str, dict[str, int]] = {}
         try:
             read = _OnePass(snapshot)
             manifest = read.manifest
@@ -932,11 +936,19 @@ class RecordFile:
                         raise TypeError(rid)
                     about: list[_Claim] = []
                     linked: set[str] = set()
-                    for c in line["provenance"]:  # one pass: the abstract claims, and the twin ids (TASK-162)
+                    cut: dict[str, int] = {}
+                    # one pass: the abstract claims, the twin ids (TASK-162), and the lists cut (decision-054)
+                    for c in line["provenance"]:
                         if c["field"] == "abstract":
                             about.append(_Claim(c["source"], c["value"], c.get("url"), c.get("evidence")))
                         elif c["field"] == "twin":
                             linked.update(_id_list(c["value"]))
+                        elif (
+                            c["field"] in LIST_CAPS
+                            and c["value"] == line[c["field"]]
+                            and (total := listed_total(c["field"], c["value"], c.get("evidence"))) is not None
+                        ):
+                            cut[c["field"]] = max(total, cut.get(c["field"], 0))
                     twins = sorted(linked - {rid})
                     from_openalex = abstract_kind_of(line["abstract"], about) == "openalex"
                     urls = line["urls"]
@@ -966,6 +978,8 @@ class RecordFile:
                 self.attributions[rid] = credit
                 if twins:
                     self.twins[rid] = tuple(twins)
+                if cut:
+                    self.lists_cut[rid] = cut
                 self.cells[cell] += 1
                 track = (line["venue"], line["year"], line["track"])
                 self.track_missing[track] += no_abstract

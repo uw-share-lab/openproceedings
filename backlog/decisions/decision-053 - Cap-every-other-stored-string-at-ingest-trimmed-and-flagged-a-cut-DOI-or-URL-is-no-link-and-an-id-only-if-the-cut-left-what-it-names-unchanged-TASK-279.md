@@ -153,6 +153,9 @@ Each cap is at least 2.7 times the longest value held, so no record of the curre
   - A `twin` claim's ids. Each must be a record of the snapshot (`snapshot.render`).
   - The enums and `year`.
   - The number of authors or keywords on a record. This decision caps each string, not the list.
+  (Extended 2026-10-22: decision-054 caps how many authors (500) and keywords (200) a record keeps, trimmed and
+  flagged; decision-055 bounds every native-id form, a record past a bound refused, so the own-page address above is
+  always within the URL cap and a URL over it is never kept whole.)
 
 ## Consequences
 

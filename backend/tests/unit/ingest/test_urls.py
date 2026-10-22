@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from openproceedings.ingest import acm_table, urls, volumes
-from openproceedings.ingest.record import PaperRecord
+from openproceedings.ingest.record import MAX_NATIVE_DIGITS, PaperRecord
 
 from tests.unit.ingest.crossref import api
 
@@ -157,3 +157,29 @@ def test_a_listed_acm_paper_doi_link_names_its_doi_id(acm, url: str) -> None:
     "https://example.org/10.1145/3593013.3594011"])  # fmt: skip
 def test_a_link_that_is_not_a_listed_acm_paper_names_nothing(acm, url: str) -> None:
     assert urls.native(url) is None
+
+
+# decision-055: a volume or article number names an id only within `MAX_NATIVE_DIGITS` digits (leading zeros aside),
+# so no URL names a number no record id can hold, and none reaches `int` past Python's 4,300-digit limit
+_AT, _PAST = "7" * MAX_NATIVE_DIGITS, "7" * (MAX_NATIVE_DIGITS + 1)
+
+
+@pytest.mark.parametrize(
+    ("url", "named"),
+    [
+        (f"https://proceedings.mlr.press/v{_AT}/a24a.html", (int(_AT), "a24a")),
+        (f"https://proceedings.mlr.press/v{_PAST}/a24a.html", None),
+        ("https://proceedings.mlr.press/v" + "9" * 5_000 + "/a24a.html", None),
+        ("https://proceedings.mlr.press/v" + "0" * 5_000 + "235/a24a.html", (235, "a24a")),  # zeros are no digits
+        (f"https://raw.githubusercontent.com/mlresearch/v{_PAST}/x/assets/a24a/a24a.pdf", None),
+    ],
+)  # fmt: skip
+def test_a_pmlr_volume_past_the_bound_names_no_paper(url: str, named: tuple[int, str] | None) -> None:
+    assert urls.pmlr(url) == named
+
+
+@pytest.mark.parametrize(
+    ("digits", "named"), [(_AT, int(_AT)), (_PAST, None), ("9" * 5_000, None), ("0" * 5_000 + "12", 12)]
+)
+def test_an_ojs_article_past_the_bound_names_no_paper(digits: str, named: int | None) -> None:
+    assert urls.ojs_article(f"https://ojs.aaai.org/index.php/AAAI/article/view/{digits}/9") == named

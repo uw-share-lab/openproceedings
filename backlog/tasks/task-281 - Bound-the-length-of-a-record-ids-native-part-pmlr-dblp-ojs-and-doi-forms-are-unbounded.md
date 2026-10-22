@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-22 06:01'
-updated_date: '2026-10-22 19:01'
+updated_date: '2026-10-22 19:35'
 labels:
   - ingest
   - security
@@ -24,9 +24,9 @@ Follow-up from the TASK-279 security review. The native part of a record id is v
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A decision record says whether native ids get a length bound, the bound per form, and what happens to a record over it (skipped and counted by its crawler, or kept), citing the measured longest ids
-- [ ] #2 If bounded: record.py's forms carry the bounds with tests at the bound and one past it, RECORD_SCHEMA_VERSION is bumped per the record-schema skill, and spec 01 and the record-schema skill describe it
-- [ ] #3 sources/ojs.py refuses an article id past the bound (or past the int digit limit) as a CrawlError, never a bare ValueError, with a test
+- [x] #1 A decision record says whether native ids get a length bound, the bound per form, and what happens to a record over it (skipped and counted by its crawler, or kept), citing the measured longest ids
+- [x] #2 If bounded: record.py's forms carry the bounds with tests at the bound and one past it, RECORD_SCHEMA_VERSION is bumped per the record-schema skill, and spec 01 and the record-schema skill describe it
+- [x] #3 sources/ojs.py refuses an article id past the bound (or past the int digit limit) as a CrawlError, never a bare ValueError, with a test
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -38,3 +38,9 @@ Follow-up from the TASK-279 security review. The native part of a record id is v
 4. Tests at the bound and one past it per form; crawler skip/count tests.
 5. FILES_HASH re-pinned; decision-055, spec 01, record-schema skill; read-only check that every record of 2026-10-16-03eab0ef56c4 still validates.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+decision-055 (owner, 2026-10-22): MAX_NATIVE_KEY=200 (pmlr, dblp keys), MAX_NATIVE_DIGITS=12 (ojs id, pmlr volume, each side of doi-<toc>.<n>; acm_table.DOI_DIGITS the same). RECORD_SCHEMA_VERSION 9 -> 10; test_combined_snapshot.FILES_HASH re-pinned (SNAPSHOT_HASH unchanged). sources/ojs._number raises CrawlError(oai_unreadable) before int(); urls.pmlr/ojs_article and ris._int read at most 12 digits past leading zeros. Tests at the bound and one past it per form (test_record.py) and per crawler (pmlr, dblp ICML, dblp AAAI, RIS, OJS, Crossref, urls). caps: decision-053's 'kept whole' own-page branch removed (a bounded id's page always fits). Read-only check: all 173,518 records of 2026-10-16-03eab0ef56c4 validate at schema 10; longest id 53.
+<!-- SECTION:NOTES:END -->

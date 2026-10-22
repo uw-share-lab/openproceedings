@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from openproceedings.ingest import urls, volumes
 from openproceedings.ingest.dedup import dedup
+from openproceedings.ingest.record import MAX_NATIVE_KEY
 from openproceedings.ingest.sources import pmlr
 from openproceedings.ingest.sources.common import MinerError
 from openproceedings.ingest.sources.crawl import ingest_pmlr, load_crawls
@@ -513,3 +514,19 @@ def test_icml_is_untouched() -> None:
 def test_a_malformed_non_icml_row_is_refused(row: str, error: str) -> None:
     with pytest.raises(ValueError, match=error):
         load(row)
+
+
+@pytest.mark.parametrize(("extra", "built"), [(0, True), (1, False)])
+def test_a_key_past_the_native_id_bound_is_skipped_and_counted_as_invalid(
+    tmp_path: Path, extra: int, built: bool
+) -> None:
+    """decision-055: a key of at most 200 characters (`record.MAX_NATIVE_KEY`). One past it makes no valid record, so
+    the miner skips the entry and counts it as it counts any invalid one; at the bound it is a record."""
+    key = "s" * (MAX_NATIVE_KEY + extra)
+    seed_fixture(tmp_path, "pmlr", V28, edit=lambda t: t.replace("sznitman13", key))
+    seed_fixture(tmp_path, "pmlr", "pmlr/v28/paper.json")
+    for k in (key, "boots13"):
+        seed(tmp_path, "pmlr", f"https://proceedings.mlr.press/v28/{k}.html", "", status=404)
+    result = mine(tmp_path, 28)
+    assert result.report.skipped["invalid"] == (0 if built else 1)
+    assert (f"op:icml:2013:pmlr-v28-{key}" in {r.id for r in result.records}) is built

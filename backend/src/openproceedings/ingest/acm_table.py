@@ -34,7 +34,10 @@ VENUES: frozenset[str] = frozenset({"AIES", "FAccT"})
 # the years a `doi-` id may name: AIES before OJS (Vol. 7, 2024); FAccT after PMLR v81 (2018)
 DOI_YEARS: Mapping[str, range] = MappingProxyType({"AIES": range(2018, 2024), "FAccT": range(2019, 10000)})
 _TOC = re.compile(r"10\.1145/[0-9]+")
-_PAPER = re.compile(r"10\.1145/([0-9]+)\.([0-9]+)")
+# each side of `<toc>.<n>` holds at most this many digits, as the `doi-<toc>.<n>` native id does
+# (`record.MAX_NATIVE_DIGITS`, decision-055; defined here too, since record imports this module)
+DOI_DIGITS = 12
+_PAPER = re.compile(rf"10\.1145/([0-9]{{1,{DOI_DIGITS}}})\.([0-9]{{1,{DOI_DIGITS}}})")
 NOT_PAPER_KINDS = frozenset({"tutorial", "craft session", "keynote", "panel", "front matter"})
 _PROCEEDINGS = {"venue", "year", "doi", "title", "window_from", "window_until", "dois", "verified", "source"}
 _NOT_PAPER = {"doi", "kind", "reason"}
@@ -44,8 +47,9 @@ SECTION_TRACKS = frozenset({"student_abstract", "consortium", "demo", "other"})
 
 
 def paper_doi(doi: str) -> tuple[str, str] | None:
-    """(toc, n) of an ACM paper DOI `10.1145/<toc>.<n>` (digits only, compared lower-case), else None. Any
-    surrounding whitespace, a trailing newline included, makes it no DOI."""
+    """(toc, n) of an ACM paper DOI `10.1145/<toc>.<n>` (digits only, at most `DOI_DIGITS` on each side, compared
+    lower-case), else None. Any surrounding whitespace, a trailing newline included, makes it no DOI; so does a side
+    past `DOI_DIGITS` (decision-055): it could be no record's `doi-` id."""
     if doi != doi.strip():
         return None
     m = _PAPER.fullmatch(doi.lower())
