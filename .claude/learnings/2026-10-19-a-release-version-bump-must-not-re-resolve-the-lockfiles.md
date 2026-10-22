@@ -55,3 +55,6 @@ the proof was run:
 - **The `git archive` probe route works as written** in `release-manager` step 2. With `__version__` patched to
   0.4.2, the copy's probe hashed the snapshot to `03e68379…` (the value before), and `SNAPSHOT_HASH` was unchanged.
   The worktree stayed clean, and the new `FILES_HASH` is `b2cfbda7…`.
+
+**Propagated to:** none new. `release-manager` §How you work already says to promote and tag on one UTC day, and
+`2026-09-27-npm-workspace-hoists-node-modules-to-the-root.md` covers the root `node_modules/` gate.
