@@ -42,3 +42,16 @@ the proof was run:
   0.4.2 it hashed to `03e68379…`. So the new `FILES_HASH` and its provenance comment went in with the release commit.
 
 **Propagated to:** `.claude/agents/release-manager.md` (§How you work, step 2: how to run the in-memory check).
+
+## Addendum — 2026-10-21 (v0.4.3)
+- **The owner's day is not the tag day.** The owner asked for 0.4.3 on 2026-10-21 (EDT), and the branch was cut at
+  00:09 UTC on 2026-10-22. `CITATION.cff`'s `date-released` is the UTC day the tag is created (spec 08 §Release step
+  6 checks it against today's UTC date), so it says 2026-10-22, not the day of the request. With a 3-hour candidate
+  nightly still to run, the tag lands hours later on that UTC day; a branch cut late in the UTC day has to plan for
+  the tag falling after 00:00 UTC.
+- **A fresh worktree has no root `node_modules/`.** `make test` stops at `frontend-deps` ("run make sync (npm ci)")
+  until `npm ci --ignore-scripts` runs in the worktree. It left both lockfiles unchanged here; check
+  `git status` after it all the same.
+- **The `git archive` probe route works as written** in `release-manager` step 2. With `__version__` patched to
+  0.4.2, the copy's probe hashed the snapshot to `03e68379…` (the value before), and `SNAPSHOT_HASH` was unchanged.
+  The worktree stayed clean, and the new `FILES_HASH` is `b2cfbda7…`.
