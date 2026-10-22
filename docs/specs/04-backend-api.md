@@ -445,7 +445,7 @@ the archive) and `OpenAlex` (decision-049, milestone C: an abstract filled from 
   | JSONL | `abstract_source`: `{source, origin, url}` (the `/search` hit's object) or null; `abstract_withheld`: a boolean | `"abstract_source": {"origin": "pmlr", "source": "pmlr", "url": "https://proceedings.mlr.press/v202/okafor23a.html"}, "abstract_withheld": false` |
 
   TASK-136 appends one more CSV column and JSONL key, `abstract_withheld_reason` (below, **Withheld by a
-  takedown**). Milestone C appends a CSV column, `abstract_kind` (last until decision-054 appended `lists_cut`) (`official`, `openalex` or `none`; JSONL the
+  takedown**). Milestone C appends a CSV column, `abstract_kind`: `official`, `openalex` or `none` (last until decision-054 appended `lists_cut`; JSONL the
   same key on every record), read from the index's display record; a withheld record's is `none` in both, as in a
   hit and a paper. An OpenAlex abstract's `abstract_source` is `openalex` and its `abstract_origin` is `openalex`.
 
@@ -544,7 +544,7 @@ the archive) and `OpenAlex` (decision-049, milestone C: an abstract filled from 
   lists may be cut without a mark (check `X-Abstract-Source: unavailable`, as for abstracts). Covidence shows
   screeners no `N1`, so a Covidence review should read the CSV's `lists_cut` (or JSONL's) before import, and report
   in its methods any record whose author list was cut. No record of snapshot 2026-10-16-03eab0ef56c4 has one (at
-  most 95 authors and 54 keywords).
+  most 95 authors and 54 keywords; `docs/results/2026-10-22-list-counts-and-native-ids.md`).
 - **`TY` is `CPAPER`, not `JOUR`** (task-004). Every exported paper is a conference paper. Zotero's RIS
   translator (`RIS.js`, 2026-01-05) imports `CPAPER` as `conferencePaper` and puts `T2` in its
   `conferenceName`; a `JOUR` would become a `journalArticle` with the conference in `publicationTitle`.

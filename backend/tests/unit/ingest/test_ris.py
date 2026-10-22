@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from openproceedings.ingest import ris
 from openproceedings.ingest.record import MAX_NATIVE_KEY, PaperRecord
 from openproceedings.ingest.ris import (
     QUERY_DATE_OFFSETS,
@@ -550,6 +551,8 @@ def listing_year(year: str, host: str | None = None) -> Callable[[Entries], None
             pmlr_urls("https://proceedings.mlr.press/v" + "0" * 5_000 + "202/"),
             "unresolved",
         ),
+        # a volume of zeros alone is volume 0, no ICML volume: never `int("")`
+        ("a PMLR volume of zeros", pmlr_urls("https://proceedings.mlr.press/v" + "0" * 5_000 + "/"), "no_id"),
         # `²` is a digit to `str.isdigit` but not to `int`: no volume, never an aborted file
         ("a PMLR volume of a non-ASCII digit", pmlr_urls("https://proceedings.mlr.press/v²/"), "no_id"),
         # an evidence URL `urlparse` refuses names no listing: skipped, never an aborted file
@@ -579,6 +582,11 @@ def test_a_proceedings_url_urlparse_refuses_is_skipped_never_an_aborted_file(tmp
     # the entry's proceedings claims cite no address it can read, so it is skipped as unresolved
     assert report.skipped == {**base.skipped, "unresolved": base.skipped["unresolved"] + 1}
     assert report.imported == base.imported - 1
+
+
+def test_a_ur_line_urlparse_refuses_is_out_of_scope_never_an_aborted_file() -> None:
+    # an entry with nothing else to go on is judged by its UR lines' hosts; one `urlparse` refuses names no host
+    assert ris._identity({"claims": []}, ["http://[x/neurips.cc"]) == "out_of_scope"
 
 
 def listed(year: str, track: str) -> Callable[[Entries], None]:

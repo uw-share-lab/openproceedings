@@ -500,12 +500,11 @@ def cap_records(records: Iterable[PaperRecord]) -> list[PaperRecord]:
 def is_trimmed(record: PaperRecord) -> bool:
     """Was any of `record`'s claims trimmed at ingest (the manifest's `trimmed`): a title or abstract
     (decision-026), any other capped value, url or evidence (decision-053), or a list of authors or keywords
-    (decision-054)?"""
+    (decision-054, by `listed_total`: the rule the exports read, so the two agree)?"""
     return any(
         _CUT_NOTE.search(c.evidence or "")
         or (c.field in CAPPED and _NOTE.search(c.evidence or ""))
-        or listed_total(c.field, c.value, c.evidence)
-        is not None  # the rule the exports read, so the two agree
+        or listed_total(c.field, c.value, c.evidence) is not None
         for c in record.provenance
     )
 

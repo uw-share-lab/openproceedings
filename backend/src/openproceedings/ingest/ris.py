@@ -265,9 +265,8 @@ def _listing(
     if len({p for _, p in icml}) > 1:
         return "ambiguous"
     url, (vol, key) = icml[0]
-    if (
-        len(key) > MAX_NATIVE_KEY
-    ):  # no record could hold the id (decision-055): skipped, never an aborted file
+    # no record could hold the id (decision-055): skipped, never an aborted file
+    if len(key) > MAX_NATIVE_KEY:
         return "unresolved"
     year, track = ICML_PMLR_VOLUMES[vol]
     return ("ICML", year, f"pmlr-v{vol}-{key}", Classification(track, "accepted", "ICML", year),
@@ -279,9 +278,8 @@ def _int(value: object) -> int | None:
     so `int` never meets Python's digit limit or a non-ASCII digit (`²`); else None."""
     if not isinstance(value, str) or not value.isascii() or not value.isdigit():
         return None
-    digits = (
-        value.lstrip("0") or "0"
-    )  # `int` reads the digits alone: a run of zeros never meets the limit either
+    # `int` reads the digits alone: a run of zeros never meets the limit either
+    digits = value.lstrip("0") or "0"
     return int(digits) if len(digits) <= MAX_NATIVE_DIGITS else None
 
 
@@ -418,7 +416,7 @@ def _identity(entry: dict[str, Any], urls: list[str]) -> _Identity | str:
         for c in entry["claims"]
     ):
         return "no_id"  # an ICML paper reached through PMC: no PMLR key to build an id from
-    if any(_IN_SCOPE_HOST.fullmatch(urlparse(u).netloc.lower()) for u in urls):
+    if any(_readable(u) and _IN_SCOPE_HOST.fullmatch(urlparse(u).netloc.lower()) for u in urls):
         return "unresolved"  # e.g. a neurips.cc/media link: in scope, but nothing to build an id from
     return "out_of_scope"
 

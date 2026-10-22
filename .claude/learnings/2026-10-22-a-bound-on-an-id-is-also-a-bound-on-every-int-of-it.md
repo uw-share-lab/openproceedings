@@ -79,3 +79,15 @@ record past a bound refused, record schema 9 → 10.
   (`contract/test_lists_cut.py`).
 - **The manifest and the exports must use one rule.** `is_trimmed` matched the count note on a list of any length while
   `listed_total` required one exactly at the cap; `is_trimmed` now calls `listed_total`.
+
+## Addendum — 2026-10-22 (review round 2)
+- **Evidence text is input too, and it travels.** RIS evidence (`scholarmend:proceedings_page <url>`) is validated by
+  no URL check, and it is read again long after import: by dedup's abstract attribution, which a snapshot load runs
+  per record. A `http://[x` there aborted the whole build. `dedup._site` and `_names_native` now read such a URL as
+  naming nothing, and `ris._readable` covers the `UR` lines too. Lesson: when fixing a parser crash at one call site,
+  grep every caller of the same parser for untrusted input (here `urls.proceedings_site`/`names_native`; the Scholar
+  comparison already had `_named`). Evidence: `test_dedup.py::test_an_evidence_url_urlparse_refuses_names_no_site_and_never_aborts_the_build`.
+- **`or "0"` is a branch.** `value.lstrip("0")` of an all-zero string is empty, and `int("")` raises; the mutation run
+  found no test for it until the "a PMLR volume of zeros" row.
+- **A bound in a regex can change which match wins.** Bounding `Volume N:` let a first heading with a huge number be
+  skipped for a later one; `heading()` now lets the first heading of that shape decide (`_VOLUME_HEADING`).

@@ -541,3 +541,12 @@ def test_a_volume_heading_reads_at_most_twelve_digits(number: str, read: int | N
     # `heading_mismatch`, never a bare ValueError from `int` past Python's 4,300-digit limit
     found = pmlr.heading(f"<h1>Volume {number}: International Conference</h1>")
     assert found == (None if read is None else (read, "International Conference"))
+    # the first `Volume N:` heading decides: one past the bound is never passed over for a later one
+    later = pmlr.heading(f"<h1>Volume {number}: Bogus</h1><h2>Volume 235: International Conference</h2>")
+    assert later == (None if read is None else (read, "Bogus"))
+
+
+def test_a_link_urljoin_refuses_is_no_link_never_a_bare_value_error() -> None:
+    # an unclosed IPv6 host (`http://[x`) makes `urljoin` raise; such a link names nothing, so the block is unlinked
+    page = """<div class='paper'><p class='title'>T</p><p class='links'>[<a href='http://[x/v235/a24a.html'>abs</a>]</p></div>"""
+    assert pmlr.parse_volume_index(page, "https://proceedings.mlr.press/v235/") == ([], 1)

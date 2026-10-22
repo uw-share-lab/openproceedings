@@ -1165,6 +1165,24 @@ def test_an_evidence_url_is_linked_only_as_this_records_own_page() -> None:
     )
 
 
+def test_an_evidence_url_urlparse_refuses_names_no_site_and_never_aborts_the_build() -> None:
+    """RIS evidence is read by no URL validator, so its url can be one `urlparse` refuses (an unclosed IPv6 host): it
+    names no site and no paper, in the attribution and in `_own_abstract`, never a ValueError out of the build."""
+    bad = f"http://[x/paper/2024/hash/{H[1]}-Abstract-Conference.html"
+    assert attribution("T", [_via(bad)], forum=None, proceedings=None, native=NATIVE) == Attribution(
+        "ris", None, None
+    )
+    text = (
+        "An abstract long enough to be compared, about trust in people and in the systems they use every day."
+    )
+    ris = paper(
+        f"nips-{H[1]}", source="ris", abstract=text, abstract_evidence=f"scholarmend:proceedings_page {bad}"
+    )
+    crawled = paper(f"nips-{H[1]}", source="neurips_proceedings")
+    [merged] = dedup([ris, crawled]).records
+    assert merged.id == ris.id
+
+
 def test_when_the_evidence_and_the_proceedings_link_name_different_sites_the_evidence_wins_unlinked() -> None:
     both = attribution("T", [_via(NIPS_PAGE)], forum=None, proceedings=ICLR_PAGE, native=NATIVE)
     assert both == Attribution("ris", "neurips_proceedings", None)

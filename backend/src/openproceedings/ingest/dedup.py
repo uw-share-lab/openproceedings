@@ -330,6 +330,23 @@ def abstract_claim[C: AbstractClaim](abstract: str | None, claims: Iterable[C]) 
     return min(held, key=lambda c: order.index(c.source), default=None)
 
 
+def _site(url: str) -> str | None:
+    """`urls.proceedings_site`, but a URL `urlparse` refuses (`http://[x`, from RIS evidence, which no URL validator
+    reads) names no site, never a ValueError that aborts the build or a snapshot load."""
+    try:
+        return urls.proceedings_site(url)
+    except ValueError:
+        return None
+
+
+def _names_native(url: str, native_id: str) -> bool:
+    """`urls.names_native`, but a URL `urlparse` refuses names no paper (as `_site`)."""
+    try:
+        return urls.names_native(url, native_id)
+    except ValueError:
+        return False
+
+
 def attribution(
     abstract: str | None,
     claims: Iterable[AbstractClaim],
@@ -371,14 +388,12 @@ def attribution(
         # evidence wins, unlinked; the evidence url itself is linked only when it is this paper's page
         # (`urls.names_native`: some evidence urls stop after the hash)
         page = rest.split(" ", 1)[0]
-        said = _SITE_ORIGIN.get(urls.proceedings_site(page) or "") if page else None
-        held = _SITE_ORIGIN.get(urls.proceedings_site(proceedings) or "") if proceedings else None
+        said = _SITE_ORIGIN.get(_site(page) or "") if page else None
+        held = _SITE_ORIGIN.get(_site(proceedings) or "") if proceedings else None
         if held is not None and said in (None, held):
             return Attribution(source, held, proceedings)
         if said is not None:
-            return Attribution(
-                source, said, page if held is None and urls.names_native(page, native) else None
-            )
+            return Attribution(source, said, page if held is None and _names_native(page, native) else None)
     return Attribution(source, None, None)  # a route that names no site this code knows: named, not linked
 
 
@@ -800,7 +815,7 @@ def _own_abstract(claim: Claim, record: PaperRecord, pids: frozenset[str]) -> bo
     via, _, rest = (claim.evidence or "").partition(" ")
     where = rest.split(" ", 1)[0]
     if via == RIS_VIA_PROCEEDINGS:
-        return bool(where) and any(urls.names_native(where, n) for n in {record.native, *pids})
+        return bool(where) and any(_names_native(where, n) for n in {record.native, *pids})
     if via == RIS_VIA_OPENREVIEW:
         return record.forum_id is not None and where == f"openreview:{record.forum_id}"
     return False

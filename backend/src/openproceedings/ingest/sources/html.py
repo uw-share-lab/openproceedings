@@ -28,6 +28,7 @@ import html
 import re
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
+from urllib.parse import urljoin
 
 from openproceedings.ingest.sources.http import SourceError, cache_name
 
@@ -440,6 +441,15 @@ class _TagParser(_RawTextParser):
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self.handle_starttag(tag, attrs)
+
+
+def joined(base: str, href: str) -> str | None:
+    """`href` resolved against `base`, or None for one `urljoin` refuses (`http://[x`, an unclosed IPv6 host): a page's
+    link no parser can read names nothing, never a bare ValueError that aborts the listing."""
+    try:
+        return urljoin(base, href)
+    except ValueError:
+        return None
 
 
 def attrs(tag: str) -> dict[str, str]:

@@ -23,7 +23,7 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 from pydantic import ValidationError
 
@@ -50,7 +50,7 @@ from openproceedings.ingest.sources.common import (
     record_from_claims,
     titles_match,
 )
-from openproceedings.ingest.sources.html import collapse, meta, metas, node_text, parse
+from openproceedings.ingest.sources.html import collapse, joined, meta, metas, node_text, parse
 from openproceedings.ingest.sources.http import Fetcher, Page, canonical
 from openproceedings.ingest.volumes import PMLR_VENUES, VOLUMES, Volume
 from openproceedings.logs import elapsed_ms
@@ -66,6 +66,7 @@ PROGRESS_SECONDS = 30.0
 # a volume number of at most `MAX_NATIVE_DIGITS` digits past leading zeros, as every other reader of it (decision-055): a
 # longer one is no heading (the miner's `heading_mismatch`), never `int` past Python's 4,300-digit limit
 _VOLUME_PREFIX = re.compile(rf"Volume\s+0*([0-9]{{1,{MAX_NATIVE_DIGITS}}})\s*:\s*")
+_VOLUME_HEADING = re.compile(r"Volume\s+[0-9]+\s*:")  # any heading of that shape, however long its number
 
 
 def ingestable(number: int) -> Volume:
@@ -92,13 +93,15 @@ class Entry:
 
 
 def heading(text: str, url: str | None = None) -> tuple[int, str] | None:
-    """(volume number, the rest) from the page's first `<h1>`/`<h2>` reading `Volume N: …`."""
+    """(volume number, the rest) from the page's first `<h1>`/`<h2>` reading `Volume N: …`; None when N is past
+    `MAX_NATIVE_DIGITS` digits (decision-055)."""
     for node in parse(text, url).iter():
         if node.tag not in ("h1", "h2"):
             continue
         title = node_text(node)
-        if prefix := _VOLUME_PREFIX.match(title):
-            return int(prefix.group(1)), title[prefix.end() :]
+        if _VOLUME_HEADING.match(title):  # the first such heading decides, whatever its number
+            prefix = _VOLUME_PREFIX.match(title)
+            return (int(prefix.group(1)), title[prefix.end() :]) if prefix else None
     return None
 
 
@@ -107,7 +110,9 @@ def parse_volume_index(text: str, base: str) -> tuple[list[Entry], int]:
     entries: list[Entry] = []
     unlinked = 0
     for block in (node for node in parse(text, canonical(base)).iter("div") if node.has_class("paper")):
-        hrefs = [urljoin(base, node.attributes.get("href", "")) for node in block.iter("a")]
+        hrefs = [
+            h for node in block.iter("a") if (h := joined(base, node.attributes.get("href", ""))) is not None
+        ]
         abs_url = next((h for h in hrefs if urlparse(h).path.endswith(".html") and urls.pmlr(h)), None)
         if abs_url is None:
             unlinked += 1

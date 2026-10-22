@@ -23,7 +23,7 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | `status` | `accepted` \| `rejected` \| `withdrawn` \| `desk_rejected` \| `unknown`. No default. |
 | `presentation` | `oral` \| `spotlight` \| `poster` \| `null`, only when a source states it: a v1 decision note or venue string (`openreview_v1._PRESENTATION`); a v2 accepted, non-workshop note's `content.venue`, matched exactly per venue-year in `classify.V2_PRESENTATION` (an unlisted string is `null` and counted as `presentation_unmapped`; spec 01 §Presentation). Its claim's evidence is `content.venue=<string>`. `dedup.resolve` keeps it only when the resolved `status` is `accepted` (a reconcile-demoted `unknown` shows `null`; the claim stays). Never a track, never hashed. |
 | `venue_id_raw` | OpenReview `content.venueid` verbatim, else `null`. One over 500 characters never fills it after the snapshot build: its claim keeps it cut, as text (below). |
-| `urls` | `{forum, pdf, proceedings, doi}`, each optional. A URL over 2,048 characters or a DOI over 1,000 never fills its slot after the snapshot build (its claim keeps it cut, as text), unless the record's own id was read from it: then it becomes an address of that id's page, rebuilt from the id, which the native-id bounds keep within the cap (decision-055; below). |
+| `urls` | `{forum, pdf, proceedings, doi}`, each optional. A URL over 2,048 characters or a DOI over 1,000 never fills its slot after the snapshot build: its claim keeps it cut, as text, or, when the record's own id was read from it, as an address of that id's page rebuilt from the id (still a cut, so no slot; it names the record for dedup), which the native-id bounds keep within the cap (decision-055; below). |
 | `keywords` | Stored and shown, **never indexed as text** (guarantee 2). Each capped by the snapshot build at 2,000 characters, and the first 200 kept (below; decision-054). |
 | `provenance` | `list[Claim]`, see below. |
 | `content_hash` | See below. |
@@ -69,7 +69,9 @@ refuses any invalid one: PMLR and dblp ICML skip and count it (`skipped.invalid`
 past 12 digits after leading zeros (`oai_unreadable`, a `CrawlError` raised before `int`, never a bare `ValueError`
 past Python's 4,300-digit limit). Every other reader of those numbers counts digits after leading zeros and reads at
 most 12, so none meets that limit: `urls.pmlr` and `urls.ojs_article` (no URL names a number no id can hold), the RIS
-importer's volume claim (`ris._int`; an evidence URL `urlparse` refuses is no listing, `ris._readable`), a PMLR
+importer's volume claim (`ris._int`; an evidence URL or `UR` line `urlparse` refuses names no listing or host,
+`ris._readable`, and no site in dedup's attribution, `dedup._site`; a listing link `urljoin` refuses is no link,
+`html.joined`), a PMLR
 page's `Volume N:` heading (`pmlr._VOLUME_PREFIX`: past 12 digits it is no heading, `heading_mismatch`), and a
 NeurIPS year page's stated count (`neurips._COUNT`, at most 16 characters, else none). The model checks the form
 before reading a PMLR volume as an int.

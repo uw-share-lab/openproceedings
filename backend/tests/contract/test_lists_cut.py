@@ -26,7 +26,7 @@ from scholarmend.parse import parse_ris
 from tests.contract.conftest import BUILT, attributed, make_app
 from tests.contract.test_compare import COMPARE, NO_COOLDOWN, RIS, by_title
 from tests.contract.test_records import save
-from tests.contract.test_takedowns import DATE, FORMATS, _build, exported
+from tests.contract.test_takedowns import DATE, EXPORT, FORMATS, _build, exported
 from tests.fixtures.corpus.synthetic_5k import records
 
 # data, many authors, many keywords, the other cases by name (`_cases`), and a record with no cut list
@@ -300,6 +300,9 @@ def test_an_export_whose_snapshot_cant_be_verified_names_no_cut_list(
     records_file.write_bytes(records_file.read_bytes() + b"\n")  # no longer hashes to its manifest
     _, many_authors, *_ = _papers()
     with TestClient(make_app(data)) as c:
+        # what spec 04 tells a reviewer to check: the export says its snapshot couldn't be verified
+        r = c.get(EXPORT, params={"format": "csv", "q": _q(many_authors), "index_version": cut})
+        assert r.headers["X-Abstract-Source"] == "unavailable"
         for fmt in FORMATS:
             text = exported(c, fmt, q=_q(many_authors), index_version=cut)
             assert (

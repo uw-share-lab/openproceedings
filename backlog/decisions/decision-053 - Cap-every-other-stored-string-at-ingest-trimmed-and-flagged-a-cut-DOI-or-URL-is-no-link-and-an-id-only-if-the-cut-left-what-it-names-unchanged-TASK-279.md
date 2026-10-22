@@ -128,8 +128,9 @@ Each cap is at least 2.7 times the longest value held, so no record of the curre
   only if it names the same id. Flagged `value cut from <n> to <m> characters, rebuilt as the page of the record id it
   names`, it counts as a cut, so it fills no slot, but it still names the record, so dedup's input check passes. A
   URL that already is that page is kept whole and flagged once (`value of <n> characters kept, …`); it stays a valid
-  link. (Superseded 2026-10-22 by decision-055: with every native id bounded, that page is always within the
-  cap, so a URL over it is never that page; the branch is gone.) The page is the id's length plus a fixed host and path, so leading zeros and any text past the id are gone,
+  link. (Superseded 2026-10-22 by decision-055: with every native id bounded, that page is always within the cap,
+  so a URL over it is never that page; the branch is gone.) The page is the id's length plus a fixed host and path,
+  so leading zeros and any text past the id are gone,
   and only an id near or over the cap (a hostile PMLR key, dblp key, OJS article id or ACM DOI number; the native forms have no length
   bound, TASK-281) takes it past the cap. It is decided from the value and the record's id, never from evidence, so no
   text a source writes can claim it.
