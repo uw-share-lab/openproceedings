@@ -24,10 +24,11 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    promotion has merged by then); stop and list blockers at the first step that fails. In short:
    readiness on `dev` (required checks, `e2e`, `bench`, the latest `web-image` run, a nightly from the last day that tested `dev`'s head (dispatched with `--ref dev`, or a scheduled run whose summary names that sha), the M4 gate, no open
    Must); the security gate (`/security-review` over `origin/main...origin/dev`; TASK-067 Done before the
-   first release a public instance serves); verify the index (the served one, or a new one when
+   first release a public instance serves; a reviewer run in parallel reads other trees with `git show <ref>:<path>`,
+   `git diff` or its own `git worktree add --detach`, never a checkout in the shared one, 2026-10-22); verify the index (the served one, or a new one when
    `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy changes) and replay sampled records with `--json`
    (`reproduced` or `drifted` as the versions say; `mismatch` blocks); freeze `dev` and cut `release/X.Y.Z`:
-   bump `backend/pyproject.toml` and `frontend/package.json`, relock, set `CITATION.cff`'s `version` (= the release version) and `date-released` (the planned tag day; spec 08 §Release step 4, checked again at step 6 before tagging), add the `docs/releases.toml` table
+   bump `backend/pyproject.toml` and `frontend/package.json`, relock, set `CITATION.cff`'s `version` (= the release version) and `date-released` (the planned tag day; spec 08 §Release step 4, checked again at step 6 before tagging), and check its title, abstract and keywords, and `backend/pyproject.toml`'s `description`, against the README's venues and years (2026-10-22), add the `docs/releases.toml` table
    from the index manifest, `make changelog RELEASE=X.Y.Z` (never hand-edit `CHANGELOG.md`),
    `/record-learnings`, `/review-gate`, `/open-pr`; promote with `gh pr create --base main --head dev` (not
    `/open-pr`), which requires green checks but no mandatory approving review under the
@@ -43,7 +44,9 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    Retained supported pins still reproduce when `QUERY_VERSION` matches; changed replay inputs report
    `drifted`. Release tables alone do not establish whether an older pin is supported. `changelog.py`
    refuses a version change as a PATCH and refuses a data table that disagrees with the code
-   or the index manifest.
+   or the index manifest. It does not refuse a PATCH that carries a new feature: choose the number from the
+   release's Added section (or the PR titles in the merge commits' bodies, `git log --first-parent --format=%b
+   origin/main..origin/dev`); a `feat` means at least MINOR (spec 08 §Release, Versioning; 2026-10-22).
    The combined-snapshot golden includes the manifest's app version. After an app-version bump, if that
    golden fails, prove that reverting only `openproceedings_version` in memory restores the exact prior
    whole-directory hash before updating its expected hash. To do that, use a throwaway test that
