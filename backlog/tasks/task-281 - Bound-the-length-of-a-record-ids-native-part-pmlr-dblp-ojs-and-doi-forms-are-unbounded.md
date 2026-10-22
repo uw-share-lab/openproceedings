@@ -3,10 +3,11 @@ id: TASK-281
 title: >-
   Bound the length of a record id's native part (pmlr-, dblp-, ojs- and doi-
   forms are unbounded)
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@jeevan'
 created_date: '2026-10-22 06:01'
-updated_date: '2026-10-22 08:07'
+updated_date: '2026-10-22 19:01'
 labels:
   - ingest
   - security
@@ -27,3 +28,13 @@ Follow-up from the TASK-279 security review. The native part of a record id is v
 - [ ] #2 If bounded: record.py's forms carry the bounds with tests at the bound and one past it, RECORD_SCHEMA_VERSION is bumped per the record-schema skill, and spec 01 and the record-schema skill describe it
 - [ ] #3 sources/ojs.py refuses an article id past the bound (or past the int digit limit) as a CrawlError, never a bare ValueError, with a test
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. record.py: MAX_NATIVE_KEY=200 (pmlr and dblp keys), MAX_NATIVE_DIGITS=12 (ojs article id, pmlr volume, each side of doi-<toc>.<n>) in PROCEEDINGS_NATIVE; RECORD_SCHEMA_VERSION 9 -> 10.
+2. sources/ojs.py: an article id over 12 digits (or past the int digit limit) is a CrawlError, before int().
+3. acm_table._PAPER and urls.pmlr/ojs_article bounded the same way, so no bare ValueError on a hostile volume or DOI number.
+4. Tests at the bound and one past it per form; crawler skip/count tests.
+5. FILES_HASH re-pinned; decision-055, spec 01, record-schema skill; read-only check that every record of 2026-10-16-03eab0ef56c4 still validates.
+<!-- SECTION:PLAN:END -->
