@@ -209,8 +209,10 @@ model, so an over-cap value is trimmed and flagged, never refused, and every rec
   id, which hashes the whole URL) differ from the whole URL's, the note adds `not read as an id`, and dedup's identity
   reads (`proceedings_ids`, `forum_ids`, Creative AI evidence) skip it. A forum URL's `id` cut short is a valid id of
   another paper. A long query string after a proceedings page's path is still that page's id.
-- **A URL the record's own id was read from becomes that id's page address** when a cut at the cap would unname it
-  (`caps._own_page`: rebuilt from the parsed id per form, NeurIPS/ICLR, PMLR, dblp, OJS, DOI; kept only if it names the
+- **A page past its cap first drops its tail** (`caps._page_only`): when a cut would change what it names, the URL
+  without its query, parameters and fragment is kept if it fits and names all the whole did, track token included.
+- **A URL the record's own id was read from becomes an address of that id's page** when neither keeps it naming its
+  id (`caps._own_page`: rebuilt from the parsed id per form, naming the id though not always the address served, NeurIPS/ICLR, PMLR, dblp, OJS, DOI; kept only if it names the
   same id), flagged `value cut from <n> to <m> characters, rebuilt as the page of the record id it names`. It fills no
   slot but still names the record, so dedup's self-naming check passes. A URL that already is that page is kept, a
   valid link, flagged once. Only the id's own length (TASK-281) takes such a value past the cap; leading zeros and text
@@ -222,7 +224,9 @@ model, so an over-cap value is trimmed and flagged, never refused, and every rec
   through RIS evidence, an automated security review that keeping such a URL whole had no bound, and round 3 that
   cutting it just past the id failed for pages whose form goes on past the id.
 - **Reserved.** No miner or importer may end a claim's evidence with the `CUT` note: `cut_identifier` and
-  `unread_identifier` read it. A forged one only takes a value out of the slots or Creative AI evidence.
+  `unread_identifier` read it. A forged `value cut` note only takes a value out of the slots or Creative AI evidence; a
+  forged `not read as an id` would hide a URL's ids from dedup's identity reads, but no claim can carry one today (a
+  URL holds no whitespace, so RIS URL evidence can't end in a note, and crawlers write fixed evidence).
 - **Not capped:** `id` (an id is identity: cutting it would rename the paper; the `pmlr-`, `dblp-`, `ojs-` and `doi-`
   forms have no length bound, TASK-281; longest 53), a `twin` claim's ids (each must be a record of the snapshot),
   and the enums and `year`. Nor the number of authors or keywords per record (95 and 54 at most; TASK-280).

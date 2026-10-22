@@ -804,6 +804,80 @@ def test_a_proceedings_page_with_a_long_token_is_rebuilt_from_its_id_and_builds(
     assert list(dedup([out]).records) == [out] and cap_record(out) is out
 
 
+_LONG = "7" * (MAX_URL + 50)  # an id past the cap (TASK-281): its page is rebuilt from it, no longer
+
+
+@pytest.mark.parametrize(
+    ("rid", "venue", "year", "page", "rebuilt", "source"),
+    [
+        (f"op:aaai:2005:dblp-K{_LONG}", "AAAI", 2005, f"https://dblp.org/rec/conf/aaai/K{_LONG}.html",
+         f"https://dblp.org/rec/conf/aaai/K{_LONG}", "dblp"),
+        (f"op:icml:2009:dblp-K{_LONG}", "ICML", 2009, f"http://DBLP.org/rec/conf/icml/K{_LONG}.html",
+         f"https://dblp.org/rec/conf/icml/K{_LONG}", "dblp"),
+        (f"op:aies:2024:ojs-{_LONG}", "AIES", 2024, f"https://ojs.aaai.org/index.php/AIES/article/view/{_LONG}/9",
+         f"https://ojs.aaai.org/index.php/AIES/article/view/{_LONG}", "ojs"),
+        (f"op:iaseai:2026:ojs-{_LONG}", "IASEAI", 2026,
+         f"https://ojs.aaai.org/index.php/IASEAI/article/view/{_LONG}/9",
+         f"https://ojs.aaai.org/index.php/IASEAI/article/view/{_LONG}", "ojs"),
+        (f"op:aies:2018:doi-3278721.{_LONG}", "AIES", 2018, f"https://dx.doi.org/10.1145/3278721.{_LONG}",
+         f"https://doi.org/10.1145/3278721.{_LONG}", "crossref"),
+        (f"op:aies:2018:doi-3278721.{_LONG}", "AIES", 2018, f"https://doi.org/10.1145%2F3278721.{_LONG}",
+         f"https://doi.org/10.1145/3278721.{_LONG}", "crossref"),
+        (f"op:neurips:2024:nips-{_HASH}", "NeurIPS", 2024,
+         f"http://PROCEEDINGS.NEURIPS.CC/paper/2024/hash/{_HASH}-Paper-Conference{'x' * MAX_URL}.pdf",
+         f"https://proceedings.neurips.cc/paper_files/paper/2024/hash/{_HASH}-Abstract.html", "neurips_proceedings"),
+        # its page alone (the query dropped) is itself past the cap: rebuilt, never kept over the cap
+        (f"op:neurips:2024:nips-{_HASH}", "NeurIPS", 2024,
+         f"https://proceedings.neurips.cc/paper_files/paper/2024/hash/{_HASH}-Abstract-T{'x' * MAX_URL}.html?q=1",
+         f"https://proceedings.neurips.cc/paper_files/paper/2024/hash/{_HASH}-Abstract.html", "neurips_proceedings"),
+    ],
+)  # fmt: skip
+def test_each_form_of_an_own_page_is_rebuilt_from_its_id_and_builds(
+    rid: str, venue: str, year: int, page: str, rebuilt: str, source: str
+) -> None:
+    out = cap_record(_listing(rid, venue, year, "urls.proceedings", page, source))
+    [c] = out.claims("urls.proceedings")
+    assert (
+        c.value == rebuilt and _OWN in (c.evidence or "") and proceedings_ids(out.provenance) == {out.native}
+    )
+    assert list(dedup([out]).records) == [out] and cap_record(out) is out
+
+
+def test_a_page_with_a_tail_of_symbols_keeps_its_page_and_its_track_token() -> None:
+    # a cut at the cap would fall inside `.html` (no letter or digit to cut before): the tail is dropped instead, and
+    # the Creative AI token stays (rebuilding the page would lose it)
+    page = (
+        f"https://proceedings.neurips.cc/paper_files/paper/2023/hash/{_HASH}-Abstract-Creative_AI_Track.html"
+    )
+    whole = page + "?" + "&" * MAX_URL
+    nips = {"source": "neurips_proceedings", "evidence": "listing"}
+    r = record(
+        id=f"op:neurips:2023:nips-{_HASH}", venue="NeurIPS", year=2023, track="other", venue_id_raw=None, keywords=(),
+        provenance=(claim("track", "other", **nips), claim("urls.proceedings", whole, **nips)),
+    )  # fmt: skip
+    out = cap_record(r)
+    [c] = out.claims("urls.proceedings")
+    assert c.value == page and not unread_identifier(c) and _OWN not in (c.evidence or "")
+    assert is_creative_ai(r) and is_creative_ai(out)
+
+
+def test_a_rebuilt_page_never_reads_as_creative_ai_where_the_whole_did_not() -> None:
+    whole = f"https://proceedings.neurips.cc/paper_files/paper/2023/hash/{_HASH}-Abstract-Creative_AI_Track{'x' * MAX_URL}.html"
+    nips = {"source": "neurips_proceedings", "evidence": "listing"}
+    r = record(
+        id=f"op:neurips:2023:nips-{_HASH}", venue="NeurIPS", year=2023, track="other", venue_id_raw=None, keywords=(),
+        provenance=(claim("track", "other", **nips), claim("urls.proceedings", whole, **nips)),
+    )  # fmt: skip
+    assert not is_creative_ai(r) and not is_creative_ai(cap_record(r))
+
+
+def test_another_rounds_page_is_never_rebuilt_as_this_records() -> None:
+    # the 2021 D&B host names a paper by hash and round: a round2 page doesn't name the round1 record
+    c = claim("urls.proceedings", "x", source="neurips_proceedings")
+    page = f"https://datasets-benchmarks-proceedings.neurips.cc/paper/2021/hash/{_HASH}-Abstract-round2.html"
+    assert _own_page(c, page, f"nips-{_HASH}-round1") is None
+
+
 def test_a_pmlr_github_asset_with_a_long_segment_is_rebuilt_as_its_page_and_builds() -> None:
     asset = f"https://raw.githubusercontent.com/mlresearch/v235/{'g' * MAX_URL}/assets/own24a/own24a.pdf"
     out = cap_record(_listing("op:icml:2024:pmlr-v235-own24a", "ICML", 2024, "urls.pdf", asset, "pmlr"))
@@ -938,6 +1012,7 @@ def test_an_archive_record_with_its_target_cut_is_still_kept_apart_from_another_
     )
     other = f"https://proceedings.iclr.cc/paper_files/paper/2015/hash/{_HASH}-Abstract.html"
     listing = _listing(f"op:iclr:2015:iclr-{_HASH}", "ICLR", 2015, "urls.proceedings", other, "ris")
+    assert _cluster([archive]).proceedings_ids == {archive.native}  # its native, not its whole id
     assert len(dedup([archive, listing]).records) == 2
 
 

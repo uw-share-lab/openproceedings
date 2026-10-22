@@ -3,7 +3,7 @@
 **Key lesson:** When a length cap trims an identifier (a DOI or URL), keep the cut text only as display text: never fill the record's link slot from it (the next uncut claim does, else none), and stop identity reads from using it whenever the cut changed what it names. A cut that leaves the id alone must still count, or a record that names itself only by that URL stops the whole build.
 
 - **Date:** 2026-10-22 · **Task:** task-279 · **Area:** ingest
-- **Artifacts:** `backend/src/openproceedings/ingest/caps.py` (`FIELD_CAPS`, `cut_identifier`, `unread_identifier`, `_names`, `_own_page`), `backend/src/openproceedings/ingest/dedup.py` (`resolve`, `resolved_value`, `proceedings_ids`, `forum_ids`, `_names_creative_ai`, `_archive_target_cut`), `docs/results/2026-10-22-stored-string-lengths.md`, `backend/tests/unit/ingest/test_caps.py`, decision-053
+- **Artifacts:** `backend/src/openproceedings/ingest/caps.py` (`FIELD_CAPS`, `cut_identifier`, `unread_identifier`, `_names`, `_page_only`, `_own_page`), `backend/src/openproceedings/ingest/dedup.py` (`resolve`, `resolved_value`, `proceedings_ids`, `forum_ids`, `_names_creative_ai`, `_archive_target_cut`), `docs/results/2026-10-22-stored-string-lengths.md`, `backend/tests/unit/ingest/test_caps.py`, decision-053
 
 ## What we set out to do
 Cap every stored string field that decision-026 left uncapped (DOI, URLs, author names, keywords, venue_id_raw,
@@ -114,9 +114,20 @@ refused.
   build for a NeurIPS or ICLR page whose track token after the hash is long (the path must end `-Abstract….html`) and
   for a PMLR raw GitHub asset (the key sits mid-path), let leading zeros take a URL past the cap (`v000…235`), and never
   checked that the whole URL named the record's own id (a claim for `…/v235/abcddd…` was cut to name `abc`). The rule
-  now rebuilds the id's canonical page from the parsed id, per form (`caps._own_page`), and keeps it only if it names
+  now rebuilds an address of the id's page from the parsed id, per form (`caps._own_page`), and keeps it only if it names
   the same id. Lesson: when a value must keep naming something, build it from the thing it names rather than trimming
   the source's text toward it.
 - **An exception that drops an id from a set weakens every guard that reads the set.** The `iclr_archive` exception
   left the record's own id out of its cluster's proceedings ids, so the two-ids guard let it title-merge into another
   ICLR paper. `_cluster` now adds it back for those records (`test_an_archive_record_with_its_target_cut_is_still_kept_apart_from_another_paper`).
+
+## Addendum — 2026-10-22 (review round 4)
+- **A cut can't land before a letter that isn't there.** `_cut` falls before the last space, else before the last
+  letter or digit, that fits. A Creative AI page followed by `?` and 2,000 `&` has neither in its tail, so the cut fell
+  inside `.html`, and the page was rebuilt without its track token: the record stopped being Creative AI. Now a page
+  first drops its query, parameters and fragment (`caps._page_only`) when that fits and names all the whole did; only
+  a page whose own path is past the cap is rebuilt. Lesson: a fallback that rebuilds a value from what it names loses
+  whatever else the value carried (here a track token), so prefer the step that keeps the source's text.
+- **Every form a builder handles needs its own row.** Five builder branches (dblp AAAI, DOI, the OJS journal, the
+  upper-case host, the 2021 D&B round) survived mutation until the test had a row per form. The D&B round turned out
+  unreachable (its paths are fixed-length, so the tail step always fits), so its code went rather than stay untested.

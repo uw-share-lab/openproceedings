@@ -309,22 +309,22 @@ def _names(c: Claim, url: str) -> tuple[object, ...]:
 
 
 def _own_page(c: Claim, url: str, own: str) -> str | None:
-    """The canonical page address of the record's own proceedings id `own`, built from what `url` names, when `url`
-    names `own` (`urls.native` read the id from it); else None (decision-053). Each form's page is rebuilt from the
-    parsed id alone, so its length is the id's plus a fixed host and path, and leading zeros or any text past the id
-    are gone: a NeurIPS or ICLR page `…/paper_files/paper/<year>/hash/<hash>-Abstract[-<round>].html` on its own host,
-    a PMLR paper `proceedings.mlr.press/v<N>/<key>.html`, a dblp record page, an OJS article on its journal, a DOI
-    link. Kept only if it names `own` too. An `iclr_archive` id hashes the whole URL and is never `urls.native`'s, so
-    nothing is built for it."""
+    """An address of the page of the record's own proceedings id `own`, rebuilt from what `url` names, when `url`
+    names `own` (`urls.native` read the id from it); else None (decision-053). It names the id, though it need not be
+    the address the site serves (a NeurIPS or ICLR page loses its track token). Each form's address is rebuilt from
+    the parsed id alone, so its length is the id's plus a fixed host and path, and leading zeros or text past the id
+    are gone: `…/paper_files/paper/<year>/hash/<hash>-Abstract.html` on a NeurIPS or ICLR host, a PMLR paper
+    `proceedings.mlr.press/v<N>/<key>.html`, a dblp record page, an OJS article on its journal, a doi.org link. Kept
+    only if it names `own` too. An `iclr_archive` id hashes the whole URL and is never `urls.native`'s, so nothing is
+    built for it."""
     if _names(c, url)[0] != own:  # only a URL the record's own id was read from (never another paper's)
         return None
     parsed = urlparse(url)
     page: str | None = None
+    # a NeurIPS or ICLR page's path is fixed but for its track token, so only a long token gets here; the 2021 D&B
+    # host's paths are fixed-length (its token is the round), so a page there always fits once its query is gone
     if (parts := urls.proceedings_parts(url)) is not None:
-        rounds = "".join(
-            f"-{r}" for r in own.split("-")[2:]
-        )  # the 2021 D&B host's round (`proceedings_native`)
-        page = f"https://{parsed.netloc.lower()}/paper_files/paper/{parts[1]}/hash/{parts[2]}-Abstract{rounds}.html"
+        page = f"https://{parsed.netloc.lower()}/paper_files/paper/{parts[1]}/hash/{parts[2]}-Abstract.html"
     elif (paper := urls.pmlr(url)) is not None:
         page = f"https://proceedings.mlr.press/v{paper[0]}/{paper[1]}.html"
     elif (key := urls.dblp_icml(url)) is not None:
@@ -336,6 +336,16 @@ def _own_page(c: Claim, url: str, own: str) -> str | None:
     elif (doi := urls.acm_doi(url)) is not None:
         page = f"https://doi.org/{doi}"
     return page if page is not None and _names(c, page)[0] == own else None
+
+
+def _page_only(c: Claim, url: str, most: int) -> str | None:
+    """`url` without its query, parameters and fragment, when that fits `most` and names all the whole URL names
+    (`_names`: a proceedings page's track token included); else None. Every parser reads the page from the path
+    alone (a forum id aside, which the comparison keeps out), so a long tail after a page is dropped whole, never cut
+    into the page (a tail of only symbols would cut inside `.html`)."""
+    parsed = urlparse(url)
+    page = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+    return page if page != url and _length(page) <= most and _names(c, page) == _names(c, url) else None
 
 
 def _claim(c: Claim, own: str | None = None) -> Claim:
@@ -351,12 +361,21 @@ def _claim(c: Claim, own: str | None = None) -> Claim:
     most = FIELD_CAPS.get(c.field)
     if most is not None and isinstance(value, str) and (kept := cut(value, most)) is not None:
         whole = _names(c, value)
-        if c.field in _URL_SLOTS and _names(c, kept) != whole:  # its prefix names another paper, or none
+        if (
+            c.field in _URL_SLOTS
+            and _names(c, kept) != whole
+            and (page := _page_only(c, value, most)) is not None
+        ):
+            said.append(
+                f"{_VALUE_CUT}{len(value):,} to {len(page):,} characters"
+            )  # its page, the tail dropped
+            value = page
+        elif c.field in _URL_SLOTS and _names(c, kept) != whole:  # its prefix names another paper, or none
             if own is not None and (to_own := _own_page(c, value, own)) is not None:
-                if to_own != value:  # its page's address, rebuilt from the id: it names the record still
+                if to_own != value:  # an address of its page, rebuilt from the id: it names the record still
                     said.append(f"{_VALUE_CUT}{len(value):,} to {len(to_own):,} characters, {_OWN}")
                     value = to_own
-                # it ends at the id: kept whole, still a valid link, and flagged once (not again on a second pass)
+                # it already is that address: kept whole, still a valid link, flagged once (not on a second pass)
                 elif _OWN not in _cut_parts(c):
                     said.append(f"value of {len(value):,} characters kept, {_OWN}")
             else:

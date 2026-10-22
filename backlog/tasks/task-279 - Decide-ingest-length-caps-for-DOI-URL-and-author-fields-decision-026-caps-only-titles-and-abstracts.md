@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-21 23:01'
-updated_date: '2026-10-22 07:27'
+updated_date: '2026-10-22 07:51'
 labels:
   - ingest
   - security
@@ -51,4 +51,6 @@ Review round 1 (code, docs, observability, dedup, track-classifier, security, me
 Automated security review (coordinator, after round 2): keeping a self-naming URL whole had no bound (an iclr_archive id hashes the whole target). Fixed: a URL the record's own id was read from is cut just past that id (caps._own_prefix); an iclr_archive target is cut and unread like any other, and dedup._archive_target_cut lets that record stand for itself only by the crawler's own claim. Tests: junk past the id, the id spelled twice, a URL already ending at the id (kept, flagged once), the archive exception limited by source and id form, the prefix check.
 
 Review round 3: cutting a self-naming URL just past its id failed where a page's form goes on past the id (NeurIPS/ICLR track token, PMLR GitHub asset; build abort), let leading zeros past the cap, and didn't check the whole URL named the id. Replaced by caps._own_page: the id's canonical page rebuilt per form from the parsed id, kept only if it names the same id. The iclr_archive exception now also keeps the record's own id among its cluster's proceedings ids (the two-ids guard). Tests for each case.
+
+Review round 4: a page with a tail of symbols only was cut inside .html and rebuilt without its Creative AI token; now a page first drops its query/params/fragment when that fits and names all the whole did (caps._page_only), and only a page whose path is past the cap is rebuilt. Tests now cover every rebuild form (dblp ICML/AAAI, OJS AIES/IASEAI, doi.org/dx/percent-encoded DOI, upper-case host), the own-id guard, and the archive id kept in its cluster by native. The D&B round in the rebuild was unreachable and removed. Docs: the Reserved bullet now says what a forged unread note could do and why no claim can carry one.
 <!-- SECTION:NOTES:END -->
