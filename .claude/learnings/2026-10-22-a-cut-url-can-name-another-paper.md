@@ -98,3 +98,13 @@ refused.
 - **Check what each source puts in evidence before trusting a suffix.** Crawlers write fixed evidence, but RIS
   evidence holds raw values (a URL, a venue id). The `_url` validator keeps whitespace out of URLs, so only the venue
   id carried a forgery; adding `venue_id_raw` to the identifier fields opened that channel in round 1.
+
+## Addendum — 2026-10-22 (automated security review)
+- **An exemption from a cap needs its own bound.** Round 2 kept a self-naming URL whole when a cut would unname it.
+  An automated security review flagged that this had no bound: an `iclr_archive` target's id hashes the whole URL, so
+  a target of any length passed, which defeats the cap. The fix cuts the URL just past the first place it spells the
+  record's own id (`caps._own_prefix`, kept only if that prefix still names the id), so only the id's own length
+  (TASK-281) bounds it. The hash-derived `iclr_archive` id is left out: its target is cut and unread like any other,
+  and dedup lets that record stand for itself only by the crawler's own claim (`dedup._archive_target_cut`), which no
+  import can write. Lesson: whenever a rule says "keep it whole", ask what bounds "whole", and test the case where
+  junk follows the part that matters (`test_an_identifying_url_never_passes_its_cap_by_more_than_its_id`).

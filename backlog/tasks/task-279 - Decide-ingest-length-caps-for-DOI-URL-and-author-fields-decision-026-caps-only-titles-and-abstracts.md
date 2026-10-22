@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-21 23:01'
-updated_date: '2026-10-22 06:44'
+updated_date: '2026-10-22 07:03'
 labels:
   - ingest
   - security
@@ -47,4 +47,6 @@ Measured over snapshot 2026-10-16-03eab0ef56c4 (173,518 records, every claim): D
 decision-053 records the caps, the trim-and-flag rule and the handling of a cut DOI or URL (no link; an id only if the cut left what it names unchanged). Follow-up filed: TASK-280 (cap the number of authors and keywords per record).
 
 Review round 1 (code, docs, observability, dedup, track-classifier, security, methodologist, qa): a cut venue id is an identifier too (it never fills venue_id_raw and counts against Creative AI); cap_record sets the urls slots and venue_id_raw with dedup.resolved_value (resolve's own rule: the next uncut claim, else null); caps._names survives an OJS id past Python's int digit limit; scholar_compare never joins on a cut DOI; a record whose own page URL was cut inside its own id refused the build at dedup's self-naming check. Round 2: round 1's fix for that (a note dedup read, 'it named its own record') was forgeable through RIS venue id evidence and credited the wrong record after a merge, so it was replaced: a URL that names its own record whole and that a cut would unname is kept whole, flagged, decided from the value and the record's id only. Measurements committed as docs/results/2026-10-22-stored-string-lengths.md (+ its check script; rerun at the round-1 code: records=173518 changed=0 flagged=26). Follow-up TASK-281 filed (bound native id length; and ojs.py's int() past the digit limit).
+
+Automated security review (coordinator, after round 2): keeping a self-naming URL whole had no bound (an iclr_archive id hashes the whole target). Fixed: a URL the record's own id was read from is cut just past that id (caps._own_prefix); an iclr_archive target is cut and unread like any other, and dedup._archive_target_cut lets that record stand for itself only by the crawler's own claim. Tests: junk past the id, the id spelled twice, a URL already ending at the id (kept, flagged once), the archive exception limited by source and id form, the prefix check.
 <!-- SECTION:NOTES:END -->

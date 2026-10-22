@@ -292,11 +292,12 @@ the OJS, AAAI 1980–2008, Crossref, FAccT site, OpenAlex and AAAI library rows 
    - **A cut URL names its paper only if the cut changed nothing it names.** When the cut value's proceedings id,
      forum id or page parts differ from the whole URL's (a forum URL's `id` cut short is a valid id of another
      paper), the note adds `not read as an id` and dedup reads no id from it (§Pipeline 4, the forum link). A long query
-     string cut after a proceedings page's path still names that page. A URL that names the record's own id (the miner
-     read the id from it) and that a cut would unname is kept whole instead, flagged `kept whole, as it names its own
-     record`, as before the caps: that happens only when the id itself sits past the cap (TASK-281) or in an
-     `iclr_archive` target, whose id hashes the whole URL. It is decided from the value and the id, never from
-     evidence, so a record whose own page URL is over the cap still builds.
+     string cut after a proceedings page's path still names that page. A URL the record's own id was read from, which
+     a cut at the cap would unname, is cut just past that id instead (flagged `just past the record id it names`; one
+     already ending there is kept), so it still names the record and is no longer than the URL up to its id: only the
+     id's own length (TASK-281) takes it past the cap. An `iclr_archive` target, whose id hashes the whole URL, is cut
+     and unread like any other; dedup still takes that record as standing for itself, but only by the crawler's own
+     target claim. Both are decided from the value, the id and the claim's source, never from evidence text.
    - **Not capped:** `id` (identity: cutting it would rename the paper; the `pmlr-`, `dblp-`, `ojs-` and `doi-`
      forms have no length bound, TASK-281; the longest is 53), a `twin` claim's ids (each must be a record of the
      snapshot), the enums and `year`, and how many authors or keywords a record has (95 and 54 at most; TASK-280).

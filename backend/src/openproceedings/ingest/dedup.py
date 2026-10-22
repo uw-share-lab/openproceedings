@@ -528,6 +528,16 @@ def proceedings_ids(claims: Iterable[Claim]) -> set[str]:
     return found
 
 
+def _archive_target_cut(record: PaperRecord) -> bool:
+    """Did the ingest caps cut an `iclr_archive` record's own target so that it no longer reads (decision-053)? Its id
+    hashes the whole target, so no prefix of it names the record: the record still stands for itself (as it did whole)
+    though its target is unread. Only the crawler writes an `iclr_archive` claim's evidence, so no import can say so."""
+    return record.native.startswith("iclr-") and any(
+        c.source == "iclr_archive" and c.field == "urls.proceedings" and unread_identifier(c)
+        for c in record.provenance
+    )
+
+
 def forum_ids(record: PaperRecord) -> frozenset[str]:
     """The record's own forum id and every forum id its kept `urls.forum` claims name (never one a cut changed,
     `caps.unread_identifier`)."""
@@ -716,7 +726,11 @@ def _dedup(records: Iterable[PaperRecord]) -> DedupResult:
         again, _ = resolve(r.id, r.provenance)
         if again != r:
             raise ValueError(f"{r.id}: fields don't match its own claims; dedup would silently change it")
-        if r.forum_id is None and r.native not in proceedings_ids(r.provenance):
+        if (
+            r.forum_id is None
+            and r.native not in proceedings_ids(r.provenance)
+            and not _archive_target_cut(r)
+        ):
             raise ValueError(f"{r.id}: a proceedings record must name itself in a urls.proceedings/pdf claim")
 
     # Step 1: identical id: the same forum id in the same venue and year, or the same proceedings id.

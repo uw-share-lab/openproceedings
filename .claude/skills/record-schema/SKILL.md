@@ -209,12 +209,15 @@ model, so an over-cap value is trimmed and flagged, never refused, and every rec
   id, which hashes the whole URL) differ from the whole URL's, the note adds `not read as an id`, and dedup's identity
   reads (`proceedings_ids`, `forum_ids`, Creative AI evidence) skip it. A forum URL's `id` cut short is a valid id of
   another paper. A long query string after a proceedings page's path is still that page's id.
-- **A URL that names its own record is kept whole when a cut would unname it.** When the whole URL names the
-  record's own proceedings id (`urls.native`, or an `iclr_archive` target's id: the miner read the id from it) and the
-  cut wouldn't, the claim keeps the whole value, flagged `value of <n> characters kept whole, as it names its own
-  record`, and still fills the slot, as before the caps. Only an id past character 2,048 (TASK-281) or an
-  `iclr_archive` target (its id hashes the whole URL) gets here. Decided from the value and the record's id, never
-  from evidence: round 2 of the review showed a note dedup read could be forged through RIS evidence.
+- **A URL the record's own id was read from is cut just past that id** when a cut at the cap would unname it
+  (`caps._own_prefix`: the first place the URL spells `urls.native`'s id, kept only if that prefix still names it),
+  flagged `value cut from <n> to <m> characters, just past the record id it names`. It fills no slot but still names
+  the record, so dedup's self-naming check passes. One already ending at the id is kept, a valid link, flagged once.
+  Only the id's own length (TASK-281) takes such a value past the cap. An `iclr_archive` target (its id hashes the
+  whole URL, so no prefix names it) is cut and unread like any other; `dedup._archive_target_cut` lets that record
+  stand for itself, but only for the crawler's own `iclr_archive` claim on an `iclr-` id. Decided from the value, the
+  id and the claim's source, never from evidence: round 2 of the review showed a note dedup read could be forged
+  through RIS evidence, and an automated security review that keeping such a URL whole had no bound.
 - **Reserved.** No miner or importer may end a claim's evidence with the `CUT` note: `cut_identifier` and
   `unread_identifier` read it. A forged one only takes a value out of the slots or Creative AI evidence.
 - **Not capped:** `id` (an id is identity: cutting it would rename the paper; the `pmlr-`, `dblp-`, `ojs-` and `doi-`

@@ -47,8 +47,9 @@ slot or `venue_id_raw` is taken from it (`cut_identifier`: `dedup.resolve`, and 
 claim's own url, which is only ever a link, is dropped when it is over its cap. Dedup still reads a cut URL as naming
 its paper when the cut left what it names unchanged (a long query string after a proceedings page's path), and reads
 nothing from one whose cut changed it (`unread_identifier`: a forum URL's `id` cut short is a valid id of another
-paper). A URL that names its own record whole (its id was read from it) is kept whole when a cut would stop it naming
-the record, as it was before these caps: the id it names is as long (TASK-281 would bound both).
+paper). A URL the record's own id was read from, which a cut at the cap would unname, is cut just past that id
+instead (`_own_prefix`), so it still names the record; only the id bounds it (TASK-281). An `iclr_archive` target,
+whose id hashes the whole URL, is cut and unread like any other (`dedup` accepts that record as naming itself).
 """
 
 from __future__ import annotations
@@ -99,9 +100,8 @@ CUT = "trimmed at ingest (decision-053):"  # how a claim's evidence says one of 
 _CUT_NOTE = re.compile(rf"(?:^|\s\(){re.escape(CUT)} ([0-9a-z ,;]+)\)?\Z")
 _VALUE_CUT = "value cut from "
 _UNREAD = "not read as an id"  # a cut URL that no longer names what it named whole
-_KEPT = (
-    "kept whole, as it names its own record"  # a URL a cut would unname, whose whole names the record's id
-)
+# a URL cut there rather than at the cap, so that it still names the record (`_own_prefix`)
+_OWN = "just past the record id it names"
 _URL_SLOTS = ("urls.forum", "urls.pdf", "urls.proceedings", "urls.doi")
 
 
@@ -306,11 +306,23 @@ def _names(c: Claim, url: str) -> tuple[object, ...]:
         return (object(),)
 
 
+def _own_prefix(c: Claim, url: str, own: str) -> str | None:
+    """`url` cut just past the first place it spells the record's own proceedings id `own` (`urls.native` read
+    `own` from it), when that prefix still names `own`; else None. Its length is the id's position, so only the id
+    itself (TASK-281) bounds it. An `iclr_archive` id hashes the whole URL and is never `urls.native`'s, so no prefix
+    names it."""
+    tail = own.split("-", 2)[2] if own.startswith("pmlr-") else own.split("-", 1)[1]
+    at = url.lower().find(tail.lower())
+    prefix = url[: at + len(tail)] if at >= 0 else None
+    return prefix if prefix is not None and _names(c, prefix)[0] == own else None
+
+
 def _claim(c: Claim, own: str | None = None) -> Claim:
     """`c` under every cap: its title or abstract (`cap`), its value or each item of it (`FIELD_CAPS`), its url and
     its evidence, flagged in its evidence (`c` itself when nothing changes). `own` is the record's own proceedings
-    id: a URL that names it whole is kept whole when a cut would stop it naming it (decision-053). That is decided
-    from the value and the id alone, so no text a source writes can claim it."""
+    id: a URL the id was read from, which a cut at the cap would unname, is cut just past the id instead
+    (`_own_prefix`, decision-053). That is decided from the value and the id alone, so no text a source writes can
+    claim it."""
     value, url, notes, said = c.value, c.url, [], []
     if c.field in CAPPED and isinstance(value, str):
         value, note = cap(c.field, value)
@@ -319,9 +331,13 @@ def _claim(c: Claim, own: str | None = None) -> Claim:
     if most is not None and isinstance(value, str) and (kept := cut(value, most)) is not None:
         whole = _names(c, value)
         if c.field in _URL_SLOTS and _names(c, kept) != whole:  # its prefix names another paper, or none
-            if own is not None and own in (whole[0], whole[-1]):  # the record's own id was read from it
-                if _KEPT not in _cut_parts(c):  # flagged once: a second pass (after the fills) adds nothing
-                    said.append(f"value of {len(value):,} characters {_KEPT}")
+            if own is not None and (to_own := _own_prefix(c, value, own)) is not None:
+                if to_own != value:
+                    said.append(f"{_VALUE_CUT}{len(value):,} to {len(to_own):,} characters, {_OWN}")
+                    value = to_own
+                # it ends at the id: kept whole, still a valid link, and flagged once (not again on a second pass)
+                elif _OWN not in _cut_parts(c):
+                    said.append(f"value of {len(value):,} characters kept, {_OWN}")
             else:
                 said += [f"{_VALUE_CUT}{len(value):,} to {len(kept):,} characters", _UNREAD]
                 value = kept

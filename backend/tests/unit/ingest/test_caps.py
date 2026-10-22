@@ -32,6 +32,7 @@ from openproceedings.ingest.caps import (
     MAX_URL,
     MAX_VENUE_ID,
     TRIMMED,
+    _own_prefix,
     cap,
     cap_marks,
     cap_record,
@@ -704,26 +705,51 @@ def _pmlr(page: str, *more: Claim) -> PaperRecord:
     )  # fmt: skip
 
 
-_KEPT = "kept whole, as it names its own record"
+_OWN = "just past the record id it names"
 
 
-def test_a_listing_whose_own_page_url_a_cut_would_unname_keeps_it_whole_and_builds() -> None:
-    # the id was read from the whole URL; a cut would name another key, so the URL is kept whole (as before the caps),
-    # flagged, and still names the record: dedup's self-naming check passes (decision-053)
-    page = "https://proceedings.mlr.press/v235/" + "k" * (MAX_URL + 10) + ".html"
+def test_a_listing_whose_own_page_url_a_cut_would_unname_is_cut_just_past_its_id_and_builds() -> None:
+    # the id was read from the URL; a cut at the cap would name another key, so the cut falls just past the id instead:
+    # the URL still names the record (dedup's self-naming check passes) and is as long as the id, no more (decision-053)
+    key = "k" * (MAX_URL + 10)
+    page = f"https://proceedings.mlr.press/v235/{key}.html"
     out = cap_record(_pmlr(page))
     [c] = out.claims("urls.proceedings")
-    assert c.value == page and out.urls.proceedings == page and is_trimmed(out)
-    assert c.evidence == f"listing ({CUT} value of {len(page):,} characters {_KEPT})"
-    assert not cut_identifier(c) and not unread_identifier(c)
+    assert c.value == f"https://proceedings.mlr.press/v235/{key}" and out.urls.proceedings is None
+    assert (
+        c.evidence
+        == f"listing ({CUT} value cut from {len(page):,} to {len(str(c.value)):,} characters, {_OWN})"
+    )
+    assert cut_identifier(c) and not unread_identifier(c) and is_trimmed(out)
     assert proceedings_ids(out.provenance) == {out.native} and is_listing(out)
     assert list(dedup([out]).records) == [out] and cap_record(out) is out
 
 
-def test_an_ojs_listing_whose_own_page_url_is_kept_whole_is_a_listing_by_its_own_id() -> None:
+def test_a_url_that_ends_at_its_own_id_past_the_cap_is_kept_and_flagged_once() -> None:
+    page = "https://proceedings.mlr.press/v235/" + "k" * (MAX_URL + 10)
+    out = cap_record(_pmlr(page))
+    [c] = out.claims("urls.proceedings")
+    assert (
+        c.value == page and out.urls.proceedings == page and not cut_identifier(c)
+    )  # whole: still a valid link
+    assert c.evidence == f"listing ({CUT} value of {len(page):,} characters kept, {_OWN})" and is_trimmed(out)
+    assert cap_record(out) is out and list(dedup([out]).records) == [out]
+
+
+def test_an_identifying_url_never_passes_its_cap_by_more_than_its_id() -> None:
+    # junk after the id (a PMLR path may go on past the key) is cut away: no URL is kept past the id it names
+    key = "k" * (MAX_URL + 10)
+    page = (
+        f"https://proceedings.mlr.press/v235/{key}/" + "j" * (20 * MAX_URL) + f"/{key}"
+    )  # the id spelled twice
+    [c] = cap_record(_pmlr(page)).claims("urls.proceedings")
+    assert c.value == f"https://proceedings.mlr.press/v235/{key}" and len(str(c.value)) < len(key) + 40
+
+
+def test_an_ojs_listing_whose_own_page_url_is_cut_past_its_id_is_a_listing_by_it() -> None:
     # ojs is no proceedings source, so only its own id makes it a listing (`is_listing`, the cluster's ids)
     article = "7" * (MAX_URL + 10)
-    page = f"https://ojs.aaai.org/index.php/AAAI/article/view/{article}"
+    page = f"https://ojs.aaai.org/index.php/AAAI/article/view/{article}/99"  # a galley link past the id
     ojs = {"source": "ojs", "evidence": "dc:identifier"}
     r = record(
         id=f"op:aaai:2020:ojs-{article}", venue="AAAI", year=2020, venue_id_raw=None, keywords=(),
@@ -737,7 +763,8 @@ def test_an_ojs_listing_whose_own_page_url_is_kept_whole_is_a_listing_by_its_own
     )  # fmt: skip
     out = cap_record(r)
     [c] = out.claims("urls.proceedings")
-    assert c.value == page and _KEPT in (c.evidence or "") and proceedings_ids(out.provenance) == {out.native}
+    assert c.value == page.removesuffix("/99") and _OWN in (c.evidence or "")
+    assert proceedings_ids(out.provenance) == {out.native}
     assert is_listing(out)
     cluster = _cluster([out])
     assert cluster.proceedings_ids == {out.native} and cluster.listed and cluster.crawled
@@ -754,19 +781,20 @@ def test_a_cut_url_that_named_another_paper_does_not_name_this_one() -> None:
     other = "https://proceedings.mlr.press/v235/" + "k" * (MAX_URL + 10) + ".html"
     r = _pmlr("https://proceedings.mlr.press/v235/own24a.html", claim("urls.pdf", other, source="pmlr"))
     [c] = cap_record(r).claims("urls.pdf")
-    assert unread_identifier(c) and c.value != other and _KEPT not in (c.evidence or "")
+    assert unread_identifier(c) and _OWN not in (c.evidence or "")
 
 
-def test_no_text_a_source_writes_keeps_a_url_whole() -> None:
+def test_no_text_a_source_writes_makes_a_record_name_an_id() -> None:
     # the rule is the value and the record's id, never evidence: a forum record's evidence that reads like the note
     # changes nothing (the round-2 forgery), and a forum id is never a proceedings id
-    forged = f"scholarmend:openreview_api venueid=X ({CUT} value of 9 characters {_KEPT})"
+    forged = f"scholarmend:openreview_api venueid=X ({CUT} value cut from 9 to 9 characters, {_OWN})"
     r = record(provenance=(claim("venue_id_raw", "ICLR.cc/2024/Conference", source="ris", evidence=forged),))
     assert not is_listing(r) and proceedings_ids(r.provenance) == set()
 
 
-def test_an_iclr_archive_record_whose_own_target_a_cut_would_unname_keeps_it_whole() -> None:
-    # its id hashes the whole target, so any cut names another id: the target that named the record is kept whole
+def test_an_iclr_archive_record_whose_own_target_is_cut_is_unread_and_still_builds() -> None:
+    # its id hashes the whole target, so no prefix names it: the target is cut and unread like any other (never kept
+    # past the cap), and dedup takes the record as standing for itself, as it did whole
     target = "https://arxiv.org/abs/1412.6980?" + "q" * MAX_URL
     found = urls.iclr_archive_target(target)
     assert found is not None
@@ -781,10 +809,52 @@ def test_an_iclr_archive_record_whose_own_target_a_cut_would_unname_keeps_it_who
         ),
     )  # fmt: skip
     out = cap_record(r)
-    assert out.claims("urls.proceedings")[0].value == target and proceedings_ids(out.provenance) == {
-        out.native
-    }
+    [c] = out.claims("urls.proceedings")
+    assert len(str(c.value)) <= MAX_URL and unread_identifier(c) and proceedings_ids(out.provenance) == set()
     assert list(dedup([out]).records) == [out]
+
+
+def test_only_an_iclr_archive_claim_lets_a_record_stand_for_itself_unread() -> None:
+    # the same unread target claimed by another source (an import can write any evidence) doesn't
+    target = "https://arxiv.org/abs/1412.6980?" + "q" * MAX_URL
+    found = urls.iclr_archive_target(target)
+    assert found is not None
+    ris = {"source": "ris", "evidence": "mended.ris:UR"}
+    unread = "https://openreview.net/forum?pad=" + "p" * (MAX_URL - 43) + "&id=Other12345" + "6" * 20
+    r = record(
+        id=f"op:iclr:2015:{found[0]}", year=2015, venue_id_raw=None, keywords=(), urls=Urls(proceedings=unread),
+        provenance=(
+            claim("urls.proceedings", unread, **ris), claim("title", "Trust Calibration in LLMs", **ris),
+            claim("venue", "ICLR", **ris), claim("year", 2015, **ris), claim("track", "main", **ris),
+            claim("status", "accepted", **ris), claim("authors", ("A. Author", "B. Author"), **ris),
+            claim("abstract", "We study trust.", **ris),
+        ),
+    )  # fmt: skip
+    with pytest.raises(ValueError, match="must name itself"):
+        dedup([cap_record(r)])
+
+
+def test_only_an_iclr_archive_id_stands_for_itself_by_an_unread_archive_target() -> None:
+    # a PMLR listing that doesn't name itself is refused, whatever unread archive target it carries
+    target = "https://arxiv.org/abs/1412.6980?" + "q" * MAX_URL
+    r = _pmlr("https://proceedings.mlr.press/v235/own24a.html")
+    r = r.model_copy(update={"urls": Urls(), "provenance": (
+        *(c for c in r.provenance if c.field != "urls.proceedings"),
+        claim("urls.proceedings", target, source="iclr_archive", evidence="archive"),
+    )})  # fmt: skip
+    out = cap_record(r)
+    assert unread_identifier(out.claims("urls.proceedings")[0])
+    with pytest.raises(ValueError, match="must name itself"):
+        dedup([out])
+
+
+def test_a_prefix_is_kept_only_where_it_names_the_records_own_id() -> None:
+    # the id's text first appears in the host here, where a prefix names nothing: no prefix is kept
+    c = claim("urls.proceedings", "x", source="pmlr")
+    assert _own_prefix(c, "https://abc.example.org/v235/abc", "pmlr-v235-abc") is None
+    assert _own_prefix(c, "https://proceedings.mlr.press/v235/abc/x", "pmlr-v235-abc") == (
+        "https://proceedings.mlr.press/v235/abc"
+    )
 
 
 def test_a_cut_iclr_archive_target_never_reads_as_its_id() -> None:
