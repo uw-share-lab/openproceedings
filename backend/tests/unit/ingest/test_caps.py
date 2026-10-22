@@ -861,6 +861,26 @@ def test_a_page_with_a_tail_of_symbols_keeps_its_page_and_its_track_token() -> N
     assert is_creative_ai(r) and is_creative_ai(out)
 
 
+@pytest.mark.parametrize("over", [0, 1])
+def test_a_page_keeps_its_own_text_up_to_the_cap_and_is_rebuilt_past_it(over: int) -> None:
+    head = f"https://proceedings.neurips.cc/paper_files/paper/2024/hash/{_HASH}-Abstract-T"
+    page = head + "x" * (MAX_URL - len(head) - len(".html") + over) + ".html"
+    out = cap_record(_listing(f"op:neurips:2024:nips-{_HASH}", "NeurIPS", 2024, "urls.proceedings", page + "?" + "&" * 99,
+                              "neurips_proceedings"))  # fmt: skip
+    [c] = out.claims("urls.proceedings")
+    rebuilt = f"https://proceedings.neurips.cc/paper_files/paper/2024/hash/{_HASH}-Abstract.html"
+    assert c.value == (page if not over else rebuilt)
+
+
+def test_a_cut_that_leaves_what_a_url_names_keeps_its_prefix() -> None:
+    page = f"https://proceedings.neurips.cc/paper_files/paper/2024/hash/{_HASH}-Abstract-Conference.html"
+    whole = page + "?q=" + "a" * MAX_URL
+    out = cap_record(_listing(f"op:neurips:2024:nips-{_HASH}", "NeurIPS", 2024, "urls.proceedings", whole,
+                              "neurips_proceedings"))  # fmt: skip
+    [c] = out.claims("urls.proceedings")
+    assert c.value == whole[:MAX_URL] and not unread_identifier(c)  # a prefix: the query cut, the page whole
+
+
 def test_a_rebuilt_page_never_reads_as_creative_ai_where_the_whole_did_not() -> None:
     whole = f"https://proceedings.neurips.cc/paper_files/paper/2023/hash/{_HASH}-Abstract-Creative_AI_Track{'x' * MAX_URL}.html"
     nips = {"source": "neurips_proceedings", "evidence": "listing"}

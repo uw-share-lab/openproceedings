@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-21 23:01'
-updated_date: '2026-10-22 07:51'
+updated_date: '2026-10-22 08:09'
 labels:
   - ingest
   - security
@@ -53,4 +53,6 @@ Automated security review (coordinator, after round 2): keeping a self-naming UR
 Review round 3: cutting a self-naming URL just past its id failed where a page's form goes on past the id (NeurIPS/ICLR track token, PMLR GitHub asset; build abort), let leading zeros past the cap, and didn't check the whole URL named the id. Replaced by caps._own_page: the id's canonical page rebuilt per form from the parsed id, kept only if it names the same id. The iclr_archive exception now also keeps the record's own id among its cluster's proceedings ids (the two-ids guard). Tests for each case.
 
 Review round 4: a page with a tail of symbols only was cut inside .html and rebuilt without its Creative AI token; now a page first drops its query/params/fragment when that fits and names all the whole did (caps._page_only), and only a page whose path is past the cap is rebuilt. Tests now cover every rebuild form (dblp ICML/AAAI, OJS AIES/IASEAI, doi.org/dx/percent-encoded DOI, upper-case host), the own-id guard, and the archive id kept in its cluster by native. The D&B round in the rebuild was unreachable and removed. Docs: the Reserved bullet now says what a forged unread note could do and why no claim can carry one.
+
+Review round 5: no Must; QA's Should (the own-id guard in _own_page untestable beside the final check) fixed by removing the early guard (the page is built from what the URL names, so the final check names-own test is the guard); tests pin the page-only length boundary and that a cut leaving what a URL names keeps its prefix. Docs: a forged cut note also lists the record as trimmed; the tail step named before the rebuild.
 <!-- SECTION:NOTES:END -->

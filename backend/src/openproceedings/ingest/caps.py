@@ -318,8 +318,6 @@ def _own_page(c: Claim, url: str, own: str) -> str | None:
     `proceedings.mlr.press/v<N>/<key>.html`, a dblp record page, an OJS article on its journal, a doi.org link. Kept
     only if it names `own` too. An `iclr_archive` id hashes the whole URL and is never `urls.native`'s, so nothing is
     built for it."""
-    if _names(c, url)[0] != own:  # only a URL the record's own id was read from (never another paper's)
-        return None
     parsed = urlparse(url)
     page: str | None = None
     # a NeurIPS or ICLR page's path is fixed but for its track token, so only a long token gets here; the 2021 D&B
@@ -336,6 +334,7 @@ def _own_page(c: Claim, url: str, own: str) -> str | None:
         page = f"https://ojs.aaai.org/index.php/{parsed.path.split('/')[2]}/article/view/{article}"
     elif (doi := urls.acm_doi(url)) is not None:
         page = f"https://doi.org/{doi}"
+    # built from what `url` names, so it names `own` exactly when `url` does: never another paper's page
     return page if page is not None and _names(c, page)[0] == own else None
 
 
@@ -346,7 +345,7 @@ def _page_only(c: Claim, url: str, most: int) -> str | None:
     into the page (a tail of only symbols would cut inside `.html`)."""
     parsed = urlparse(url)
     page = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
-    return page if page != url and _length(page) <= most and _names(c, page) == _names(c, url) else None
+    return page if _length(page) <= most and _names(c, page) == _names(c, url) else None
 
 
 def _claim(c: Claim, own: str | None = None) -> Claim:
