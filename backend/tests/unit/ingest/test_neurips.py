@@ -789,3 +789,15 @@ def test_a_listing_counts_the_abstracts_that_lost_a_control_character(
     seed_2013(plain)
     [clean] = mine(plain, 2013).reports
     assert clean.abstract_control_characters == 0 and "abstract_control_characters" not in clean.to_manifest()
+
+
+@pytest.mark.parametrize(
+    ("count", "stated"), [("1,234", 1234), ("9" * 16, int("9" * 16)), ("9" * 17, None), ("9" * 5_000, None)]
+)
+def test_a_stated_count_past_sixteen_characters_states_none(count: str, stated: int | None) -> None:
+    # never `int` past Python's 4,300-digit limit: a count that long is no count, so the listing is checked without one
+    page = f"<span class='paper-count'>{count} papers</span><ul class='paper-list'></ul>"
+    assert (
+        neurips.parse_year_index(page, "https://proceedings.neurips.cc/paper_files/paper/2025/").stated
+        == stated
+    )

@@ -543,6 +543,17 @@ def listing_year(year: str, host: str | None = None) -> Callable[[Entries], None
             pmlr_urls("https://proceedings.mlr.press/v" + "9" * 5_000 + "/a23a.html"),
             "no_id",
         ),
+        # a volume claim of 5,000 zeros then an ICML volume names that volume, read without `int` meeting the limit; its
+        # URL names no paper, so the entry is skipped, never an aborted file
+        (
+            "a zero-padded PMLR volume",
+            pmlr_urls("https://proceedings.mlr.press/v" + "0" * 5_000 + "202/"),
+            "unresolved",
+        ),
+        # `²` is a digit to `str.isdigit` but not to `int`: no volume, never an aborted file
+        ("a PMLR volume of a non-ASCII digit", pmlr_urls("https://proceedings.mlr.press/v²/"), "no_id"),
+        # an evidence URL `urlparse` refuses names no listing: skipped, never an aborted file
+        ("a PMLR URL urlparse refuses", pmlr_urls("http://[x/v202/a23a.html"), "unresolved"),
         ("a venueid of another conference", set_venueid("AAAI.org/2025/Workshop/X"), "out_of_scope"),
         ("a malformed in-scope venueid", set_venueid("ICML.cc/2026//X"), "unresolved"),
         ("a venueid without a forum id", lambda e: e[1]["claims"].pop(0), "no_id"),
@@ -559,6 +570,15 @@ def test_records_that_cannot_be_imported(
     _, report = run(tmp_path, edit)
     assert report.skipped[reason] == 1 + {"out_of_scope": 2, "unresolved": 2, "no_id": 1}.get(reason, 0)
     assert report.imported == 5
+
+
+def test_a_proceedings_url_urlparse_refuses_is_skipped_never_an_aborted_file(tmp_path: Path) -> None:
+    (tmp_path / "base").mkdir()
+    _, base = run(tmp_path / "base", lambda _e: None)
+    _, report = run(tmp_path, dbhost("datasets_and_benchmarks", "http://[x/paper/2021/hash/a"))
+    # the entry's proceedings claims cite no address it can read, so it is skipped as unresolved
+    assert report.skipped == {**base.skipped, "unresolved": base.skipped["unresolved"] + 1}
+    assert report.imported == base.imported - 1
 
 
 def listed(year: str, track: str) -> Callable[[Entries], None]:

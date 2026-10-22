@@ -445,7 +445,7 @@ the archive) and `OpenAlex` (decision-049, milestone C: an abstract filled from 
   | JSONL | `abstract_source`: `{source, origin, url}` (the `/search` hit's object) or null; `abstract_withheld`: a boolean | `"abstract_source": {"origin": "pmlr", "source": "pmlr", "url": "https://proceedings.mlr.press/v202/okafor23a.html"}, "abstract_withheld": false` |
 
   TASK-136 appends one more CSV column and JSONL key, `abstract_withheld_reason` (below, **Withheld by a
-  takedown**). Milestone C appends the last CSV column, `abstract_kind` (`official`, `openalex` or `none`; JSONL the
+  takedown**). Milestone C appends a CSV column, `abstract_kind` (last until decision-054 appended `lists_cut`) (`official`, `openalex` or `none`; JSONL the
   same key on every record), read from the index's display record; a withheld record's is `none` in both, as in a
   hit and a paper. An OpenAlex abstract's `abstract_source` is `openalex` and its `abstract_origin` is `openalex`.
 
@@ -533,15 +533,18 @@ the archive) and `OpenAlex` (decision-049, milestone C: an abstract filled from 
 
   | Format | Carries it as |
   |---|---|
-  | RIS | one more `N1`, right after the status sentence (so the provenance line stays the last `N1`): `Author list cut: the first 500 of the 612 authors its source lists are given (decision-054).` (`export.authors_cut`). RIS has no tag for "and others", and an `AU  - et al.` line would be imported as an author (ris-format skill: never a sentinel `AU`), so a note says it |
+  | RIS | one more `N1`, right after the status sentence (so the provenance line stays the last `N1`): `Author list cut: only the first 500 of the 612 authors listed by its source are given (decision-054).` (`export.authors_cut`). RIS has no tag for "and others", and an `AU  - et al.` line would be imported as an author (ris-format skill: never a sentinel `AU`), so a note says it |
   | BibTeX | `and others` after the last kept author in `author` (BibTeX's own et al.; a real author named `others` stays braced) |
   | CSV | a column `lists_cut`, appended last (after `abstract_kind`): `authors 612`, `keywords 250`, or both joined by `; `; empty for every other record |
   | JSONL | a key `lists_cut`, only on such a record: `{"authors": 612}` |
 
   RIS and BibTeX export no record keywords, so a cut keyword list shows in CSV and JSONL only. Additive under
   decision-021: every other record exports byte for byte as before in RIS, BibTeX and JSONL; CSV gains the one
-  empty cell. An export whose snapshot can't be verified names no cut list, as it names no twins. No record of
-  snapshot 2026-10-16-03eab0ef56c4 has one (at most 95 authors and 54 keywords).
+  empty cell. An export whose snapshot can't be verified names no cut list, as it names no twins, so its author
+  lists may be cut without a mark (check `X-Abstract-Source: unavailable`, as for abstracts). Covidence shows
+  screeners no `N1`, so a Covidence review should read the CSV's `lists_cut` (or JSONL's) before import, and report
+  in its methods any record whose author list was cut. No record of snapshot 2026-10-16-03eab0ef56c4 has one (at
+  most 95 authors and 54 keywords).
 - **`TY` is `CPAPER`, not `JOUR`** (task-004). Every exported paper is a conference paper. Zotero's RIS
   translator (`RIS.js`, 2026-01-05) imports `CPAPER` as `conferencePaper` and puts `T2` in its
   `conferenceName`; a `JOUR` would become a `journalArticle` with the conference in `publicationTitle`.

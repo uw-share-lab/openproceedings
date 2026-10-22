@@ -47,13 +47,15 @@ A record keeps its first 500 authors (`caps.MAX_AUTHORS`) and its first 200 keyw
   | Format | A cut author list | A cut keyword list |
   |---|---|---|
   | BibTeX | `and others` after the last kept author (BibTeX's own "et al.") | (keywords aren't exported) |
-  | RIS | one `N1  - Author list cut: the first 500 of the <m> authors its source lists are given (decision-054).`, after the status sentence. Not an `AU` line: RIS has no "et al." tag, and Covidence would import one as an author | (keywords aren't exported) |
+  | RIS | one `N1  - Author list cut: only the first 500 of the <m> authors listed by its source are given (decision-054).`, after the status sentence. Not an `AU` line: RIS has no "et al." tag, and Covidence would import one as an author | (keywords aren't exported) |
   | CSV | last column `lists_cut`: `authors <m>`, `authors <m>; keywords <k>`, or empty | likewise |
   | JSONL | `lists_cut` (`{"authors": <m>}`), only on a record with a cut list | likewise |
 
-  When the snapshot can't be verified, no list is named cut (as for twins, TASK-162).
+  When the snapshot can't be verified, no list is named cut (as for twins, TASK-162), so such an export's author lists
+  may be cut without a mark; it says `X-Abstract-Source: unavailable`. Covidence shows screeners no `N1`, so a
+  Covidence review reads the CSV's `lists_cut` before import (spec 04 §Exports, the prisma-reporting skill).
 - **Only the note's own form counts.** `listed_total` answers only for a list exactly at the cap whose note says it
-  kept exactly the cap of more. Evidence that merely reads like the note says nothing of a shorter list.
+  kept exactly the cap, of more values than that. Evidence that merely reads like the note says nothing of a shorter list.
 - **Reserved.** No miner or importer may end a list claim's evidence with the `COUNT` note. A forged one could only
   add `and others` to a record whose list is exactly at the cap, and list it in `trimmed`. None can today: every
   source's authors and keywords evidence ends in fixed text, or (an OpenReview v1 author list it split) in the raw value
@@ -80,6 +82,6 @@ A record keeps its first 500 authors (`caps.MAX_AUTHORS`) and its first 200 keyw
   format, and the record keeps the first names in the source's order, so the first author (the BibTeX key's) is
   unchanged.
 - **Docs.** Spec 01 (§Record schema, §Pipeline 2, §5's `trimmed`), spec 04 (§Exports), the record-schema,
-  bibtex-format, ris-format, api-contract, snapshots and logging-standards skills, and `CLAUDE.md` (`caps.py`).
+  bibtex-format, ris-format, api-contract, prisma-reporting, snapshots and logging-standards skills, and `CLAUDE.md` (`caps.py`).
   decision-053 is extended, not superseded: its "Not capped: the number of authors or keywords" no longer holds.
 - **Revisit** if a real source comes within 2× of a cap (a record of 250 authors or 100 keywords).

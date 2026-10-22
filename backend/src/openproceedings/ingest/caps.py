@@ -412,9 +412,8 @@ def _claim(c: Claim, own: str | None = None) -> Claim:
             said.append(f"{_VALUE_CUT}{len(value):,} to {len(kept):,} characters")
             value = kept
     elif most is not None and isinstance(value, tuple):
-        if (keep := LIST_CAPS.get(c.field)) is not None and len(
-            value
-        ) > keep:  # the list first, then its items
+        # the list first, then its items
+        if (keep := LIST_CAPS.get(c.field)) is not None and len(value) > keep:
             notes.append(f"{COUNT} kept the first {keep:,} of {len(value):,} values")
             value = value[:keep]
         value, n = _items(value, most)
@@ -505,7 +504,8 @@ def is_trimmed(record: PaperRecord) -> bool:
     return any(
         _CUT_NOTE.search(c.evidence or "")
         or (c.field in CAPPED and _NOTE.search(c.evidence or ""))
-        or (c.field in LIST_CAPS and _COUNT_NOTE.search(c.evidence or ""))
+        or listed_total(c.field, c.value, c.evidence)
+        is not None  # the rule the exports read, so the two agree
         for c in record.provenance
     )
 

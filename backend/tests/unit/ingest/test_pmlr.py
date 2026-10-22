@@ -530,3 +530,14 @@ def test_a_key_past_the_native_id_bound_is_skipped_and_counted_as_invalid(
     result = mine(tmp_path, 28)
     assert result.report.skipped["invalid"] == (0 if built else 1)
     assert (f"op:icml:2013:pmlr-v28-{key}" in {r.id for r in result.records}) is built
+
+
+@pytest.mark.parametrize(
+    ("number", "read"),
+    [("9" * 12, int("9" * 12)), ("0" * 5_000 + "235", 235), ("9" * 13, None), ("9" * 5_000, None)],
+)
+def test_a_volume_heading_reads_at_most_twelve_digits(number: str, read: int | None) -> None:
+    # decision-055: a volume number past 12 digits (leading zeros aside) is no heading, so `mine_volume` reports
+    # `heading_mismatch`, never a bare ValueError from `int` past Python's 4,300-digit limit
+    found = pmlr.heading(f"<h1>Volume {number}: International Conference</h1>")
+    assert found == (None if read is None else (read, "International Conference"))

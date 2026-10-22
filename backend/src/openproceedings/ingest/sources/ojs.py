@@ -225,14 +225,16 @@ def _token(listing: ET.Element) -> Token | None:
 
 
 def _number(digits: str, what: str) -> int:
-    """`digits` (a run of ASCII digits) as an int, when it holds at most `MAX_NATIVE_DIGITS` (decision-055): an article
-    id longer than that could be no record's `ojs-` id (a volume is held to the same bound), and past Python's
-    4,300-digit limit `int` would raise a bare ValueError that aborts the harvest unexplained. A longer one is a
-    CrawlError, `oai_unreadable`, as a header with no article id is."""
-    if len(digits) > MAX_NATIVE_DIGITS:
-        raise CrawlError(f"an OAI-PMH record's {what} has {len(digits):,} digits, more than the {MAX_NATIVE_DIGITS} a "
-                         f"native id's number may hold (decision-055): {digits[:20]}…", reason="oai_unreadable")  # fmt: skip
-    return int(digits)
+    """`digits` (a run of ASCII digits) as an int, when it holds at most `MAX_NATIVE_DIGITS` past leading zeros
+    (decision-055, as `urls` reads the same number from a URL): an article id longer than that could be no record's
+    `ojs-` id (a volume is held to the same bound), and past Python's 4,300-digit limit `int` would raise a bare
+    ValueError that aborts the harvest unexplained. A longer one is a CrawlError, `oai_unreadable`, as a header with
+    no article id is."""
+    significant = digits.lstrip("0") or "0"
+    if len(significant) > MAX_NATIVE_DIGITS:
+        raise CrawlError(f"an OAI-PMH record's {what} has {len(significant):,} digits, more than the {MAX_NATIVE_DIGITS} "
+                         f"a native id's number may hold (decision-055): {significant[:20]}…", reason="oai_unreadable")  # fmt: skip
+    return int(significant)
 
 
 def _header(header: ET.Element | None) -> OaiRecord:

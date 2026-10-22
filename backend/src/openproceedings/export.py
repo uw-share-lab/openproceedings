@@ -129,9 +129,8 @@ _SOURCE = "abstract_source"  # the key `entries` adds to each record it hands a 
 _WITHHELD = "abstract_withheld"  # likewise: True when the record's abstract is withheld
 _REASON = "abstract_withheld_reason"  # likewise: why (`WITHHELD_REASONS`), None when it isn't
 _TWINS = "twins"  # likewise: the record's twins' ids, () when it has none (TASK-162)
-_CUT = (
-    "lists_cut"  # likewise: each list the ingest caps cut → how many values its source listed ({} for most)
-)
+# likewise: each list the ingest caps cut → how many values its source listed ({} for most)
+_CUT = "lists_cut"
 
 # what a record says when its abstract is withheld (decision-021): RIS `N1`, BibTeX `abstract_withheld`
 WITHHELD = (
@@ -152,7 +151,7 @@ WITHHELD_REASONS = tuple(SENTENCES)
 def authors_cut(kept: int, total: int) -> str:
     """What a record whose author list the ingest caps cut says of it (RIS `N1`; decision-054): RIS has no tag for
     "and others", and an `AU` line that isn't a person would be imported as one, so a note says it instead."""
-    return f"Author list cut: the first {kept:,} of the {total:,} authors its source lists are given (decision-054)."
+    return f"Author list cut: only the first {kept:,} of the {total:,} authors listed by its source are given (decision-054)."
 
 
 def see_also(twins: tuple[str, ...]) -> str:
@@ -350,9 +349,8 @@ def _ris(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         lines += [("ID", r["id"]), ("KW", r["track"]), ("KW", f"status:{status}")]
         if status != "accepted":
             lines.append(("N1", _not_accepted(venue_name(r["venue"], r["year"]), status)))
-        if (
-            total := (r.get(_CUT) or {}).get("authors")
-        ) is not None:  # after the status sentence (decision-054)
+        # after the status sentence (decision-054)
+        if (total := (r.get(_CUT) or {}).get("authors")) is not None:
             lines.append(("N1", authors_cut(len(r.get("authors") or ()), total)))
         if r.get(_TWINS):  # after the status sentence, before the abstract's line (TASK-162)
             lines.append(("N1", see_also(r[_TWINS])))
@@ -533,9 +531,8 @@ def _bibtex(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         # each name brace-free before it's protected, so one stray brace can't unbrace the others
         # (and no trailing backslash, which would escape the brace `_name` may close it with)
         names = [_name(n) for n in (_debraced(a).rstrip("\\ ") for a in r.get("authors") or []) if n]
-        if names and "authors" in (
-            r.get(_CUT) or {}
-        ):  # the list the ingest caps cut: BibTeX's et al. (decision-054)
+        # the list the ingest caps cut: BibTeX's et al. (decision-054)
+        if names and "authors" in (r.get(_CUT) or {}):
             names.append("others")
         if names:
             fields.append(("author", _braced(" and ".join(names))))
@@ -596,9 +593,8 @@ def _jsonl(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         row = {
             **{k: v for k, v in r.items() if k not in (_TWINS, _CUT)},
             **({_TWINS: list(r[_TWINS])} if r.get(_TWINS) else {}),  # only on a record with a twin (TASK-162)
-            **(
-                {_CUT: dict(r[_CUT])} if r.get(_CUT) else {}
-            ),  # only on a record with a cut list (decision-054)
+            # only on a record with a cut list (decision-054)
+            **({_CUT: dict(r[_CUT])} if r.get(_CUT) else {}),
             # only on a submission-time abstract (TASK-210)
             **({"abstract_note": source.note} if source is not None and source.note is not None else {}),
             _SOURCE: None

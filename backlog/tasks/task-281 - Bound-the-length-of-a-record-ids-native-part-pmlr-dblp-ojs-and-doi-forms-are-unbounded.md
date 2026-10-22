@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-22 06:01'
-updated_date: '2026-10-22 19:35'
+updated_date: '2026-10-22 20:11'
 labels:
   - ingest
   - security
@@ -43,4 +43,6 @@ Follow-up from the TASK-279 security review. The native part of a record id is v
 
 <!-- SECTION:NOTES:BEGIN -->
 decision-055 (owner, 2026-10-22): MAX_NATIVE_KEY=200 (pmlr, dblp keys), MAX_NATIVE_DIGITS=12 (ojs id, pmlr volume, each side of doi-<toc>.<n>; acm_table.DOI_DIGITS the same). RECORD_SCHEMA_VERSION 9 -> 10; test_combined_snapshot.FILES_HASH re-pinned (SNAPSHOT_HASH unchanged). sources/ojs._number raises CrawlError(oai_unreadable) before int(); urls.pmlr/ojs_article and ris._int read at most 12 digits past leading zeros. Tests at the bound and one past it per form (test_record.py) and per crawler (pmlr, dblp ICML, dblp AAAI, RIS, OJS, Crossref, urls). caps: decision-053's 'kept whole' own-page branch removed (a bounded id's page always fits). Read-only check: all 173,518 records of 2026-10-16-03eab0ef56c4 validate at schema 10; longest id 53.
+
+Review round 1: ris._int converts the zero-stripped digits (a zero-padded volume no longer reaches int's limit); ojs._number counts digits after leading zeros like urls; pmlr._VOLUME_PREFIX and neurips._COUNT bounded; ris._readable skips an evidence URL urlparse refuses.
 <!-- SECTION:NOTES:END -->

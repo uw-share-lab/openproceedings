@@ -63,13 +63,16 @@ PMLR or dblp key at most 200 characters (`MAX_NATIVE_KEY`), an OJS article id, a
 imports that module); a forum id 4–64 characters, a `nips-`/`iclr-` hash 32 hex digits. The longest id in
 2026-10-16-03eab0ef56c4 is 53 characters (its parts: a dblp key of 30, a PMLR key of 25, 7 digits on each side of a
 DOI, 5 of an OJS id, 3 of a PMLR volume). A record past a bound is invalid, so its crawler refuses the entry as it
-refuses any invalid one: PMLR and dblp ICML skip and count it (`skipped.invalid`), the RIS importer skips it
+refuses any invalid one: PMLR and dblp ICML skip and count it (`skipped.invalid`, listed by `op eval coverage`), the RIS importer skips it
 (`unresolved`; a PMLR volume past 12 digits names no volume, `no_id`), dblp AAAI and Crossref stop
 (`invalid_record`; a DOI past the bound is `odd_doi`), and `sources/ojs.py` stops on an OAI-PMH article id or volume
-past 12 digits (`oai_unreadable`, a `CrawlError` raised before `int`, never a bare `ValueError` past Python's
-4,300-digit limit). `urls.pmlr` and `urls.ojs_article` read a volume or article number only within 12 digits past
-leading zeros, so no URL names a number no id can hold. The model checks the form before reading a PMLR volume as an
-int.
+past 12 digits after leading zeros (`oai_unreadable`, a `CrawlError` raised before `int`, never a bare `ValueError`
+past Python's 4,300-digit limit). Every other reader of those numbers counts digits after leading zeros and reads at
+most 12, so none meets that limit: `urls.pmlr` and `urls.ojs_article` (no URL names a number no id can hold), the RIS
+importer's volume claim (`ris._int`; an evidence URL `urlparse` refuses is no listing, `ris._readable`), a PMLR
+page's `Volume N:` heading (`pmlr._VOLUME_PREFIX`: past 12 digits it is no heading, `heading_mismatch`), and a
+NeurIPS year page's stated count (`neurips._COUNT`, at most 16 characters, else none). The model checks the form
+before reading a PMLR volume as an int.
 
 When records merge (`.claude/skills/dedup-rules/SKILL.md`), the surviving id uses the OpenReview forum id
 if either side has one. A proceedings record's `urls.forum` claim (PMLR v235's link) is identity evidence

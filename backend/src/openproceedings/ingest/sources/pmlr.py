@@ -29,6 +29,7 @@ from pydantic import ValidationError
 
 from openproceedings.ingest import urls
 from openproceedings.ingest.record import (
+    MAX_NATIVE_DIGITS,
     Claim,
     ClaimField,
     ClaimValue,
@@ -62,7 +63,9 @@ HOST = "proceedings.mlr.press"
 HOSTS = frozenset({HOST})
 PROGRESS_SECONDS = 30.0
 
-_VOLUME_PREFIX = re.compile(r"Volume\s+([0-9]+)\s*:\s*")
+# a volume number of at most `MAX_NATIVE_DIGITS` digits past leading zeros, as every other reader of it (decision-055): a
+# longer one is no heading (the miner's `heading_mismatch`), never `int` past Python's 4,300-digit limit
+_VOLUME_PREFIX = re.compile(rf"Volume\s+0*([0-9]{{1,{MAX_NATIVE_DIGITS}}})\s*:\s*")
 
 
 def ingestable(number: int) -> Volume:
@@ -228,9 +231,14 @@ def mine_volume(
             record, missing, cleaned = _record(volume, native, entry, index, page)
         except (ValidationError, ValueError) as e:
             report.skipped["invalid"] += 1
-            log.debug(  # counted in the volume's one `listing_attention` WARNING
+            log.debug(  # counted in the volume's one `listing_attention` WARNING; a key past its bound can be any length
                 "pmlr_record_invalid",
-                extra={"volume": number, "native": native, "url": page.url, "error": type(e).__name__},
+                extra={
+                    "volume": number,
+                    "native": native[:80],
+                    "url": page.url[:200],
+                    "error": type(e).__name__,
+                },
             )
             continue
         records.append(record)

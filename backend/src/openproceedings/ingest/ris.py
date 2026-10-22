@@ -199,6 +199,16 @@ def _claims(entry: dict[str, Any], fld: str, source: str) -> list[dict[str, Any]
     return [c for c in entry["claims"] if c["field"] == fld and c["source"] == source]
 
 
+def _readable(url: str) -> bool:
+    """Whether `urlparse` reads `url` at all: one it refuses (`http://[x`, an unclosed IPv6 host) names no listing, so
+    its entry is skipped like any other that names none, never an aborted file."""
+    try:
+        urlparse(url)
+    except ValueError:
+        return False
+    return True
+
+
 def _listing(
     entry: dict[str, Any],
 ) -> tuple[str, int, str, Classification, tuple[str, str], list[str]] | str | None:
@@ -207,7 +217,7 @@ def _listing(
     proc = [
         (c, p)
         for c in entry["claims"]
-        if c["source"] == "proceedings_url"
+        if c["source"] == "proceedings_url" and _readable(c["evidence"])
         if (p := proceedings(c["evidence"]))
     ]
     if proc:
@@ -243,7 +253,10 @@ def _listing(
             return "unresolved"
         return (venue, year, native, classify_proceedings(track),
                 ("proceedings_url", url), sorted({c["evidence"] for c, _ in proc}))  # fmt: skip
-    parsed = [(c, pmlr(c["evidence"])) for c in _claims(entry, "pmlr_volume", "pmlr_url")]
+    parsed = [
+        (c, pmlr(c["evidence"]) if _readable(c["evidence"]) else None)
+        for c in _claims(entry, "pmlr_volume", "pmlr_url")
+    ]
     # an ICML volume, by the URL or (when the URL doesn't parse) by scholarmend's volume claim
     icml_claims = [(c, vk) for c, vk in parsed if (vk[0] if vk else _int(c["value"])) in ICML_PMLR_VOLUMES]
     icml = [(c["evidence"], vk) for c, vk in icml_claims if vk is not None]
@@ -266,7 +279,10 @@ def _int(value: object) -> int | None:
     so `int` never meets Python's digit limit or a non-ASCII digit (`²`); else None."""
     if not isinstance(value, str) or not value.isascii() or not value.isdigit():
         return None
-    return int(value) if len(value.lstrip("0")) <= MAX_NATIVE_DIGITS else None
+    digits = (
+        value.lstrip("0") or "0"
+    )  # `int` reads the digits alone: a run of zeros never meets the limit either
+    return int(digits) if len(digits) <= MAX_NATIVE_DIGITS else None
 
 
 def _url_fields(urls: list[str], source: str) -> tuple[tuple[ClaimField, str, str], ...]:

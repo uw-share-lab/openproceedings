@@ -69,7 +69,9 @@ FIRST_YEAR = 1987  # decision-047: the first NIPS (vocab.CONFERENCES); the site 
 OPENREVIEW_FROM = 2021  # OpenReview hosts NeurIPS from 2021 (v1), so the proceedings confirm from then on
 PROGRESS_SECONDS = 30.0
 
-_COUNT = re.compile(r"^([0-9][0-9,]*)\s+papers?$", re.I)
+# a stated count of at most 16 characters (`99,999,999,999`): a longer one states no count, never `int` past Python's
+# 4,300-digit limit (decision-055's reasoning)
+_COUNT = re.compile(r"^([0-9][0-9,]{0,15})\s+papers?$", re.I)
 
 
 def listing_urls(year: int) -> list[str]:

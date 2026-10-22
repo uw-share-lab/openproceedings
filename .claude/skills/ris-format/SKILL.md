@@ -72,7 +72,7 @@ record's own id stays in `ID`. An attributed ICLR 2017 copy (`unknown` status) w
 
 **Cut author list (decision-054, TASK-280).** The ingest caps keep a record's first 500 authors. A record whose list
 they cut (`RecordFile.lists_cut`) has one more `N1`, right after the status sentence (or first, for an accepted
-paper): `N1  - Author list cut: the first 500 of the 612 authors its source lists are given (decision-054).`
+paper): `N1  - Author list cut: only the first 500 of the 612 authors listed by its source are given (decision-054).`
 (`export.authors_cut`). RIS has no tag for "and others", and the `AU` rule above stands (never an `et al.` or `...`
 sentinel line, which Covidence, Zotero and EndNote would import as an author), so the `AU` lines are the 500 people
 and the note says the rest were cut. The provenance line stays last. Every other record is byte for byte what it was;

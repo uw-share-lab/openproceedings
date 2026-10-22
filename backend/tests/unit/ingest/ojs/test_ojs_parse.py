@@ -240,3 +240,20 @@ def test_a_volume_is_held_to_the_same_bound(digits: int, ok: bool) -> None:
     else:
         with pytest.raises(CrawlError, match=rf"volume has {digits:,} digits"):
             ojs.parse_page(text)
+
+
+@pytest.mark.parametrize(
+    ("digits", "read"),
+    [
+        ("0" * 5_000 + "39", 39),
+        ("0" * 5_000, 0),
+        ("0" + "3" * MAX_NATIVE_DIGITS, int("3" * MAX_NATIVE_DIGITS)),
+    ],
+)
+def test_leading_zeros_are_no_digits(digits: str, read: int) -> None:
+    # as `urls` reads the same number from a URL (decision-055): only the digits past the zeros count, so a padded
+    # volume or article id reads as its number, and `int` never meets the limit
+    text = oai.page(oai.record(1, volume=f"Vol. {digits} No. 01: AAAI-20 Technical Tracks 1"))
+    assert ojs.parse_page(text)[0][0].volume == read
+    (r,), _ = ojs.parse_page(oai.page(_with_article(oai.record(1), digits)))
+    assert r.article == read

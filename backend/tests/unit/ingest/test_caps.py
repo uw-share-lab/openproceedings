@@ -1098,6 +1098,16 @@ def test_an_ojs_url_past_the_int_digit_limit_is_cut_without_error() -> None:
     assert proceedings_ids((c,)) == set()
 
 
+def test_a_url_urlparse_refuses_on_a_record_with_a_proceedings_id_is_cut_and_unread() -> None:
+    # the record has its own id, so a cut that would unname the URL tries its page (`_own_page`): a URL `urlparse`
+    # refuses has none, so it is cut and unread like any other, never a ValueError out of the build
+    whole = "http://[x/" + "a" * MAX_URL
+    r = record(id="op:icml:2024:pmlr-v235-a24a", venue="ICML", venue_id_raw=None, keywords=(),
+               provenance=(claim("urls.proceedings", whole, source="pmlr", evidence="listing"),))  # fmt: skip
+    [c] = cap_record(r).claims("urls.proceedings")
+    assert unread_identifier(c) and len(str(c.value)) <= MAX_URL
+
+
 def test_a_url_no_parser_can_read_is_cut_and_never_read_as_an_id() -> None:
     whole = "http://[x/" + "a" * MAX_URL  # urlparse raises on the host
     r = record(provenance=(claim("urls.proceedings", whole, source="ojs", evidence="dc:identifier"),))
@@ -1294,12 +1304,18 @@ def test_a_long_evidence_is_cut_after_a_lists_note_and_both_notes_stay_within_th
         # the note must end the evidence (or come just before the CUT note)
         (tuple("a" * MAX_AUTHORS), f"x ({COUNT} kept the first {MAX_AUTHORS:,} of 600 values) tail"),
         (tuple("a" * MAX_AUTHORS), None),
+        # the note starts the evidence or follows ` (`: glued to other text, it is a source's own words
+        (tuple("a" * MAX_AUTHORS), f"x{COUNT} kept the first {MAX_AUTHORS:,} of 600 values"),
+        # a list past the cap was never cut by the caps, whatever its evidence says
+        (tuple("a" * (MAX_AUTHORS + 1)), f"x ({COUNT} kept the first {MAX_AUTHORS:,} of 600 values)"),
     ],
 )  # fmt: skip
 def test_only_the_count_notes_own_form_on_a_list_at_the_cap_says_it_was_cut(
     value: tuple[str, ...], evidence: str | None
 ) -> None:
     assert listed_total("authors", value, evidence) is None
+    # nor does it make the record trimmed: the manifest and the exports read the one rule
+    assert not is_trimmed(record(authors=value, provenance=(claim("authors", value, evidence=evidence),)))
 
 
 def test_a_snapshot_keeps_the_first_authors_of_a_long_list_and_names_its_record(tmp_path: Path) -> None:

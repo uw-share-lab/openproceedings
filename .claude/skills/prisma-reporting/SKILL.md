@@ -144,3 +144,7 @@ clause is `crawl_dates["*"]` from–to, both dates (a crawl spans days; spec 04)
   record says so in every export (RIS `N1`, BibTeX `abstract_note`, CSV and JSONL `abstract_note`) and in the web
   app. Covidence shows screeners no `N1`: read the CSV's `abstract_note` before import, and report how many records
   were screened on a submission-time abstract (the coverage report's scope line counts them per snapshot).
+- **Cut author lists** (decision-054, TASK-280). A record keeps its first 500 authors and first 200 keywords. One whose
+  list was cut says so in every export (BibTeX `and others`, an RIS `N1`, the CSV/JSONL `lists_cut` with the source's
+  count). Covidence shows screeners no `N1`: read the CSV's `lists_cut` before import, and report any record whose
+  author list was cut. None was in snapshot 2026-10-16-03eab0ef56c4 (at most 95 authors).

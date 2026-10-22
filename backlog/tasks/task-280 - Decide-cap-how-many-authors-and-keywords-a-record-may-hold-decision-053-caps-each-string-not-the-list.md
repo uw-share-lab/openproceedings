@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-22 05:32'
-updated_date: '2026-10-22 19:35'
+updated_date: '2026-10-22 20:12'
 labels:
   - ingest
   - security
@@ -42,4 +42,6 @@ Follow-up from TASK-279. decision-053 caps the length of each author name (1,000
 
 <!-- SECTION:NOTES:BEGIN -->
 decision-054 (owner, 2026-10-22: cap + trim at 500 authors / 200 keywords). caps.LIST_CAPS cuts the list before its items, on the record and every claim; the COUNT note goes before any decision-053 note; is_trimmed reads it. snapshot.RecordFile.lists_cut (from caps.listed_total) feeds the exports: BibTeX 'and others', one RIS N1, CSV last column lists_cut, JSONL lists_cut only on a cut record. Tests at count-1/count/count+1 (test_caps.py) and per export format (contract/test_lists_cut.py). Read-only check over 2026-10-16-03eab0ef56c4: most 95 authors / 54 keywords; changed=0 (docs/results/2026-10-22-list-counts-and-native-ids.md). openapi.json unchanged.
+
+Review round 1: is_trimmed reads listed_total (one rule with the exports); tests for the losing-claim guard, the max of two totals, a rejected record's N1 order, record_id/pinned/unverifiable/compare exports; Covidence caveat in spec 04 and prisma-reporting; N1 reworded 'only the first N of the M authors listed by its source are given'.
 <!-- SECTION:NOTES:END -->

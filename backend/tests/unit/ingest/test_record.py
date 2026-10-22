@@ -687,6 +687,7 @@ def test_the_acm_tables_doi_bound_is_the_native_ids() -> None:
     assert acm_table.DOI_DIGITS == MAX_NATIVE_DIGITS
     assert acm_table.paper_doi(f"10.1145/3278721.{_DIGITS_AT}") == ("3278721", _DIGITS_AT)
     assert acm_table.paper_doi(f"10.1145/3278721.{_DIGITS_PAST}") is None
+    assert acm_table.paper_doi(f"10.1145/{_DIGITS_AT}.1") == (_DIGITS_AT, "1")  # the toc at the bound too
     assert acm_table.paper_doi(f"10.1145/{_DIGITS_PAST}.1") is None
 
 

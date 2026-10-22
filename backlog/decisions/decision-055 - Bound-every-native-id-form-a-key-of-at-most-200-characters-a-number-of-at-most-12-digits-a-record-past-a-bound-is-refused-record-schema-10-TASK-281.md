@@ -54,11 +54,16 @@ Every native-id form is bounded, and a record past a bound is refused. The owner
   - PMLR and dblp ICML skip it and count it (`skipped.invalid`);
   - the RIS importer skips it (`unresolved`; a PMLR volume past 12 digits names no volume, `no_id`);
   - dblp AAAI and Crossref stop (`invalid_record`; a Crossref DOI past the bound is `odd_doi`);
-  - `sources/ojs.py` stops on an OAI-PMH article id or volume past 12 digits (`oai_unreadable`), a `CrawlError` raised
-    before `int`, never a bare `ValueError`.
-- **No parser reads an unbounded number.** `urls.pmlr`, `urls.ojs_article` and the RIS importer's volume read a number
-  only within 12 digits after leading zeros, so no URL names a number no id can hold, and `int` never meets Python's
-  digit limit. The model checks the form before it reads a PMLR volume as an int.
+  - `sources/ojs.py` stops on an OAI-PMH article id or volume past 12 digits after leading zeros (`oai_unreadable`), a
+    `CrawlError` raised before `int`, never a bare `ValueError`.
+  - A refusal PMLR or dblp ICML skips and counts is listed in `op eval coverage`'s "Proceedings listings that skipped
+    entries" (spec 07), so a reviewer can cite it.
+- **No parser reads an unbounded number.** `urls.pmlr`, `urls.ojs_article`, the OJS harvest, the RIS importer's volume
+  and a PMLR page's `Volume N:` heading read a number only within 12 digits after leading zeros, and a NeurIPS year
+  page's stated count only within 16 characters. So no URL names a number no id can hold, and `int` never meets
+  Python's digit limit. The model checks the form before it reads a PMLR volume as an int. The RIS importer also
+  treats an evidence URL `urlparse` refuses (`http://[x`) as naming no listing, so the entry is skipped, never an
+  aborted file.
 - **Record schema 10.** The native-id forms changed, so `RECORD_SCHEMA_VERSION` goes from 9 to 10 (record-schema skill
   §Versions).
 - **decision-053's own-page rule is now always within the cap.** An address rebuilt from a bounded id is at most about
@@ -70,16 +75,18 @@ Every native-id form is bounded, and a record past a bound is refused. The owner
 
 - **Code.** `ingest/record.py` (`MAX_NATIVE_KEY`, `MAX_NATIVE_DIGITS`, `PROCEEDINGS_NATIVE`, `RECORD_SCHEMA_VERSION`),
   `ingest/acm_table.py` (`DOI_DIGITS`, `paper_doi`), `ingest/urls.py` (`_NUMBER`), `ingest/ris.py` (`_int`,
-  `_listing`), `ingest/sources/ojs.py` (`_number`), `ingest/sources/crossref.py` (the `odd_doi` message),
-  `ingest/caps.py` (`_claim`, `_names`, `_own_page`, `_page_only`), `engine/index.py` (its id-length guard stays, for
-  any id ingest misses). Tests at the bound and one past it per form (`test_record.py`), and per crawler
-  (`test_pmlr.py`, `test_dblp.py`, `test_dblp_aaai.py`, `test_ris.py`, `ojs/test_ojs_parse.py`,
+  `_listing`, `_readable`), `ingest/sources/ojs.py` (`_number`), `ingest/sources/crossref.py` (the `odd_doi` message),
+  `ingest/sources/pmlr.py` (`_VOLUME_PREFIX`), `ingest/sources/neurips.py` (`_COUNT`), `ingest/caps.py` (`_claim`,
+  `_names`, `_own_page`, `_page_only`), `engine/index.py` (its id-length guard stays, for any id ingest misses). Tests at the bound and one past it per form (`test_record.py`), and per crawler
+  (`test_pmlr.py`, `test_dblp.py`, `test_dblp_aaai.py`, `test_ris.py`, `ojs/test_ojs_parse.py`, `test_neurips.py`,
   `crossref/test_crossref_mine.py`, `test_urls.py`).
 - **Reproducibility.** Every record of 2026-10-16-03eab0ef56c4 validates under record schema 10 (`records=173518
   valid=173518`). So `records.jsonl`, `snapshot_hash` and `index_version` are unchanged. The next snapshot built
   writes `record_schema_version` `10` in its manifest, so its files hash changes
   (`test_combined_snapshot.FILES_HASH` is re-pinned; `SNAPSHOT_HASH` is unchanged). `TOKENIZER_VERSION` and the index
-  `SCHEMA_VERSION` are unchanged.
+  `SCHEMA_VERSION` are unchanged. Because `record_schema_version` is in the build's audited manifest fields, rebuilding
+  the same cache into a data directory that already holds 2026-10-16-03eab0ef56c4 stops ("exists but isn't this
+  snapshot in the current format"): retire the old snapshot first, as after every schema bump.
 - **Exactness.** A refused entry is a paper missing from the index, which the crawl report counts or the crawl stops
   on. No real source comes near a bound.
 - **Docs.** Spec 01 (§Record schema's `id` row, §Pipeline 2), the record-schema skill (§Native ids, §Versions, §The

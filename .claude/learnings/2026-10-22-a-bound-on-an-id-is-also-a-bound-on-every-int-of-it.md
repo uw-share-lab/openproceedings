@@ -58,3 +58,24 @@ record past a bound refused, record schema 9 → 10.
 - Test or hook added? — tests at the bound and one past it per form and per crawler (`test_record.py`, `test_pmlr.py`,
   `test_dblp.py`, `test_dblp_aaai.py`, `test_ris.py`, `ojs/test_ojs_parse.py`, `crossref/test_crossref_mine.py`,
   `test_urls.py`), at count−1/count/count+1 (`test_caps.py`), and per export format (`contract/test_lists_cut.py`).
+
+## Addendum — 2026-10-22 (review round 1)
+- **Stripping zeros for the length check isn't enough if `int` still gets the zeros.** `ris._int` counted digits after
+  `lstrip("0")` but called `int(value)` on the whole string, so 5,000 zeros then `202` still raised past the 4,300-digit
+  limit (code, security and QA review each reproduced it). It now converts the stripped digits. Lesson: check and
+  convert the same string. Evidence: `test_ris.py`, the "a zero-padded PMLR volume" row.
+- **The sweep for unbounded `int()` has to cover every crawler, not only the id forms.** Review found two more: a PMLR
+  page's `Volume N:` heading (`pmlr._VOLUME_PREFIX`) and a NeurIPS year page's stated count (`neurips._COUNT`). Both are
+  now bounded in the regex, so an oversized number is no match (`heading_mismatch`, or no stated count). And
+  `urlparse` raises on an unclosed IPv6 host, which aborted an RIS import from claim evidence: `ris._readable` now
+  skips such a URL. Evidence: `test_pmlr.py::test_a_volume_heading_reads_at_most_twelve_digits`,
+  `test_neurips.py::test_a_stated_count_past_sixteen_characters_states_none`,
+  `test_ris.py::test_a_proceedings_url_urlparse_refuses_is_skipped_never_an_aborted_file`.
+- **Leading zeros must count the same way in every reader.** `ojs._number` counted them and `urls._NUMBER` didn't, so
+  the harvest refused a padded article id that the URL parser read. All now count digits after leading zeros.
+- **A guard on which claim a value is read from needs a case where the guard decides.** `RecordFile.lists_cut` reads
+  only a claim holding the record's own list, and keeps the largest count. Neither choice was tested until a record
+  with a cut *losing* claim (no `and others`) and two cut claims in both orders (700, not 600) were added
+  (`contract/test_lists_cut.py`).
+- **The manifest and the exports must use one rule.** `is_trimmed` matched the count note on a list of any length while
+  `listed_total` required one exactly at the cap; `is_trimmed` now calls `listed_total`.
