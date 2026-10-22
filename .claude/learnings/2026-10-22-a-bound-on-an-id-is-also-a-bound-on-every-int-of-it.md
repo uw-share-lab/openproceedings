@@ -47,7 +47,8 @@ record past a bound refused, record schema 9 → 10.
   record comes within 2× of a cap.
 
 ## Follow-ups
-- None found.
+- TASK-282: the dblp year parsers still trust `str.isdigit()` (see the closing addendum).
+- TASK-275 (note added): a NeurIPS listing warning logs its see-also links uncapped through `scrub()`.
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/record-schema/SKILL.md` (§Native ids bounds, §Versions, §The
@@ -110,3 +111,10 @@ record past a bound refused, record schema 9 → 10.
   anchor in turn, so an unreadable OpenReview link let the item be read from its arXiv link, without the forum.
   `iclr._paper_anchor` now names no paper when any of its links is unreadable, as `pmlr.parse_volume_index` does
   (`test_iclr.py::test_a_link_urljoin_refuses_names_no_paper_never_a_bare_value_error`).
+
+## Addendum — 2026-10-22 (closing)
+- **The `isdigit` fix was made where the bound was, not everywhere `isdigit` is.** `ris._int` gained `isascii()`, but
+  `sources/dblp.py` and `sources/dblp_aaai.py` still read a year with `raw.isdigit()`: `int('²')` raises and
+  `int('١٩٨٠')` reads 1980. The input is the pinned, digest-checked dblp release, so it was filed (TASK-282) rather
+  than fixed after merge. Lesson: once a primitive is found unsafe, grep the repo for it (`isdigit()`), not only the
+  files the task touched.
