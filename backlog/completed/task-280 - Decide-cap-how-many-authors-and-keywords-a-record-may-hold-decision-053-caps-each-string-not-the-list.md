@@ -3,11 +3,11 @@ id: TASK-280
 title: >-
   Decide: cap how many authors and keywords a record may hold (decision-053 caps
   each string, not the list)
-status: In Progress
+status: Done
 assignee:
   - '@jeevan'
 created_date: '2026-10-22 05:32'
-updated_date: '2026-10-22 20:54'
+updated_date: '2026-10-22 22:23'
 labels:
   - ingest
   - security
@@ -47,3 +47,9 @@ Review round 1: is_trimmed reads listed_total (one rule with the exports); tests
 
 Review round 2: spec 04 and prisma-reporting cite the results doc for 95/54; prisma counts the lists_cut cells naming authors; X-Abstract-Source asserted in the unverifiable-export test.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Capped at ingest (decision-054, owner 2026-10-22): a record keeps its first 500 authors and first 200 keywords, on the record and every claim, trimmed and flagged; every export says a cut list was cut (BibTeX 'and others', one RIS N1, CSV/JSONL lists_cut). Tests at count-1/count/count+1 and per export. Snapshot 2026-10-16-03eab0ef56c4 (most 95 authors, 54 keywords) is unchanged. PR #195.
+<!-- SECTION:FINAL_SUMMARY:END -->

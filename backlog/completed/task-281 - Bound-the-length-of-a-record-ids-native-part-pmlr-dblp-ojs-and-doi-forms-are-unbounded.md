@@ -3,11 +3,11 @@ id: TASK-281
 title: >-
   Bound the length of a record id's native part (pmlr-, dblp-, ojs- and doi-
   forms are unbounded)
-status: In Progress
+status: Done
 assignee:
   - '@jeevan'
 created_date: '2026-10-22 06:01'
-updated_date: '2026-10-22 21:25'
+updated_date: '2026-10-22 22:23'
 labels:
   - ingest
   - security
@@ -52,3 +52,9 @@ Review round 3: iclr._paper_anchor and aaai_library.same_capture guarded (html.j
 
 Review round 4: iclr._paper_anchor names no paper when any of an item's links is unreadable (no half-read, as PMLR); RIS no_id wording corrected in spec 01, record-schema, decision-055.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Native ids bounded (decision-055, owner 2026-10-22): a PMLR/dblp key at most 200 characters, an OJS id, PMLR volume and each side of doi-<toc>.<n> at most 12 digits; a record past a bound is refused by its crawler. RECORD_SCHEMA_VERSION 9 -> 10. OJS, RIS, PMLR, NeurIPS, ACM and URL parsers bound their digits before int(), and a URL urlparse refuses names nothing instead of aborting a run. All 173,518 records of 2026-10-16-03eab0ef56c4 validate at schema 10 (longest id 53). PR #195.
+<!-- SECTION:FINAL_SUMMARY:END -->
