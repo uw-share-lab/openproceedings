@@ -94,7 +94,8 @@ def test_csv_and_jsonl_carry_the_kind_last(tmp_path: Path) -> None:
         lines = client.get("/api/v1/export", params={**params, "format": "jsonl"}).text
         ris = client.get("/api/v1/export", params={**params, "format": "ris"}).text
     rows = list(csv.reader(io.StringIO(text.removeprefix("﻿"))))
-    assert rows[0][-1] == "abstract_kind" and {r[-1] for r in rows[1:]} == {"openalex"}
+    kind = rows[0].index("abstract_kind")
+    assert rows[0][-2:] == ["abstract_kind", "lists_cut"] and {r[kind] for r in rows[1:]} == {"openalex"}
     assert {r[rows[0].index("abstract_source")] for r in rows[1:]} == {"openalex"}  # the claim source column
     assert {json.loads(x)["abstract_kind"] for x in lines.splitlines() if x} == {"openalex"}
     assert "N1  - Abstract source: OpenAlex" in ris

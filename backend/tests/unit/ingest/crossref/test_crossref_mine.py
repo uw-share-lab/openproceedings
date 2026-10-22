@@ -103,7 +103,14 @@ def test_an_abstract_from_crossref_would_be_credited_to_the_doi_link() -> None:
 
 
 @pytest.mark.parametrize(
-    ("bad", "reason"), [("10.1145/3593013.3594011a", "odd_doi"), ("10.1145/3593013.x", "odd_doi")]
+    ("bad", "reason"),
+    [
+        ("10.1145/3593013.3594011a", "odd_doi"),
+        ("10.1145/3593013.x", "odd_doi"),
+        # a paper number past 12 digits could be no record's `doi-` id (decision-055): never a bare ValueError
+        ("10.1145/3593013." + "1" * 13, "odd_doi"),
+        ("10.1145/3593013." + "1" * 5_000, "odd_doi"),
+    ],
 )
 def test_an_odd_doi_under_the_proceedings_stops(tmp_path: Path, bad: str, reason: str) -> None:
     _whole(tmp_path, api.work(D1), api.work(bad), api.work(NP), total=3)

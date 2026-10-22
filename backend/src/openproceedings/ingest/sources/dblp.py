@@ -382,7 +382,10 @@ def mine_year(
             record = _record(year, tail, e, extract, table, found)
         except (ValidationError, ValueError) as err:
             report.skipped["invalid"] += 1
-            log.debug("dblp_record_invalid", extra={"year": year, "key": e.key, "error": type(err).__name__})
+            # a key past its bound (decision-055) can be any length, so the line carries its start
+            log.debug(
+                "dblp_record_invalid", extra={"year": year, "key": e.key[:80], "error": type(err).__name__}
+            )
             continue
         records.append(record)
         report.count(record, None if record.abstract else "no_abstract", found.spaced if found else 0,

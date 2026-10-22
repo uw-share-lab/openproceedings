@@ -69,6 +69,8 @@ from openproceedings.ingest.classify import (
 )
 from openproceedings.ingest.record import (
     FORUM_ID,
+    MAX_NATIVE_DIGITS,
+    MAX_NATIVE_KEY,
     Claim,
     ClaimField,
     ClaimValue,
@@ -197,6 +199,16 @@ def _claims(entry: dict[str, Any], fld: str, source: str) -> list[dict[str, Any]
     return [c for c in entry["claims"] if c["field"] == fld and c["source"] == source]
 
 
+def _readable(url: str) -> bool:
+    """Whether `urlparse` reads `url` at all: one it refuses (`http://[x`, an unclosed IPv6 host) names no listing, so
+    its entry is skipped like any other that names none, never an aborted file."""
+    try:
+        urlparse(url)
+    except ValueError:
+        return False
+    return True
+
+
 def _listing(
     entry: dict[str, Any],
 ) -> tuple[str, int, str, Classification, tuple[str, str], list[str]] | str | None:
@@ -205,7 +217,7 @@ def _listing(
     proc = [
         (c, p)
         for c in entry["claims"]
-        if c["source"] == "proceedings_url"
+        if c["source"] == "proceedings_url" and _readable(c["evidence"])
         if (p := proceedings(c["evidence"]))
     ]
     if proc:
@@ -241,7 +253,10 @@ def _listing(
             return "unresolved"
         return (venue, year, native, classify_proceedings(track),
                 ("proceedings_url", url), sorted({c["evidence"] for c, _ in proc}))  # fmt: skip
-    parsed = [(c, pmlr(c["evidence"])) for c in _claims(entry, "pmlr_volume", "pmlr_url")]
+    parsed = [
+        (c, pmlr(c["evidence"]) if _readable(c["evidence"]) else None)
+        for c in _claims(entry, "pmlr_volume", "pmlr_url")
+    ]
     # an ICML volume, by the URL or (when the URL doesn't parse) by scholarmend's volume claim
     icml_claims = [(c, vk) for c, vk in parsed if (vk[0] if vk else _int(c["value"])) in ICML_PMLR_VOLUMES]
     icml = [(c["evidence"], vk) for c, vk in icml_claims if vk is not None]
@@ -250,13 +265,22 @@ def _listing(
     if len({p for _, p in icml}) > 1:
         return "ambiguous"
     url, (vol, key) = icml[0]
+    # no record could hold the id (decision-055): skipped, never an aborted file
+    if len(key) > MAX_NATIVE_KEY:
+        return "unresolved"
     year, track = ICML_PMLR_VOLUMES[vol]
     return ("ICML", year, f"pmlr-v{vol}-{key}", Classification(track, "accepted", "ICML", year),
             ("pmlr_url", url), sorted({u for u, _ in icml}))  # fmt: skip
 
 
 def _int(value: object) -> int | None:
-    return int(value) if isinstance(value, str) and value.isdigit() else None
+    """A volume claim's value as a number: ASCII digits, at most `MAX_NATIVE_DIGITS` past leading zeros (decision-055),
+    so `int` never meets Python's digit limit or a non-ASCII digit (`²`); else None."""
+    if not isinstance(value, str) or not value.isascii() or not value.isdigit():
+        return None
+    # `int` reads the digits alone: a run of zeros never meets the limit either
+    digits = value.lstrip("0") or "0"
+    return int(digits) if len(digits) <= MAX_NATIVE_DIGITS else None
 
 
 def _url_fields(urls: list[str], source: str) -> tuple[tuple[ClaimField, str, str], ...]:
@@ -392,7 +416,7 @@ def _identity(entry: dict[str, Any], urls: list[str]) -> _Identity | str:
         for c in entry["claims"]
     ):
         return "no_id"  # an ICML paper reached through PMC: no PMLR key to build an id from
-    if any(_IN_SCOPE_HOST.fullmatch(urlparse(u).netloc.lower()) for u in urls):
+    if any(_readable(u) and _IN_SCOPE_HOST.fullmatch(urlparse(u).netloc.lower()) for u in urls):
         return "unresolved"  # e.g. a neurips.cc/media link: in scope, but nothing to build an id from
     return "out_of_scope"
 

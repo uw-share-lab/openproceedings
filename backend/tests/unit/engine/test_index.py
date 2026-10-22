@@ -430,11 +430,17 @@ def test_an_index_under_another_name_is_refused(built: Path, tmp_path: Path) -> 
         verify_index(copy)
 
 
-def test_an_id_tantivy_would_drop_refuses_the_build(tmp_path: Path) -> None:
-    long = paper("pmlr-v202-" + "k" * MAX_TOKEN_BYTES, venue="ICML", source="pmlr",
-                 urls_proceedings=None, urls_pdf="https://proceedings.mlr.press/v202/" + "k" * MAX_TOKEN_BYTES + ".pdf")  # fmt: skip
+def test_an_id_tantivy_would_drop_refuses_the_build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # no valid record's id comes near Tantivy's limit since ingest bounds native ids (decision-055: a key of at most
+    # 200 characters), so the guard is shown at a limit lowered below the longest id one can hold
+    key = "k" * 200
+    long = paper(f"pmlr-v202-{key}", venue="ICML", source="pmlr",
+                 urls_proceedings=None, urls_pdf=f"https://proceedings.mlr.press/v202/{key}.pdf")  # fmt: skip
+    monkeypatch.setattr(idx, "MAX_TOKEN_BYTES", len(long.id) - 1)
     with pytest.raises(IndexBuildError, match="the id is over"):
         build_index(snapshot_of([long], tmp_path / "snap"), tmp_path / "indexes", BUILT)
+    monkeypatch.setattr(idx, "MAX_TOKEN_BYTES", len(long.id))
+    build_index(snapshot_of([long], tmp_path / "snap2"), tmp_path / "indexes", BUILT)  # at the limit: built
 
 
 def test_every_display_field_is_stored(tmp_path: Path) -> None:

@@ -783,3 +783,12 @@ def test_an_abstract_held_by_sources_on_both_sides_of_it_is_not_outranked() -> N
     mixed = resolve(both.id, [*both.provenance, claim])[0]
     assert {c.source for c in mixed.claims("abstract")} == {"ris", "dblp"}
     assert a._outranked(both) and not a._outranked(mixed)
+
+
+@pytest.mark.parametrize(
+    "location", ["http://[x/", "/web/20070101000000id_/http://[x/Papers/AAAI/1984/AAAI84-001.pdf"]
+)
+def test_a_redirect_location_urlparse_refuses_names_no_capture(location: str) -> None:
+    # a redirect's Location is the archive's text, read by no URL validator: one `urljoin` or `urlparse` refuses
+    # (an unclosed IPv6 host) is no capture, never a bare ValueError out of the harvest
+    assert a.same_capture(location, row_for(next(iter(FIXTURES)))) is None

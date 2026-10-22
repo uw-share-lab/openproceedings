@@ -445,8 +445,9 @@ the archive) and `OpenAlex` (decision-049, milestone C: an abstract filled from 
   | JSONL | `abstract_source`: `{source, origin, url}` (the `/search` hit's object) or null; `abstract_withheld`: a boolean | `"abstract_source": {"origin": "pmlr", "source": "pmlr", "url": "https://proceedings.mlr.press/v202/okafor23a.html"}, "abstract_withheld": false` |
 
   TASK-136 appends one more CSV column and JSONL key, `abstract_withheld_reason` (below, **Withheld by a
-  takedown**). Milestone C appends the last CSV column, `abstract_kind` (`official`, `openalex` or `none`; JSONL the
-  same key on every record), read from the index's display record; a withheld record's is `none` in both, as in a
+  takedown**). Milestone C appends a CSV column, `abstract_kind`: `official`, `openalex` or `none`. It was the
+  last column until decision-054 appended `lists_cut`. JSONL has the same key on every record. The CSV column and
+  the JSONL key are both read from the index's display record; a withheld record's is `none` in both, as in a
   hit and a paper. An OpenAlex abstract's `abstract_source` is `openalex` and its `abstract_origin` is `openalex`.
 
   A record with no abstract, or whose abstract no claim holds (synthetic fixtures), names nothing: no `N1`, no
@@ -527,6 +528,24 @@ the archive) and `OpenAlex` (decision-049, milestone C: an abstract filled from 
   gains the one empty cell. A withheld abstract (a takedown, or an export whose snapshot can't be verified) has
   no note, since none of it goes out. Covidence shows screeners no `N1`, so a Covidence review that screens
   these years should read the CSV's `abstract_note` (or the results list, which shows it) before import.
+  **Cut lists** (decision-054, TASK-280): a record keeps its first 500 authors and its first 200 keywords (spec 01
+  §Pipeline 2), and an export of one whose list was cut says so, from the snapshot's `RecordFile.lists_cut` (how
+  many values the source listed, read off the claim the record's list came from):
+
+  | Format | Carries it as |
+  |---|---|
+  | RIS | one more `N1`, right after the status sentence (so the provenance line stays the last `N1`): `Author list cut: only the first 500 of the 612 authors listed by its source are given (decision-054).` (`export.authors_cut`). RIS has no tag for "and others", and an `AU  - et al.` line would be imported as an author (ris-format skill: never a sentinel `AU`), so a note says it |
+  | BibTeX | `and others` after the last kept author in `author` (BibTeX's own et al.; a real author named `others` stays braced) |
+  | CSV | a column `lists_cut`, appended last (after `abstract_kind`): `authors 612`, `keywords 250`, or both joined by `; `; empty for every other record |
+  | JSONL | a key `lists_cut`, only on such a record: `{"authors": 612}` |
+
+  RIS and BibTeX export no record keywords, so a cut keyword list shows in CSV and JSONL only. Additive under
+  decision-021: every other record exports byte for byte as before in RIS, BibTeX and JSONL; CSV gains the one
+  empty cell. An export whose snapshot can't be verified names no cut list, as it names no twins, so its author
+  lists may be cut without a mark (check `X-Abstract-Source: unavailable`, as for abstracts). Covidence shows
+  screeners no `N1`, so a Covidence review should read the CSV's `lists_cut` (or JSONL's) before import, and report
+  in its methods any record whose author list was cut. No record of snapshot 2026-10-16-03eab0ef56c4 has one (at
+  most 95 authors and 54 keywords; `docs/results/2026-10-22-list-counts-and-native-ids.md`).
 - **`TY` is `CPAPER`, not `JOUR`** (task-004). Every exported paper is a conference paper. Zotero's RIS
   translator (`RIS.js`, 2026-01-05) imports `CPAPER` as `conferencePaper` and puts `T2` in its
   `conferenceName`; a `JOUR` would become a `journalArticle` with the conference in `publicationTitle`.
@@ -595,7 +614,8 @@ the archive) and `OpenAlex` (decision-049, milestone C: an abstract filled from 
   JSONL: an `abstract_source` object and `abstract_withheld`), then `abstract_withheld_reason` (TASK-136;
   JSONL the same key), then `twins` (TASK-162; JSONL a list, only on a record with a twin), then
   `abstract_note` (TASK-210; JSONL the same key, only on a submission-time abstract), then `abstract_kind`
-  (decision-049; JSONL the same key on every record), UTF-8 with a BOM (so Excel opens it correctly).
+  (decision-049; JSONL the same key on every record), then `lists_cut` (decision-054; JSONL an object, only on a
+  record with a cut list), UTF-8 with a BOM (so Excel opens it correctly).
 - **BibTeX:** `@inproceedings` for an `accepted` paper, with `booktitle` = the venue string. Any other status
   (`rejected`, `withdrawn`, `desk_rejected`, `unknown`) is `@unpublished`, BibTeX's type for a paper with an
   author and title that was not formally published, and has **no `booktitle`**. Its `note` starts
@@ -643,9 +663,10 @@ the archive) and `OpenAlex` (decision-049, milestone C: an abstract filled from 
     differently can swallow the next. `&`, `%` and `#` are escaped. Every `@` is written `{@}` (BibTeX
     and refaudit open an entry at a bare `@` anywhere, so `@article{x,` in a title would become an entry;
     an odd backslash run before it loses one backslash). A value never ends on a backslash. An
-    author name holding a standalone `and`, or `others`, is braced, so it isn't split or read as et al.
+    author name holding a standalone `and`, or `others`, is braced, so it isn't split or read as et al.; a cut
+    author list (decision-054) ends with a bare `and others`.
   - **JSONL:** one object per record, with `index_version`, `canonical_hash`, `exported_at`, `record_id` and
-    `searched_at` (null unless pinned by a record), `abstract_source` (`{source, origin, url}` or null), `abstract_withheld` and `abstract_withheld_reason`, `twins` on a record with a twin, and `abstract_note` on a submission-time abstract: the lossless
+    `searched_at` (null unless pinned by a record), `abstract_source` (`{source, origin, url}` or null), `abstract_withheld` and `abstract_withheld_reason`, `twins` on a record with a twin, `abstract_note` on a submission-time abstract, and `lists_cut` on a record with a cut list: the lossless
     format (CSV's formula guard adds a `'` to some cells). U+2028, U+2029 and U+0085 are escaped, so a record
     stays one line for every reader.
 
