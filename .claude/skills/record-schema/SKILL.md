@@ -205,4 +205,4 @@ model, so an over-cap value is trimmed and flagged, never refused, and every rec
 - **Reserved.** No miner or importer may end a claim's evidence with either note: `cut_identifier` reads it.
 - **Not capped:** `id` (an id is identity, and its native part is validated per form; longest 53), a `twin` claim's ids
   (each must be a record of the snapshot), and the enums and `year`. Nor the number of authors or keywords per record
-  (95 and 54 at most).
+  (95 and 54 at most; TASK-280).

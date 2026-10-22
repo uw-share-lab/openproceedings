@@ -53,7 +53,7 @@ refused.
   (`paper-view.tsx`'s "source ▸") or read as the abstract's attribution link.
 
 ## Follow-ups
-- [ ] task-NNN — cap how many authors and keywords a record may hold (95 and 54 at most today); decision-053 caps
+- [ ] task-280 — cap how many authors and keywords a record may hold (95 and 54 at most today); decision-053 caps
   each string, not the list.
 
 ## Propagated to

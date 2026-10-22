@@ -290,7 +290,7 @@ the OJS, AAAI 1980–2008, Crossref, FAccT site, OpenAlex and AAAI library rows 
      string cut after a proceedings page's path still names that page, so the record still names itself.
    - **Not capped:** `id` (identity: its native part is validated per form; the longest is 53), a `twin` claim's
      ids (each must be a record of the snapshot), the enums and `year`, and how many authors or keywords a record
-     has (95 and 54 at most).
+     has (95 and 54 at most; TASK-280).
    **Control characters in a title (TASK-180, decision-036).** A record's title holds no control character (Unicode category
    `Cc`: C0, DEL, C1), and a source can leave one in: a PDF's soft line break pasted as U+0002
    (`A SPEC␂TRUM FROM …`, ICLR 2026 `xHMNX3l8rx`; ICLR 2024 `PqjQmLNuJt`), a trailing NUL (NeurIPS 2026

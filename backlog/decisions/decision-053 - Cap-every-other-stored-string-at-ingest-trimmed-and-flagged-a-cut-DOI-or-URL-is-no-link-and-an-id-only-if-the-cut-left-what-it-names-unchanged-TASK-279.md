@@ -1,0 +1,144 @@
+---
+id: decision-053
+title: >-
+  Cap every other stored string at ingest, trimmed and flagged; a cut DOI or URL
+  is no link, and an id only if the cut left what it names unchanged (TASK-279)
+date: '2026-10-22 05:31'
+status: accepted
+---
+## Context
+
+decision-026 (`ingest/caps.py`) caps only titles (1,000 characters) and abstracts (20,000). Every other stored string
+field was uncapped. `ingest/record.py` checks a DOI's shape (`10.NNNN/suffix`, one line) and each URL's (http(s), a
+host, one line), but not their length. Author names, keywords, `venue_id_raw`, an `invitation` claim's value and a
+provenance claim's `url` and `evidence` had no cap at all. Snapshots store each of them, and the API shows them. Since
+TASK-274 the BibTeX export escapes every field in linear time, so a long value no longer costs quadratic CPU. What
+remains is size: a value of any length is stored, and written whole into every export format (BibTeX, RIS, CSV, JSONL)
+and every API response. These fields come from crawled sources (Crossref, OpenAlex, OpenReview, proceedings pages, the
+RIS cache), not from the reviewer (TASK-279, a follow-up from TASK-274).
+
+The options put to the owner were:
+- **Leave them uncapped.** Record why, and accept the size risk.
+- **Cap + refuse.** An over-cap value drops the record or the claim. Exact, but one bad field loses a paper from
+  every result set, which decision-026 rejected for the same reason.
+- **Cap + trim.** decision-026's model: an over-cap value is trimmed and flagged, never refused.
+
+**The owner chose "Cap + trim" on 2026-10-22.** The option read: "Same caps, but over-cap values are trimmed and
+flagged instead of refused. Keeps every record whole, but a trimmed DOI or URL is wrong, so less safe for exactness."
+The owner accepted that trade-off: a trimmed DOI or URL is no longer a valid identifier. So this record also decides
+how a cut one is handled, so that it can't mislead.
+
+**Measured** over snapshot 2026-10-16-03eab0ef56c4 (173,518 records, every claim included, losing claims too; counted
+in NFKD, as decision-026 counts):
+
+| Field | Longest | Where |
+|---|---|---|
+| DOI (`urls.doi`, record and claim) | 34 | an ICML 1990 dblp record |
+| URL (`urls.forum`/`pdf`/`proceedings`, record and claim) | 154 | a NeurIPS 2024 PDF link |
+| a claim's `url` | 154 | the same link |
+| author name (record and claim) | 81 | |
+| keyword (record and claim) | 733 | ICLR 2025 `d8hURACo0P`: abstract sentences its authors put in OpenReview's keywords field, split at commas |
+| `venue_id_raw` (record and claim) | 65 | |
+| an `invitation` claim's value | none held | |
+| a claim's `evidence` | 469 | an AAAI 2005 dblp track claim citing its section and two archive URLs |
+| `id` (not capped, below) | 53 | |
+
+Lists: at most 95 authors and 54 keywords on one record.
+
+**How a cut DOI or URL could mislead.** It could do so in two ways:
+- **As a link.** In `urls`, it is a page link, an export field and the OpenAlex fill's DOI join key. A claim's own `url`
+  is the provenance table's "source" link and the abstract's attribution link.
+- **As an id.** Dedup and reconcile read ids from URL claims: proceedings ids (`dedup.proceedings_ids`), forum ids
+  (`forum_ids`, the forum link) and Creative AI page parts. A prefix can be a valid id of another paper.
+  `https://openreview.net/forum?pad=<2,000 characters>&id=Other12345…`, cut at 2,048, reads as forum id `Other1`.
+  The forum link would then merge the record with that paper (`test_caps.py`).
+
+Two readings were considered:
+1. **A cut DOI or URL is never read as an id.** This looked safest, but dedup refuses the whole build when a
+   proceedings record doesn't name itself in a `urls.proceedings`/`urls.pdf` claim. An RIS URL with a long tracking
+   query (`?utm_source=…`) cut after its path still names its paper. Skipping it would turn one long URL into a refused
+   build, the opposite of what the owner chose.
+2. **A cut DOI or URL is never a link, and is an id only if the cut left what it names unchanged.** This is the one
+   adopted.
+
+## Decision
+
+We cap every stored string field that decision-026 left uncapped at ingest. An over-cap value is trimmed and flagged,
+never refused. The owner decided this on 2026-10-22.
+
+Each cap is at least 2.7 times the longest value held, so no record of the current corpus is trimmed:
+
+| Field | Cap (characters) | Why this length |
+|---|---|---|
+| DOI: `urls.doi`, record and claim | 1,000 | 29× the longest. The DOI Handbook sets no limit. A DOI link (`https://doi.org/` + DOI) stays under the URL cap |
+| each URL: `urls.forum`, `urls.pdf`, `urls.proceedings`, record and claim | 2,048 | 13× the longest. The common practical URL limit (sitemaps protocol; browsers near 2,083) |
+| a claim's `url` | 2,048 | as a URL |
+| each author name, record and claim | 1,000 | 12× the longest |
+| each keyword, record and claim | 2,000 | 2.7× the longest, which is an abstract split into keywords: a tighter cap would cut real (if misfiled) text |
+| `venue_id_raw`, record and claim | 500 | 7.7× the longest. OpenReview venue ids are short paths |
+| an `invitation` claim's value | 500 | as a venue id (an OpenReview invitation id). None is held today |
+| a claim's `evidence`, its trim notes included | 4,000 | 8.5× the longest. Evidence quotes URLs and section names |
+
+- **Counted and cut as decision-026 cuts a title.** The NFKD length is counted. The cut falls before the last space
+  that fits, else before the last base character, else where it fits. The result is then stripped of whitespace at
+  both ends (`caps.cut`). This is in the same pass as decision-026's caps (`caps.cap_record`): in
+  `snapshot.load_sources`, before dedup, and after the `aaai_library` and OpenAlex fills. The record's field and every
+  claim of it are cut alike.
+- **Flagged in the claim's evidence.** The note is `trimmed at ingest (decision-053): <what>` (`caps.CUT`). It names
+  what changed: `value cut from <n> to <m> characters`, `<k> values cut to at most <cap> characters` (names,
+  keywords), `url of <n> characters dropped`, `evidence cut from <n> characters`, and `not read as an id` (below). It
+  goes last, after any decision-026 note, as the whole evidence or in parentheses, so an RIS route and url stay
+  first. A cut evidence keeps its start and every note within 4,000. The manifest's `trimmed` names the record
+  (`caps.is_trimmed` reads both notes), and the build's `snapshot_trimmed` warning counts it.
+- **A cut DOI or URL is never a link.** Its claim keeps the cut value, which the paper page shows as text with the
+  note: "kept as display text". The record's `urls` slot is null (`cap_record`). `dedup.resolve` fills no `urls` slot
+  from a cut claim (`caps.cut_identifier`; a lower-ranked uncut claim may fill it). So no page link, export or OpenAlex
+  DOI join ever uses a cut value. A claim's own `url` is only ever a link, so one over 2,048 is dropped (null), and the
+  note gives its length.
+- **A cut URL is an id only if the cut left what it names unchanged.** At the cut, `caps._names` compares what the
+  whole URL and the cut one name: `urls.native`, `urls.forum_id`, `urls.proceedings_parts`, and an `iclr_archive`
+  `urls.proceedings` target's id (it hashes the whole URL). If anything differs, the note adds `not read as an id`
+  (`caps.unread_identifier`). Dedup's identity reads then skip the claim: `proceedings_ids`, `forum_ids` and the
+  Creative AI evidence. A long query string after a proceedings page's path leaves what the URL names unchanged, so
+  the record still names itself.
+- **Reserved.** No miner or importer may end a claim's evidence with either note: `cut_identifier` and
+  `unread_identifier` read it, as `dedup.is_absence` reads `not listed:`.
+- **Not capped:**
+  - `id`. An id is identity: cutting it would rename the paper, and its native part is validated per form.
+  - A `twin` claim's ids. Each must be a record of the snapshot (`snapshot.render`).
+  - The enums and `year`.
+  - The number of authors or keywords on a record. This decision caps each string, not the list.
+
+## Consequences
+
+- **Code.** `ingest/caps.py` (`FIELD_CAPS`, `MAX_DOI`, `MAX_URL`, `MAX_AUTHOR`, `MAX_KEYWORD`, `MAX_VENUE_ID`,
+  `MAX_INVITATION`, `MAX_EVIDENCE`, `cut`, `cut_identifier`, `unread_identifier`), `ingest/dedup.py` (`resolve`,
+  `proceedings_ids`, `forum_ids`, `_names_creative_ai`). Tests are in `backend/tests/unit/ingest/test_caps.py`: each
+  field at cap−1, cap and cap+1, the identifier rules, a cut that keeps evidence and notes within the cap, two
+  Hypothesis properties (a cut never passes its cap and text within it is unchanged; a capped record is within every
+  cap and capping it again changes nothing), and a snapshot build that cuts a long author name and names its record.
+- **Reproducibility.** Running `cap_record` over every record of 2026-10-16-03eab0ef56c4 returned each one unchanged
+  (`changed=0`; the 26 records decision-026 already trimmed stay as they were). A value within every cap is returned
+  as it is, and `cap_record` returns the record itself. So `records.jsonl`, the manifest's `trimmed`, `snapshot_hash`
+  and `index_version` are unchanged, and no new snapshot or index is needed.
+  - `RECORD_SCHEMA_VERSION` is not bumped: the stored shape is unchanged, and the caps belong to the build, not the
+    model, as decision-026's do.
+  - `TOKENIZER_VERSION` and the index `SCHEMA_VERSION` are not bumped: nothing tokenized or indexed changes.
+  - A future crawl that brings a value over a cap changes that record's claims, and so its snapshot line and the
+    snapshot hash, as any content change does. `op snapshot diff` shows it.
+- **Exactness.** A trimmed DOI or URL is wrong, as the owner accepted. It is never presented as a working link, and
+  never used as an id that names a paper it didn't name whole.
+  - **The one refusal left.** An `iclr_archive` record whose archive target is over 2,048 characters can't name itself,
+    since its id hashes the whole URL. Nor can a proceedings record whose own page URL is cut inside its path. Dedup's
+    input check then refuses the build, as it refuses any record that doesn't name itself. The self-naming URLs are a
+    proceedings page's own address (the longest is 135 characters), so no real source reaches it.
+  - **Losing the slot.** A record whose only DOI is cut loses its DOI link, and with it the OpenAlex fill's DOI
+    route.
+- **Docs.** Spec 01 (§Record schema, §Pipeline 2, §5's `trimmed`), the record-schema skill (§The ingest caps), the
+  dedup-rules skill (the forum link), the snapshots skill, the logging-standards skill and `CLAUDE.md` (`caps.py`)
+  describe it. decision-026 is extended, not superseded: its title and abstract caps and its note are unchanged, and
+  its "Out of scope: authors and keywords" no longer holds for their length.
+- **Revisit** in either case:
+  - A real source comes within 2× of a cap. The keyword cap is the closest, at 2.7× an abstract misfiled as keywords.
+  - A source writes evidence that ends with either note's form.
+- **Follow-up.** TASK-280: cap the number of authors and keywords on a record.
