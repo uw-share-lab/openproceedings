@@ -29,7 +29,7 @@ refused.
   `aaai_library` and OpenAlex fills, on records it has already capped. If the cap covered only the source's evidence,
   the notes added after it could push the whole past 4,000, and the second pass would cut the notes off. So the
   source's evidence is cut to what the notes leave, and `cap_record(out) is out` is asserted after every cut.
-- **decision-026's cut falls before the last space, so one giant last word goes whole.** An evidence of
+- **decision-026's cut falls before the last space, so one giant last word is dropped whole.** An evidence of
   `<route> <url> <4,000 e's>` keeps only the route and the url. This is the specified behaviour (every Unicode form
   keeps the same words); the first test assumed a cut mid-word.
 - **Measuring the corpus is cheap and settles the version question.** A plain `json.loads` pass over the 1.2 GB
@@ -55,6 +55,7 @@ refused.
 ## Follow-ups
 - [ ] task-280 — cap how many authors and keywords a record may hold (95 and 54 at most today); decision-053 caps
   each string, not the list.
+- [ ] task-281 — bound the length of a record id's native part (`pmlr-`, `dblp-`, `ojs-`, `doi-` are unbounded).
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/record-schema/SKILL.md` §The ingest caps (fields, caps, the
@@ -63,3 +64,24 @@ refused.
   entry), `docs/specs/01-ingestion.md` §Pipeline 2.
 - Test or hook added? — `backend/tests/unit/ingest/test_caps.py` (each field at cap−1, cap and cap+1, the identifier
   rules, two Hypothesis properties, a snapshot build).
+
+## Addendum — 2026-10-22 (review round 1)
+- **"An id only if the cut changed nothing" still refused a build.** Code, security and observability review each
+  found it: a record whose id itself is over 2,000 characters (a hostile PMLR key or OJS article id; the native forms
+  have no length bound) has its own page URL cut inside the id, so the URL is unread and dedup's self-naming check
+  refused the whole build. The fix records, at the cut, that the whole URL named the record's own id
+  (`it named its own record`, `caps.names_own_record`), and dedup takes the record as naming itself
+  (`dedup._own_ids`) without reading any id from the cut text. Lesson: when a rule removes evidence, list every
+  invariant that needs that evidence (here `_dedup`'s self-naming check, `is_listing`, `_cluster`'s ids) before
+  calling it safe.
+- **A venue id is an identifier too.** Track-classifier and dedup review: cut before its last space,
+  `NeurIPS.cc/2024/Creative_AI_Track <600 characters>` is exactly the Creative AI id, and a workshop's
+  `…/Conference <600 characters>/Workshop/Foo` reads as the main conference's. So a cut venue id never fills
+  `venue_id_raw` and is never Creative AI evidence, like a cut URL.
+- **Set a slot with the resolver's own rule, not a guess.** `cap_record` first nulled an over-cap slot while
+  `resolve` took the next uncut claim, so a record with two sources' DOIs would have failed dedup's input check. Now
+  both call `dedup.resolved_value` (a function-level import in `caps`, since dedup imports caps).
+- **A test of a guard has to make the guard matter.** The first Creative AI URL test used a value whose whole and cut
+  forms both parsed to nothing, so removing the guard left it green. The replacement makes the cut land exactly after
+  `.html`, so the cut text is a Creative AI page the whole never was. A hand mutation pass (removing each new guard,
+  `>` to `>=`, dropping `strip()`, the evidence budget off by one) now fails a test for each.

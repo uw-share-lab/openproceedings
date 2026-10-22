@@ -57,7 +57,7 @@ from scholarmend.parse import parse_ris
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.protocol import EngineInputError, Searchable
 from openproceedings.engine.reference import ReferenceEngine
-from openproceedings.ingest import acm_table, dedup, urls
+from openproceedings.ingest import acm_table, caps, dedup, urls
 from openproceedings.ingest import volumes as _volumes
 from openproceedings.ingest.record import FORUM_ID, PaperRecord
 from openproceedings.query.ast import (
@@ -366,7 +366,10 @@ class MatchIndex:
                 forums.setdefault(f, []).append(r.id)
             for p in dedup.proceedings_ids(r.provenance):
                 proceedings.setdefault((r.venue, r.year, p), []).append(r.id)
-            claimed = {c.value for c in r.provenance if c.field == "urls.doi" and isinstance(c.value, str)}
+            claimed = {  # never a DOI the ingest caps cut (decision-053): its prefix is no DOI of this paper
+                c.value for c in r.provenance
+                if c.field == "urls.doi" and isinstance(c.value, str) and not caps.cut_identifier(c)
+            }  # fmt: skip
             for d in {k for v in {r.urls.doi, *claimed} if v and (k := doi_key(v))}:
                 dois.setdefault(d, []).append(r.id)
             if key := dedup.title_key(r.title):

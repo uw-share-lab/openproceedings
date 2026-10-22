@@ -21,8 +21,8 @@ build.
 | `track` | enum | See the taxonomy below. Never defaults to `main`. Unknown stays `unknown`. |
 | `status` | enum | `accepted` \| `rejected` \| `withdrawn` \| `desk_rejected` \| `unknown` |
 | `presentation` | str \| null | `oral` / `spotlight` / `poster`, when the source states it (§Presentation). |
-| `venue_id_raw` | str \| null | OpenReview `content.venueid` verbatim, e.g. `NeurIPS.cc/2023/Track/Datasets_and_Benchmarks`. The snapshot build caps it at 500 characters (§Pipeline 2, decision-053). |
-| `urls` | object | `forum`, `pdf`, `proceedings`, `doi`, each optional. A URL over 2,048 characters or a DOI over 1,000 leaves its slot null at the snapshot build; its claim keeps it cut, as text (§Pipeline 2, decision-053). |
+| `venue_id_raw` | str \| null | OpenReview `content.venueid` verbatim, e.g. `NeurIPS.cc/2023/Track/Datasets_and_Benchmarks`. One over 500 characters is null after the snapshot build; its claim keeps it cut, as text (§Pipeline 2, decision-053). |
+| `urls` | object | `forum`, `pdf`, `proceedings`, `doi`, each optional. A URL over 2,048 characters or a DOI over 1,000 never fills its slot after the snapshot build; its claim keeps it cut, as text (§Pipeline 2, decision-053). |
 | `keywords` | list[str] | Stored and displayed, **not searched** (guarantee 2). The snapshot build caps each at 2,000 characters (§Pipeline 2, decision-053). |
 | `provenance` | list[Claim] | For each field: the source, URL, fetch time and evidence (scholarmend's claim/ledger pattern). Two claim fields are provenance only, never a record field (record schema 4, decision-029): `twin`, the ids of a v1 copy's linked twins (§Pipeline, TASK-159), and `invitation`, a v1 note's OpenReview submission invitation from scholarmend 0.1.5 (§Sources, RIS row; TASK-157). |
 | `content_hash` | str | sha256 of the canonical JSON of the searchable and filterable fields. |
@@ -281,16 +281,22 @@ the OJS, AAAI 1980–2008, Crossref, FAccT site, OpenAlex and AAAI library rows 
    - A cut claim's evidence ends with `trimmed at ingest (decision-053): <what>`: the value cut from and to, how many
      names or keywords were cut, a claim url dropped, or the evidence cut. A cut evidence keeps its start and the
      notes within 4,000. The manifest's `trimmed` names the record too (§5).
-   - **A cut DOI or URL is no link.** Its claim keeps the cut value as text, shown on the paper page with the note,
-     but the record's `urls` slot is null and dedup fills no slot from it, so no link, export or DOI join (the
-     OpenAlex fill) uses it. A claim's own `url` is only ever a link, so one over the cap is dropped.
+   - **A cut DOI, URL or venue id is no link and no id.** Its claim keeps the cut value as plain text, shown in the
+     paper page's provenance beside the note. The record's `urls` slot or `venue_id_raw` never takes it: dedup takes
+     the next-ranked claim that wasn't cut, else null, so no link, export or DOI join (the OpenAlex fill) uses it. That
+     record's exports then carry no DOI or URL from it; the paper page's provenance and the manifest's `trimmed` are
+     where the cut shows. A cut venue id (which can read as another track's id) is never Creative AI evidence. A
+     claim's own `url` is only ever a link, so one over the cap is dropped.
    - **A cut URL names its paper only if the cut changed nothing it names.** When the cut value's proceedings id,
      forum id or page parts differ from the whole URL's (a forum URL's `id` cut short is a valid id of another
      paper), the note adds `not read as an id` and dedup reads no id from it (§Pipeline 4, the forum link). A long query
-     string cut after a proceedings page's path still names that page, so the record still names itself.
-   - **Not capped:** `id` (identity: its native part is validated per form; the longest is 53), a `twin` claim's
-     ids (each must be a record of the snapshot), the enums and `year`, and how many authors or keywords a record
-     has (95 and 54 at most; TASK-280).
+     string cut after a proceedings page's path still names that page. When the whole URL named the record's own id
+     (the miner read the id from it), the note also says `it named its own record`, and dedup still takes the record
+     as naming itself, so a record whose own page URL is over the cap still builds.
+   - **Not capped:** `id` (identity: cutting it would rename the paper; the `pmlr-`, `dblp-`, `ojs-` and `doi-`
+     forms have no length bound, TASK-281; the longest is 53), a `twin` claim's ids (each must be a record of the
+     snapshot), the enums and `year`, and how many authors or keywords a record has (95 and 54 at most; TASK-280).
+
    **Control characters in a title (TASK-180, decision-036).** A record's title holds no control character (Unicode category
    `Cc`: C0, DEL, C1), and a source can leave one in: a PDF's soft line break pasted as U+0002
    (`A SPEC␂TRUM FROM …`, ICLR 2026 `xHMNX3l8rx`; ICLR 2024 `PqjQmLNuJt`), a trailing NUL (NeurIPS 2026
@@ -392,7 +398,8 @@ the OJS, AAAI 1980–2008, Crossref, FAccT site, OpenAlex and AAAI library rows 
 4. **Deduplicate.** The same paper appears on OpenReview and in the proceedings (NeurIPS, ICML 2023+).
    `ingest/dedup.py`. Merge on (a) an identical id (the same forum ID in the same venue and year, or the
    same proceedings id), then (a′) the forum link (TASK-105): records naming the same OpenReview forum id,
-   as their id or in a `urls.forum` claim (PMLR's index links the forum from ICML 2023), merge in the same
+   as their id or in a `urls.forum` claim (never one the ingest caps cut so that it names something else, §2,
+   decision-053; PMLR's index links the forum from ICML 2023), merge in the same
    venue and year whatever their titles say; a link across venue-years, against the track rule below, or
    shared by two listings is a `conflicts.csv` row, never a merge. Then (b) a normalized title (the token contract over the title's NFC form, so every canonically equivalent spelling, NFC, NFD or marks stored in another order, has one key: TASK-168) with the same venue and year. Two
    records are merged **only** when venue and year agree. That lesson comes from venuetriage: records

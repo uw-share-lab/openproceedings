@@ -41,12 +41,13 @@ one is written whole into every snapshot, export and API response. `FIELD_CAPS` 
 2,048, an author name 1,000, a keyword 2,000, a `venue_id_raw` or `invitation` 500, each counted and cut as a title is
 (`_cut`), and a claim's url 2,048 and its evidence 4,000. Each is at least 2.7 times the longest value in the
 2026-10-16 snapshot, so they trim no record of it. An over-cap value is trimmed and flagged in its claim's evidence
-(`CUT`), never refused, so every record stays whole. A cut DOI or URL is no longer a valid link, so it is kept only as
-text for people to read: the claim keeps the cut value (the paper page shows it as text, flagged), the record's `urls`
-slot holds none (`cap_record`, and `dedup.resolve` skips it: `cut_identifier`), and a claim's own url, which is only
-ever a link, is dropped when it is over its cap. Dedup still reads a cut URL as naming its paper when the cut left what
-it names unchanged (a long query string after a proceedings page's path), and reads nothing from one whose cut changed
-it (`unread_identifier`: a forum URL's `id` cut short is a valid id of another paper).
+(`CUT`), never refused, so every record stays whole. A cut DOI, URL or venue id is no valid link or id, so it is kept
+only as text for people to read: the claim keeps the cut value (the paper page shows it as text, flagged), and no `urls`
+slot or `venue_id_raw` is taken from it (`cut_identifier`: `dedup.resolve`, and `cap_record` by the same rule). A
+claim's own url, which is only ever a link, is dropped when it is over its cap. Dedup still reads a cut URL as naming
+its paper when the cut left what it names unchanged (a long query string after a proceedings page's path), and reads
+nothing from one whose cut changed it (`unread_identifier`: a forum URL's `id` cut short is a valid id of another
+paper). A record whose id was read from such a URL whole still names itself by it (`names_own_record`).
 """
 
 from __future__ import annotations
@@ -57,7 +58,7 @@ from collections.abc import Iterable
 from functools import lru_cache
 
 from openproceedings.ingest import urls
-from openproceedings.ingest.record import Claim, PaperRecord
+from openproceedings.ingest.record import Claim, ClaimField, PaperRecord
 from openproceedings.query.normalize import KEEP, SUB, latex_mask
 
 MAX_MARKS = 8  # combining marks (NFKD non-starters) kept per run
@@ -80,17 +81,25 @@ MAX_KEYWORD = 2_000
 MAX_VENUE_ID = 500
 MAX_INVITATION = 500
 MAX_EVIDENCE = 4_000  # a claim's whole evidence, the trim notes included
-IDENTIFIERS = ("urls.forum", "urls.pdf", "urls.proceedings", "urls.doi")  # a cut one names nothing
+# the fields a cut value of names nothing: no `urls` slot, venue id or id is ever taken from one (`cut_identifier`)
+IDENTIFIERS: tuple[ClaimField, ...] = (
+    "urls.forum",
+    "urls.pdf",
+    "urls.proceedings",
+    "urls.doi",
+    "venue_id_raw",
+)
 FIELD_CAPS: dict[str, int] = {
     "urls.forum": MAX_URL, "urls.pdf": MAX_URL, "urls.proceedings": MAX_URL, "urls.doi": MAX_DOI,
     "authors": MAX_AUTHOR, "keywords": MAX_KEYWORD, "venue_id_raw": MAX_VENUE_ID, "invitation": MAX_INVITATION,
 }  # fmt: skip
-_SLOTS = {"forum": MAX_URL, "pdf": MAX_URL, "proceedings": MAX_URL, "doi": MAX_DOI}  # the record's `urls`
 CUT = "trimmed at ingest (decision-053):"  # how a claim's evidence says one of these was cut
 # the note as `_claim` writes it, always last: the whole evidence, or after the rest in parentheses
 _CUT_NOTE = re.compile(rf"(?:^|\s\(){re.escape(CUT)} ([0-9a-z ,;]+)\)?\Z")
 _VALUE_CUT = "value cut from "
 _UNREAD = "not read as an id"  # a cut URL that no longer names what it named whole
+_OWN = "it named its own record"  # ... where the whole URL named the record's own id (`names_own_record`)
+_URL_SLOTS = ("urls.forum", "urls.pdf", "urls.proceedings", "urls.doi")
 
 
 @lru_cache(maxsize=4096)
@@ -281,16 +290,23 @@ def _evidence(evidence: str | None, notes: list[str]) -> str | None:
 def _names(c: Claim, url: str) -> tuple[object, ...]:
     """What dedup reads `url` as naming when `c` claims it: a proceedings id (`urls.native`; an `iclr_archive`
     target's, whose id hashes the whole URL), a forum id, and a proceedings page's parts (`dedup.proceedings_ids`,
-    `forum_ids`, `_names_creative_ai`)."""
-    archive = (
-        urls.iclr_archive_target(url) if (c.source, c.field) == ("iclr_archive", "urls.proceedings") else None
-    )
-    return urls.native(url), urls.forum_id(url), urls.proceedings_parts(url), archive
+    `forum_ids`, `_names_creative_ai`). A URL no parser can read (an OJS article id past Python's int digit limit)
+    names nothing anyone can match: a fresh object, unequal to any other."""
+    try:
+        archive = (
+            urls.iclr_archive_target(url)
+            if (c.source, c.field) == ("iclr_archive", "urls.proceedings")
+            else None
+        )
+        return urls.native(url), urls.forum_id(url), urls.proceedings_parts(url), archive and archive[0]
+    except ValueError:
+        return (object(),)
 
 
-def _claim(c: Claim) -> Claim:
+def _claim(c: Claim, own: str | None = None) -> Claim:
     """`c` under every cap: its title or abstract (`cap`), its value or each item of it (`FIELD_CAPS`), its url and
-    its evidence, flagged in its evidence (`c` itself when nothing changes)."""
+    its evidence, flagged in its evidence (`c` itself when nothing changes). `own` is the record's own proceedings
+    id: a cut URL that named it whole says so (`names_own_record`)."""
     value, url, notes, said = c.value, c.url, [], []
     if c.field in CAPPED and isinstance(value, str):
         value, note = cap(c.field, value)
@@ -298,17 +314,20 @@ def _claim(c: Claim) -> Claim:
     most = FIELD_CAPS.get(c.field)
     if most is not None and isinstance(value, str) and (kept := cut(value, most)) is not None:
         said.append(f"{_VALUE_CUT}{len(value):,} to {len(kept):,} characters")
-        if c.field in IDENTIFIERS and _names(c, kept) != _names(
-            c, value
-        ):  # its prefix names another paper, or none
+        whole = _names(c, value)
+        # a URL whose prefix names another paper, or none, is no id (a venue id that long is none either)
+        if c.field in _URL_SLOTS and _names(c, kept) != whole:
             said.append(_UNREAD)
+            # the record's id was read from the whole URL, so the record still names itself by it
+            if own is not None and own in whole:
+                said.append(_OWN)
         value = kept
     elif most is not None and isinstance(value, tuple):
         value, n = _items(value, most)
         said += [f"{n} value{'' if n == 1 else 's'} cut to at most {most:,} characters"] if n else []
     if (
         url is not None and _length(url) > MAX_URL
-    ):  # a claim's url is only ever a link: a cut one would mislead
+    ):  # only ever a link (the source's page): a cut one would mislead
         said.append(f"url of {len(url):,} characters dropped")
         url = None
     notes += [f"{CUT} {'; '.join(said)}"] if said else []
@@ -320,14 +339,15 @@ def _claim(c: Claim) -> Claim:
 
 
 def _cut_parts(c: Claim) -> str:
-    """What the `CUT` note ending a DOI or URL claim's evidence says ('' when there is none)."""
+    """What the `CUT` note ending an `IDENTIFIERS` claim's evidence says ('' when there is none)."""
     m = _CUT_NOTE.search(c.evidence or "") if c.field in IDENTIFIERS else None
     return m.group(1) if m else ""
 
 
 def cut_identifier(c: Claim) -> bool:
-    """Is `c` a DOI or URL claim whose value the caps cut (decision-053)? A cut DOI or URL is no link: dedup fills
-    no `urls` slot from it (`dedup.resolve`), so no page, export or DOI join uses it."""
+    """Is `c` a DOI, URL or venue id claim whose value the caps cut (decision-053)? A cut one is text for people to
+    read: no `urls` slot or `venue_id_raw` is taken from it (`dedup.resolve`), so no page link, export or DOI join
+    uses it, and dedup reads no Creative AI evidence from a cut venue id."""
     return _VALUE_CUT in _cut_parts(c)
 
 
@@ -338,10 +358,21 @@ def unread_identifier(c: Claim) -> bool:
     return _UNREAD in _cut_parts(c)
 
 
+def names_own_record(c: Claim) -> bool:
+    """Is `c` an unread URL claim (`unread_identifier`) whose whole value named the record's own proceedings id? The
+    record's id was read from that URL before the cut, so dedup still takes the record as naming itself (its
+    self-naming check, and its listing's proceedings ids), though it reads no id from the cut text."""
+    return _OWN in _cut_parts(c)
+
+
 def cap_record(record: PaperRecord) -> PaperRecord:
-    """`record` with every capped field and every claim capped alike (`record` itself when none changes). A DOI or
-    URL over its cap leaves its `urls` slot empty: its claim keeps it cut, flagged, as text (`cut_identifier`)."""
-    provenance = tuple(_claim(c) for c in record.provenance)
+    """`record` with every capped field and every claim capped alike (`record` itself when none changes). A `urls`
+    slot or `venue_id_raw` over its cap, or whose claims the caps cut, holds what `dedup.resolve` takes from the
+    claims (`dedup.resolved_value`: never a cut one), so the record still equals what its claims resolve to."""
+    from openproceedings.ingest import dedup  # here: dedup imports this module
+
+    own = record.native if record.forum_id is None else None
+    provenance = tuple(_claim(c, own) for c in record.provenance)
     update: dict[str, object] = {}
     for field in CAPPED:
         text = getattr(record, field)
@@ -350,15 +381,22 @@ def cap_record(record: PaperRecord) -> PaperRecord:
     for field, most in (("authors", MAX_AUTHOR), ("keywords", MAX_KEYWORD)):
         if (items := _items(getattr(record, field), most))[1]:
             update[field] = items[0]
-    if record.venue_id_raw is not None and (venue_id := cut(record.venue_id_raw, MAX_VENUE_ID)) is not None:
-        update["venue_id_raw"] = venue_id
-    over = {
-        s: None
-        for s, most in _SLOTS.items()
-        if (u := getattr(record.urls, s)) is not None and _length(u) > most
-    }
-    if over:
-        update["urls"] = record.urls.model_copy(update=over)
+    slots: dict[str, str | None] = {}
+    for field in IDENTIFIERS:
+        held = (
+            record.venue_id_raw
+            if field == "venue_id_raw"
+            else getattr(record.urls, field.removeprefix("urls."))
+        )
+        over = held is not None and _length(held) > FIELD_CAPS[field]
+        if over or any(c.field == field and cut_identifier(c) for c in provenance):
+            value = dedup.resolved_value(provenance, field)
+            if value != held:
+                slots[field] = value if isinstance(value, str) else None
+    if "venue_id_raw" in slots:
+        update["venue_id_raw"] = slots.pop("venue_id_raw")
+    if slots:
+        update["urls"] = record.urls.model_copy(update={f.removeprefix("urls."): v for f, v in slots.items()})
     if not update and all(a is b for a, b in zip(provenance, record.provenance, strict=True)):
         return record
     return record.model_copy(update={**update, "provenance": provenance})

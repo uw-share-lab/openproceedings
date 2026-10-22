@@ -51,15 +51,19 @@ Lists: at most 95 authors and 54 keywords on one record.
 - **As an id.** Dedup and reconcile read ids from URL claims: proceedings ids (`dedup.proceedings_ids`), forum ids
   (`forum_ids`, the forum link) and Creative AI page parts. A prefix can be a valid id of another paper.
   `https://openreview.net/forum?pad=<2,000 characters>&id=Other12345…`, cut at 2,048, reads as forum id `Other1`.
-  The forum link would then merge the record with that paper (`test_caps.py`).
+  The forum link would then merge the record with that paper (`test_caps.py`). A venue id is read the same way: a cut
+  `NeurIPS.cc/2024/Creative_AI_Track <600 characters>` is exactly the Creative AI id, and a workshop's
+  `NeurIPS.cc/2024/Conference <600 characters>/Workshop/Foo` cut reads as the main conference's (the review of
+  TASK-279).
 
 Two readings were considered:
 1. **A cut DOI or URL is never read as an id.** This looked safest, but dedup refuses the whole build when a
    proceedings record doesn't name itself in a `urls.proceedings`/`urls.pdf` claim. An RIS URL with a long tracking
    query (`?utm_source=…`) cut after its path still names its paper. Skipping it would turn one long URL into a refused
-   build, the opposite of what the owner chose.
-2. **A cut DOI or URL is never a link, and is an id only if the cut left what it names unchanged.** This is the one
-   adopted.
+   build, the opposite of what the owner chose. The review found the same for a record whose id itself is over 2,000
+   characters (a hostile PMLR key or OJS article id): its own page URL is cut inside the id.
+2. **A cut DOI or URL is never a link, and is an id only if the cut left what it names unchanged; a record whose own
+   id was read from the whole URL still names itself.** This is the one adopted.
 
 ## Decision
 
@@ -75,7 +79,7 @@ Each cap is at least 2.7 times the longest value held, so no record of the curre
 | a claim's `url` | 2,048 | as a URL |
 | each author name, record and claim | 1,000 | 12× the longest |
 | each keyword, record and claim | 2,000 | 2.7× the longest, which is an abstract split into keywords: a tighter cap would cut real (if misfiled) text |
-| `venue_id_raw`, record and claim | 500 | 7.7× the longest. OpenReview venue ids are short paths |
+| `venue_id_raw`, record and claim | 500 | 7.7× the longest. OpenReview venue ids are short paths; a cut one is no id (below) |
 | an `invitation` claim's value | 500 | as a venue id (an OpenReview invitation id). None is held today |
 | a claim's `evidence`, its trim notes included | 4,000 | 8.5× the longest. Evidence quotes URLs and section names |
 
@@ -90,21 +94,28 @@ Each cap is at least 2.7 times the longest value held, so no record of the curre
   goes last, after any decision-026 note, as the whole evidence or in parentheses, so an RIS route and url stay
   first. A cut evidence keeps its start and every note within 4,000. The manifest's `trimmed` names the record
   (`caps.is_trimmed` reads both notes), and the build's `snapshot_trimmed` warning counts it.
-- **A cut DOI or URL is never a link.** Its claim keeps the cut value, which the paper page shows as text with the
-  note: "kept as display text". The record's `urls` slot is null (`cap_record`). `dedup.resolve` fills no `urls` slot
-  from a cut claim (`caps.cut_identifier`; a lower-ranked uncut claim may fill it). So no page link, export or OpenAlex
-  DOI join ever uses a cut value. A claim's own `url` is only ever a link, so one over 2,048 is dropped (null), and the
-  note gives its length.
+- **A cut DOI, URL or venue id is never a link or an id.** Its claim keeps the cut value as display text: the paper
+  page's provenance shows it as plain text beside the `CUT` note (`value cut from <n> to <m> characters`). It need not
+  be well formed. `dedup.resolve` takes no `urls` slot or `venue_id_raw` from a cut claim (`caps.cut_identifier`): the
+  next-ranked claim that wasn't cut does, else null. `cap_record` sets the record's slots by the same rule
+  (`dedup.resolved_value`), so a capped record still equals what its claims resolve to. So no page link, export or
+  OpenAlex DOI join ever uses a cut value, and dedup never reads a cut venue id as Creative AI evidence. A claim's
+  own `url` is only ever a link, so one over 2,048 is dropped (null), and the note gives its length.
 - **A cut URL is an id only if the cut left what it names unchanged.** At the cut, `caps._names` compares what the
   whole URL and the cut one name: `urls.native`, `urls.forum_id`, `urls.proceedings_parts`, and an `iclr_archive`
   `urls.proceedings` target's id (it hashes the whole URL). If anything differs, the note adds `not read as an id`
   (`caps.unread_identifier`). Dedup's identity reads then skip the claim: `proceedings_ids`, `forum_ids` and the
-  Creative AI evidence. A long query string after a proceedings page's path leaves what the URL names unchanged, so
-  the record still names itself.
-- **Reserved.** No miner or importer may end a claim's evidence with either note: `cut_identifier` and
-  `unread_identifier` read it, as `dedup.is_absence` reads `not listed:`.
+  Creative AI evidence. A long query string after a proceedings page's path leaves what the URL names unchanged.
+- **A record still names itself.** When the whole URL named the record's own proceedings id (the miner read the id
+  from it), the note also says `it named its own record` (`caps.names_own_record`). Dedup reads no id from the cut
+  text, but takes the record as naming its own id (`dedup._own_ids`: its self-naming check, `is_listing`, and its
+  cluster's proceedings ids). So no cut refuses the build.
+- **Reserved.** No miner or importer may end a claim's evidence with either note: `cut_identifier`,
+  `unread_identifier` and `names_own_record` read it, as `dedup.is_absence` reads `not listed:`.
 - **Not capped:**
-  - `id`. An id is identity: cutting it would rename the paper, and its native part is validated per form.
+  - `id`. An id is identity: cutting it would rename the paper. Its native part is validated per form, but the
+    `pmlr-`, `dblp-`, `ojs-` and `doi-` forms have no length bound; bounding them is a refusal and a record schema
+    change, so it is TASK-281.
   - A `twin` claim's ids. Each must be a record of the snapshot (`snapshot.render`).
   - The enums and `year`.
   - The number of authors or keywords on a record. This decision caps each string, not the list.
@@ -112,11 +123,15 @@ Each cap is at least 2.7 times the longest value held, so no record of the curre
 ## Consequences
 
 - **Code.** `ingest/caps.py` (`FIELD_CAPS`, `MAX_DOI`, `MAX_URL`, `MAX_AUTHOR`, `MAX_KEYWORD`, `MAX_VENUE_ID`,
-  `MAX_INVITATION`, `MAX_EVIDENCE`, `cut`, `cut_identifier`, `unread_identifier`), `ingest/dedup.py` (`resolve`,
-  `proceedings_ids`, `forum_ids`, `_names_creative_ai`). Tests are in `backend/tests/unit/ingest/test_caps.py`: each
-  field at cap−1, cap and cap+1, the identifier rules, a cut that keeps evidence and notes within the cap, two
-  Hypothesis properties (a cut never passes its cap and text within it is unchanged; a capped record is within every
-  cap and capping it again changes nothing), and a snapshot build that cuts a long author name and names its record.
+  `MAX_INVITATION`, `MAX_EVIDENCE`, `IDENTIFIERS`, `cut`, `cut_identifier`, `unread_identifier`, `names_own_record`),
+  `ingest/dedup.py` (`resolve`, `resolved_value`, `proceedings_ids`, `forum_ids`, `_own_ids`, `is_listing`,
+  `_cluster`, `_names_creative_ai`), `eval/scholar_compare.py` (no cut DOI as a join key). Tests are in
+  `backend/tests/unit/ingest/test_caps.py`: each field at cap−1, cap and cap+1, the identifier rules (a forum id cut
+  short, a query string cut, a page cut inside its id, an `iclr_archive` target, an OJS id past Python's int digit
+  limit, a cut venue id and a cut page as Creative AI evidence, a slot taken from the next claim), a cut that keeps
+  evidence and notes within the cap, two Hypothesis properties (a cut never passes its cap and text within it is
+  unchanged; a capped record is within every cap and capping it again changes nothing), and a snapshot build that cuts
+  a long author name, names its record and logs the count.
 - **Reproducibility.** Running `cap_record` over every record of 2026-10-16-03eab0ef56c4 returned each one unchanged
   (`changed=0`; the 26 records decision-026 already trimmed stay as they were). A value within every cap is returned
   as it is, and `cap_record` returns the record itself. So `records.jsonl`, the manifest's `trimmed`, `snapshot_hash`
@@ -128,10 +143,11 @@ Each cap is at least 2.7 times the longest value held, so no record of the curre
     snapshot hash, as any content change does. `op snapshot diff` shows it.
 - **Exactness.** A trimmed DOI or URL is wrong, as the owner accepted. It is never presented as a working link, and
   never used as an id that names a paper it didn't name whole.
-  - **The one refusal left.** An `iclr_archive` record whose archive target is over 2,048 characters can't name itself,
-    since its id hashes the whole URL. Nor can a proceedings record whose own page URL is cut inside its path. Dedup's
-    input check then refuses the build, as it refuses any record that doesn't name itself. The self-naming URLs are a
-    proceedings page's own address (the longest is 135 characters), so no real source reaches it.
+  - **No refusal.** A record whose own page URL is cut inside its id (an `iclr_archive` target, whose id hashes the
+    whole URL, or a hostile PMLR key or OJS id) still names itself by the note, so dedup's input check passes.
+  - **A hidden id.** An unread cut URL hides what the whole URL named from the never-merge guards too (two distinct
+    forum ids, two proceedings ids). That only happens when the id sits past character 2,048, which no real URL
+    reaches; the other rules (venue, year, track, titles) still apply.
   - **Losing the slot.** A record whose only DOI is cut loses its DOI link, and with it the OpenAlex fill's DOI
     route.
 - **Docs.** Spec 01 (§Record schema, §Pipeline 2, §5's `trimmed`), the record-schema skill (§The ingest caps), the
@@ -141,4 +157,5 @@ Each cap is at least 2.7 times the longest value held, so no record of the curre
 - **Revisit** in either case:
   - A real source comes within 2× of a cap. The keyword cap is the closest, at 2.7× an abstract misfiled as keywords.
   - A source writes evidence that ends with either note's form.
-- **Follow-up.** TASK-280: cap the number of authors and keywords on a record.
+- **Follow-ups.** TASK-280: cap the number of authors and keywords on a record. TASK-281: bound the length of a
+  record id's native part.
