@@ -553,7 +553,8 @@ def test_a_title_cut_and_an_evidence_cut_keep_both_notes_inside_the_cap() -> Non
     r = record(title=title.strip(), provenance=(claim("title", title.strip(), evidence=evidence),))
     out = cap_record(r)
     [c] = out.claims("title")
-    assert c.evidence is not None and len(c.evidence) <= MAX_EVIDENCE and c.evidence.startswith("eee")
+    # no space in the source's evidence, so the cut is exact: the whole fills the cap to the character
+    assert c.evidence is not None and len(c.evidence) == MAX_EVIDENCE and c.evidence.startswith("eee")
     assert c.evidence.endswith(
         f"e ({TRIMMED} cut from 2,399 to 995 characters) ({CUT} evidence cut from 4,000 characters)"
     )
@@ -570,6 +571,53 @@ def test_a_cut_forum_url_that_names_another_paper_is_never_read_as_its_id() -> N
     assert unread_identifier(c) and cut_identifier(c)
     assert "Other1" not in forum_ids(out)
     assert c.evidence is not None and c.evidence.endswith("characters; not read as an id)")
+
+
+def test_a_url_and_its_evidence_both_cut_share_one_note_so_it_stays_no_link() -> None:
+    # one note, not two: `cut_identifier` reads the last note, so an evidence cut in a note of its own would hide the
+    # value cut and let `resolve` link the cut URL
+    url, evidence = _sized("urls.pdf", MAX_URL + 72), "e" * (MAX_EVIDENCE + 200)
+    r = record(
+        authors=(), keywords=(), venue_id_raw=None, urls=Urls(pdf=url),
+        provenance=(*_RESOLVABLE, claim("urls.pdf", url, evidence=evidence)),
+    )  # fmt: skip
+    out = cap_record(r)
+    [c] = out.claims("urls.pdf")
+    assert c.evidence is not None and c.evidence.endswith(
+        f" ({CUT} value cut from {MAX_URL + 72:,} to {MAX_URL:,} characters; evidence cut from {MAX_EVIDENCE + 200:,}"
+        " characters)"
+    )
+    assert cut_identifier(c) and out.urls.pdf is None and resolve(out.id, out.provenance)[0].urls.pdf is None
+
+
+def test_a_non_ascii_url_is_counted_in_nfkd_on_the_record_and_its_claim() -> None:
+    # 1,100 `é` are 2,200 characters in NFKD, the form the caps count: past the URL cap, though 1,120 as stored
+    url = "https://example.org/" + "\u00e9" * 1_100
+    r = record(
+        authors=(), keywords=(), venue_id_raw=None, urls=Urls(pdf=url),
+        provenance=(*_RESOLVABLE, claim("urls.pdf", url, evidence="citation")),
+    )  # fmt: skip
+    out = cap_record(r)
+    assert out.urls.pdf is None and cut_identifier(out.claims("urls.pdf")[0])
+    assert resolve(out.id, out.provenance)[0] == out
+    assert cap_record(record(urls=Urls(pdf=url))).urls.pdf is None  # a slot with no claim is measured alike
+
+
+def test_a_cut_forum_url_that_keeps_its_id_still_names_it() -> None:
+    # a PMLR listing's link to another forum (not the record's own id), cut only in a trailing parameter
+    whole = "https://openreview.net/forum?id=Linked12345&noteId=" + "n" * MAX_URL
+    out = cap_record(record(provenance=(claim("urls.forum", whole, source="pmlr", evidence="listing"),)))
+    [c] = out.claims("urls.forum")
+    assert cut_identifier(c) and not unread_identifier(c)
+    assert urls.forum_id(str(c.value)) == "Linked12345" and "Linked12345" in forum_ids(out)
+
+
+def test_the_caps_are_decision_053s() -> None:
+    assert FIELD_CAPS == {
+        "urls.forum": 2_048, "urls.pdf": 2_048, "urls.proceedings": 2_048, "urls.doi": 1_000,
+        "authors": 1_000, "keywords": 2_000, "venue_id_raw": 500, "invitation": 500,
+    }  # fmt: skip
+    assert (MAX_URL, MAX_EVIDENCE) == (2_048, 4_000)  # a claim's url and evidence
 
 
 def test_a_cut_query_string_still_names_its_proceedings_paper() -> None:
