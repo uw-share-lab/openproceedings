@@ -63,7 +63,7 @@ Two readings were considered:
    build, the opposite of what the owner chose. The review found the same for a record whose id itself is over 2,000
    characters (a hostile PMLR key or OJS article id): its own page URL is cut inside the id.
 2. **A cut DOI or URL is never a link, and is an id only if the cut left what it names unchanged; a URL the record's
-   own id was read from becomes that id's page address instead.** This is the one adopted. The review reached it in
+   own id was read from becomes an address of that id's page instead.** This is the one adopted. The review reached it in
    four steps. Round 1 answered the long-id case with a note (`it named its own record`) that dedup read to keep the record
    naming itself. Round 2 showed that a source could forge that note in RIS evidence (which repeats a venue id) to make
    any record a listing, and that after a merge it named the wrong record, so the URL was kept whole instead. An
@@ -71,7 +71,7 @@ Two readings were considered:
    whole URL, so any length passed), which defeats the cap. Cutting just past the first place the URL spells the id
    came next, but round 3 showed it failed where a page's form goes on past the id (a NeurIPS or ICLR page's track
    token of any length after its hash; a PMLR GitHub asset), refusing the build, that leading zeros took it past the
-   cap, and that it never checked the whole URL named the id. The rule adopted rebuilds the id's own page address
+   cap, and that it never checked the whole URL named the id. The rule adopted rebuilds an address of the id's page
    from the parsed id: it reads no evidence, works for every form, and only the id bounds it.
 
 ## Decision

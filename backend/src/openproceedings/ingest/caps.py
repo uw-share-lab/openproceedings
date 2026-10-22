@@ -103,7 +103,7 @@ CUT = "trimmed at ingest (decision-053):"  # how a claim's evidence says one of 
 _CUT_NOTE = re.compile(rf"(?:^|\s\(){re.escape(CUT)} ([0-9a-z ,;]+)\)?\Z")
 _VALUE_CUT = "value cut from "
 _UNREAD = "not read as an id"  # a cut URL that no longer names what it named whole
-# a URL replaced by its page's address rebuilt from the record's id, so that it still names the record (`_own_page`)
+# a URL replaced by an address of its page rebuilt from the record's id, so that it still names the record (`_own_page`)
 _OWN = "rebuilt as the page of the record id it names"
 _URL_SLOTS = ("urls.forum", "urls.pdf", "urls.proceedings", "urls.doi")
 
