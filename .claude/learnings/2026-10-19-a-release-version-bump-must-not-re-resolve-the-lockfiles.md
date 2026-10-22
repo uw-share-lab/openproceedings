@@ -77,8 +77,9 @@ the proof was run:
   `git worktree add --detach` of its own, never with a checkout in the shared one.
 - **Read `CITATION.cff` whole, not just its two release lines.** Its title, abstract and keywords still named only
   NeurIPS, ICLR and ICML, though AAAI, AIES, FAccT and IASEAI have been in scope since 0.3.0 (decision-049) and
-  `README.md` lists all seven with their start years; five releases (0.3.0–0.4.3) shipped it that way because step 4 edits only
-  `version` and `date-released`. The UX review of this branch caught it, and 0.5.0's file now matches the README.
+  `README.md` lists all seven with their start years; five releases (0.3.0–0.4.3) shipped it that way because step 4
+  edits only `version` and `date-released`. The UX review of this branch caught it, and 0.5.0's file now matches the
+  README; so does `backend/pyproject.toml`'s `description`, which had the same three venues.
 - **The `git archive` probe route worked again.** With `__version__` patched to 0.4.3 the copy hashed to
   `b2cfbda7…` (the value before), `SNAPSHOT_HASH` unchanged; the new `FILES_HASH` is `e6906934…`.
 
