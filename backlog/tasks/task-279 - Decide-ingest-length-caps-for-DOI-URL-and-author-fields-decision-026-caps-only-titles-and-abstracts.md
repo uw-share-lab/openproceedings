@@ -3,10 +3,11 @@ id: TASK-279
 title: >-
   Decide: ingest length caps for uncapped stored string fields (DOI, URLs,
   authors, keywords, venue_id_raw, claim url and evidence)
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@jeevan'
 created_date: '2026-10-21 23:01'
-updated_date: '2026-10-21 23:20'
+updated_date: '2026-10-22 05:03'
 labels:
   - ingest
   - security
@@ -26,3 +27,14 @@ Follow-up from TASK-274. decision-026 (ingest/caps.py, CAPPED = title, abstract)
 - [ ] #1 A decision record says, for each uncapped stored string field (DOI, URLs, authors, keywords, venue_id_raw, claim url and evidence), whether it is capped at ingest, at what length and whether an over-cap value is refused or trimmed (and flagged), or why it is left uncapped
 - [ ] #2 If capped: ingest/caps.py applies the caps with tests, and the record-schema skill and spec 01 describe them
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Measure each uncapped stored string field's real maximum over snapshot 2026-10-16-03eab0ef56c4 (read-only) and pick caps with generous headroom so no current record is trimmed.
+2. Owner decision 2026-10-22: cap + trim (decision-026's model), trimmed and flagged, never refused. Write the decision record (created last, after rebasing): per field cap, trim and flag; a cut DOI or URL is never used as an identifier (the record's urls slot is cleared, dedup's resolve and identity reads skip a cut urls.* claim, a cut claim url is dropped) and is kept only as display text in its claim.
+3. ingest/caps.py: MAX_DOI, MAX_URL, MAX_AUTHOR, MAX_KEYWORD, MAX_VENUE_ID, MAX_INVITATION, MAX_EVIDENCE; cut as decision-026 cuts (NFKD length, before the last space); a second note form 'trimmed at ingest (decision-NNN):'; is_trimmed covers both; dedup skips cut identifiers.
+4. Tests: per field at cap-1, cap, cap+1; Hypothesis property; flag presence; dedup skip; snapshot build with an over-cap DOI.
+5. Docs as built: record-schema and snapshots skills, spec 01, CLAUDE.md layout line, decision-026 cross-reference.
+6. Verify no version bump needed (caps return records unchanged within them), make test/lint/tooling, learnings, review gate, finalize, PR, merge queue.
+<!-- SECTION:PLAN:END -->
