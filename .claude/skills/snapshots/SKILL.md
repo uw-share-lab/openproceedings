@@ -71,8 +71,12 @@ marker lands where the replay reads it), and adds the conflicts a v1 crawl found
 `conflicts.csv` (`with_crawl_conflicts`). **Ingest caps** (TASK-155, decision-026): `load_sources` runs every
 record through `caps.cap_records` before dedup. A run of combining marks in a title or abstract keeps 8 marks
 (only a letter or digit ends a run), a title keeps 1,000 characters and an abstract 20,000. Each trimmed claim's evidence
-carries the note `trimmed at ingest (decision-026): …`, after any source evidence in parentheses. The manifest's
-`trimmed` lists, sorted, the records with any trimmed title or abstract claim left after withholding. The key is
+carries the note `trimmed at ingest (decision-026): …`, after any source evidence in parentheses. The other stored
+strings have length caps too (decision-053, TASK-279; record-schema skill §The ingest caps): a DOI 1,000, a URL and a
+claim's url 2,048, an author name 1,000, a keyword 2,000, `venue_id_raw` and an `invitation` 500, a claim's evidence
+4,000; trimmed and flagged `trimmed at ingest (decision-053): …`, last; a cut DOI, URL or venue id never fills a `urls` slot or `venue_id_raw`
+and a cut claim url is dropped. None trims a record of snapshot 2026-10-16-03eab0ef56c4. The manifest's
+`trimmed` lists, sorted, the records with any trimmed claim (either note) left after withholding. The key is
 written only when there is one, so a corpus within the caps has the manifest and `records.jsonl` it had.
 `snapshot_built` / `snapshot_exists` carry the `trimmed` count, and a non-zero count adds one WARNING
 `snapshot_trimmed`. **Takedowns** (TASK-136, decision-022): `build` withholds every

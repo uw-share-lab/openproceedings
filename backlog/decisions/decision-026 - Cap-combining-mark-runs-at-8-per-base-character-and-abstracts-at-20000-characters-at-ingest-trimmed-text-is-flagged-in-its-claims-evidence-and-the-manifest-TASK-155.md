@@ -136,7 +136,9 @@ Details:
   snapshot build. `PaperRecord` itself does not refuse text over them.
 - **Revisit** if a real source carries a title near 1,000 characters or an abstract near 20,000, or a script
   that needs more than 8 marks on one base.
-- **Out of scope.** Authors and keywords are neither tokenized nor highlighted, so they are not capped.
+- **Out of scope.** Authors and keywords are neither tokenized nor highlighted, so they are not capped by
+  this decision. (Extended by decision-053, 2026-10-22: each author name, keyword and every other stored string now
+  has a length cap of its own, for size, trimmed and flagged the same way.)
   `conflicts.csv` rows a crawl found inside one source (`with_crawl_conflicts`) keep that source's raw texts,
   since they are not indexed.
 

@@ -16,15 +16,15 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | `id` | `op:<venue>:<year>:<native>`, with venue lower-cased: `op:iclr:2024:iilhN2MycO`. Never changes once a snapshot has shipped it. |
 | `title` | Raw, whitespace-collapsed. **No** search normalization here (spec 03 owns it). Capped by the snapshot build at 1,000 characters and 8 combining marks per run (the ingest caps, below); the model doesn't check it. |
 | `abstract` | Raw text or `null` (never an empty or whitespace-only string). For an AAAI 1980–2008 dblp record, AAAI's own paper page (an Internet Archive capture of the old aaai.org page, pinned by digest) supplies it after dedup (an `aaai_library` claim, official; decision-051). For an AAAI, AIES or FAccT record no official source gives one, the OpenAlex fill supplies it after that (an `openalex` claim; `abstract_kind` says so; spec 01 §Sources). Reject a value that starts or ends with `…`: that's a Scholar snippet. An ellipsis inside a real abstract (`x₁, …, x_n`) is allowed. HTML stripped, LaTeX kept verbatim. Capped by the snapshot build at 20,000 characters and 8 combining marks per run (the ingest caps, below); the model doesn't check it. |
-| `authors` | Display order, as the source gives them. |
+| `authors` | Display order, as the source gives them. Each name capped by the snapshot build at 1,000 characters (the ingest caps, below). |
 | `venue` | `NeurIPS` \| `ICLR` \| `ICML` \| `AAAI` \| `AIES` \| `FAccT` \| `IASEAI` (`vocab.VENUES`; decision-049; extensible later). Every venue has a source: AAAI 1980–2008 (`dblp`) and 2010+ (`ojs`), AIES 2018–2023 (`crossref`) and 2024+ (`ojs`), FAccT 2018 (`pmlr`, v81) and 2019+ (`crossref`), IASEAI 2026 (`ojs`). |
 | `year` | Conference year. Never the arXiv or PDF year. Required: a record with no year is not a valid `PaperRecord`, nor is one for a year its venue was not held under its name (NeurIPS before 1987, ICLR before 2013, ICML before 1988, AAAI before 1980, AIES and FAccT before 2018, IASEAI before 2025; `vocab.CONFERENCES`, spec 04 §Exports). |
 | `track` | `.claude/skills/track-taxonomy/SKILL.md`. No default value in the model. |
 | `status` | `accepted` \| `rejected` \| `withdrawn` \| `desk_rejected` \| `unknown`. No default. |
 | `presentation` | `oral` \| `spotlight` \| `poster` \| `null`, only when a source states it: a v1 decision note or venue string (`openreview_v1._PRESENTATION`); a v2 accepted, non-workshop note's `content.venue`, matched exactly per venue-year in `classify.V2_PRESENTATION` (an unlisted string is `null` and counted as `presentation_unmapped`; spec 01 §Presentation). Its claim's evidence is `content.venue=<string>`. `dedup.resolve` keeps it only when the resolved `status` is `accepted` (a reconcile-demoted `unknown` shows `null`; the claim stays). Never a track, never hashed. |
-| `venue_id_raw` | OpenReview `content.venueid` verbatim, else `null`. |
-| `urls` | `{forum, pdf, proceedings, doi}`, each optional. |
-| `keywords` | Stored and shown, **never indexed as text** (guarantee 2). |
+| `venue_id_raw` | OpenReview `content.venueid` verbatim, else `null`. One over 500 characters never fills it after the snapshot build: its claim keeps it cut, as text (below). |
+| `urls` | `{forum, pdf, proceedings, doi}`, each optional. A URL over 2,048 characters or a DOI over 1,000 never fills its slot after the snapshot build (its claim keeps it cut, as text), unless the URL already is the page of the record's own id: then it is kept whole and flagged, bounded only by the id (TASK-281; below). |
+| `keywords` | Stored and shown, **never indexed as text** (guarantee 2). Each capped by the snapshot build at 2,000 characters (below). |
 | `provenance` | `list[Claim]`, see below. |
 | `content_hash` | See below. |
 | `venue_name` | **Derived, never stored** (TASK-112): `vocab.venue_name(venue, year)`, a computed field. Sent with the record (`GET /papers/{id}`); `record.DERIVED` names it, and `snapshot.record_line` and `model_copy` dump with `exclude={*DERIVED}` (a set: mypy's `IncEx` refuses the frozenset itself). Stored data naming it is refused (`extra="forbid"`), so a dump you validate again must exclude it too. |
@@ -159,15 +159,75 @@ canonical reordering is superlinear in a long run of marks with alternating comb
 - **Length.** A title keeps at most 1,000 code points (the owner, 2026-10-02; the longest real one is 192), and
   an abstract at most 20,000, both counted in NFKD. The cut falls before the last space that fits, so every
   Unicode form keeps the same words, and it runs before the mark cap. A cut title is collapsed, and a cut abstract is stripped of whitespace and `…`.
-- **Where.** The caps run once, in `snapshot.load_sources`, before dedup, on the record's field and on every
-  claim of it alike.
+- **Where.** The caps run in `snapshot.load_sources` before dedup, and again on each record the `aaai_library` or
+  OpenAlex fill changes (`cap_record`), on the record's field and on every claim of it alike.
 - **Flagged.** Never silent: a trimmed claim's `evidence` carries `trimmed at ingest (decision-026): <what>`,
   the marks dropped and the length cut from and to.
   - With no source evidence, the note is the whole evidence.
   - Otherwise it follows the source's evidence in parentheses, so an RIS route and url stay first for
     `dedup.attribution`.
-  - `caps.is_trimmed` matches only that form at the end.
-  - The manifest's `trimmed` lists the records with any trimmed title or abstract claim.
+  - `caps.is_trimmed` matches only this form or decision-053's (below) at the end.
+  - The manifest's `trimmed` lists the records with any trimmed claim (title or abstract here; any other capped
+    value, url or evidence under decision-053, below).
 - **Model.** The caps belong to the build, not the model: `PaperRecord` doesn't refuse text over them.
 - **Unchanged otherwise.** Text within both caps comes back unchanged, so the caps change no record of a corpus
   within them.
+
+**The other stored strings** (`caps.FIELD_CAPS`, decision-053, TASK-279). For size alone: none is tokenized, but each
+is written whole into every snapshot, export and API response. The owner chose "cap + trim" (2026-10-22): decision-026's
+model, so an over-cap value is trimmed and flagged, never refused, and every record stays whole.
+| Field | Cap | Longest in 2026-10-16-03eab0ef56c4 (`docs/results/2026-10-22-stored-string-lengths.md`) |
+|---|---|---|
+| DOI (`urls.doi`, record and claim) | 1,000 | 34 |
+| each URL (`urls.forum`/`pdf`/`proceedings`, record and claim) | 2,048 | 154 |
+| each author name (record and claim) | 1,000 | 81 |
+| each keyword (record and claim) | 2,000 | 733 (an abstract a source split into keywords) |
+| `venue_id_raw` (record and claim) | 500 | 65 |
+| an `invitation` claim's value | 500 | none held |
+| a claim's `url` | 2,048 | 154 |
+| a claim's `evidence`, its trim notes included | 4,000 | 469 |
+- **Counted and cut as a title is** (`caps.cut`: NFKD length, before the last space that fits, or the last base),
+  then stripped of whitespace; authors and keywords on the record and every claim alike (the `urls` slots and
+  `venue_id_raw` are re-resolved, below). In the same pass as decision-026's caps (`cap_record`, in `snapshot.load_sources` and
+  after the `aaai_library` and OpenAlex fills).
+- **Flagged** in the claim's evidence, after everything else: `trimmed at ingest (decision-053): <what>` (`caps.CUT`),
+  `value cut from <n> to <m> characters`, `<k> values cut to at most <cap> characters` (names, keywords), `url of <n>
+  characters dropped`, `evidence cut from <n> characters`. The manifest's `trimmed` lists the record too
+  (`caps.is_trimmed` reads both notes). A cut evidence keeps its start (an RIS route and url) and the notes, within
+  4,000.
+- **A cut DOI, URL or venue id never fills the record** (`caps.cut_identifier`): never a link, and a cut venue id
+  is no id. The claim keeps the cut value, which
+  the paper page's provenance shows as plain text beside the note; it need not be well formed (`10.1234/` is a
+  possible cut DOI). `dedup.resolve` takes no `urls` slot or `venue_id_raw` from a cut claim (the next-ranked claim
+  that wasn't cut does, else `null`), and `cap_record` sets the record's slots the same way
+  (`dedup.resolved_value`), so the record still equals what its claims resolve to. So no page link, export or
+  OpenAlex DOI join uses a cut value, and a cut venue id (which can read as another track's id, or exactly as the
+  Creative AI id) counts against Creative AI, as the whole id would. A claim's own `url` is only ever a link, so over 2,048 it is dropped
+  (`null`).
+- **A cut URL is an id only if the cut changed nothing it names.** `caps.unread_identifier`: when the cut value's
+  proceedings id, forum id or page parts (`urls.native`, `forum_id`, `proceedings_parts`; an `iclr_archive` target's
+  id, which hashes the whole URL) differ from the whole URL's, the note adds `not read as an id`, and dedup's identity
+  reads (`proceedings_ids`, `forum_ids`, Creative AI evidence) skip it. A forum URL's `id` cut short is a valid id of
+  another paper. A long query string after a proceedings page's path is still that page's id.
+- **A page past its cap first drops its tail** (`caps._page_only`): when a cut would change what it names, the URL
+  without its query, parameters and fragment is kept if it fits and names all the whole did, track token included.
+- **A URL the record's own id was read from becomes an address of that id's page** when neither keeps it naming its
+  id (`caps._own_page`: rebuilt from the parsed id per form, naming the id though not always the address served, NeurIPS/ICLR, PMLR, dblp, OJS, DOI; kept only if it names the
+  same id), flagged `value cut from <n> to <m> characters, rebuilt as the page of the record id it names`. It fills no
+  slot but still names the record, so dedup's self-naming check passes. A URL that already is that page is kept, a
+  valid link, flagged once. Only the id's own length (TASK-281) takes such a value past the cap; leading zeros and text
+  past the id are gone. An `iclr_archive` target (its id hashes the whole URL) is cut and unread like any other;
+  `dedup._archive_target_cut` lets that record stand for itself, and `_cluster` keeps its own id among the cluster's
+  proceedings ids, but only for the crawler's own `iclr_archive` claim on an `iclr-` id. The page is decided from the
+  value and the id alone, and the archive exception reads the `not read as an id` note on the crawler's own claim
+  only, whose evidence no import writes: round 2 of the review showed a note dedup read on any claim could be forged
+  through RIS evidence, an automated security review that keeping such a URL whole had no bound, and round 3 that
+  cutting it just past the id failed for pages whose form goes on past the id.
+- **Reserved.** No miner or importer may end a claim's evidence with the `CUT` note: `cut_identifier` and
+  `unread_identifier` read it. A forged `value cut` note only takes a value out of the slots or Creative AI evidence (and lists
+  the record in the manifest's `trimmed`: `is_trimmed` reads it on any claim); a
+  forged `not read as an id` would hide a URL's ids from dedup's identity reads, but no claim can carry one today (a
+  URL holds no whitespace, so RIS URL evidence can't end in a note, and every crawler ends its URL claims' evidence with fixed text the note can't match).
+- **Not capped:** `id` (an id is identity: cutting it would rename the paper; the `pmlr-`, `dblp-`, `ojs-` and `doi-`
+  forms have no length bound, TASK-281; longest 53), a `twin` claim's ids (each must be a record of the snapshot),
+  and the enums and `year`. Nor the number of authors or keywords per record (95 and 54 at most; TASK-280).

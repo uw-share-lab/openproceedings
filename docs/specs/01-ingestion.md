@@ -15,15 +15,15 @@ build.
 | `id` | str | Stable ID `op:<venue>:<year>:<native>`, e.g. `op:iclr:2024:iilhN2MycO`. `native` is the OpenReview forum ID, or `pmlr-v202-<key>` (ICML) / `dblp-<key>` (ICML 1988–2012: the dblp key after `conf/icml/`, e.g. `dblp-SzitaL09`; decision-047) / `nips-<hash>` (NeurIPS; `nips-<hash>-round1`/`-round2` on the 2021 Datasets and Benchmarks host: the suffix is the link's round token, because that host numbers each round and the main track separately, so its hash alone can name three papers; a D&B link without a round, or dated other than 2021, gets no id (miner `no_round`, RIS `unresolved`), never a bare `nips-<hash>`; `urls.proceedings_native` is the one rule) / `iclr-<hash>` (ICLR) for proceedings-only papers / `ojs-<article id>` (AAAI, AIES and IASEAI, from ojs.aaai.org; the id is unique across its journals, so the native id never names two papers; decision-049) / `doi-<toc>.<n>` (FAccT 2019 on and AIES 2018–2023, from Crossref: the ACM paper DOI `10.1145/<toc>.<n>` without its prefix, digits only on both sides, e.g. `op:facct:2023:doi-3593013.3594011`; `record.DOI_YEARS` bounds the years, the record check ties the toc to the `acm_proceedings.toml` row of the record's own venue and year, and a DOI is unique everywhere). A `dblp-<key>` id is also AAAI 1980–2008's (the key after `conf/aaai/`, e.g. `op:aaai:1986:dblp-Darden86`; `record.DBLP_YEARS` bounds the years per venue, and an ICML and an AAAI key can coincide, so a takedown names a dblp id with its venue, `aaai:dblp-<key>`), and FAccT 2018's is `pmlr-v81-<key>` (PMLR v81; the record check ties a non-ICML `pmlr-` id to the volume of its own venue and year). `record.PROCEEDINGS_NATIVE` ties each form to its venues. |
 | `title` | str | Raw, whitespace-collapsed. No control character: the record refuses one, and every importer replaces each with a space first (§Pipeline 2, TASK-180, decision-036). Normalization for search happens in 03, not here. The snapshot build caps it at 1,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
 | `abstract` | str \| null | Raw, whitespace-collapsed. From OpenReview, else the proceedings page, else (ICML 1988–2012 only, decision-047) an official ICML conference page that the table `ingest/icml_sites.toml` names, live or as a pinned Internet Archive capture, attached by exact title key (§Sources, ICML sites row); else (AAAI 1980–2008 only, decision-051) AAAI's own paper page, read from a pinned Internet Archive capture and joined by dblp key (§Sources, AAAI library row); and, for an AAAI, AIES or FAccT record that still has none after every official source, OpenAlex's (decision-049, milestone C; §Sources, OpenAlex row), which `abstract_kind` labels; every importer replaces each control character with a space (§Pipeline 2, TASK-188, decision-044), though the model does not refuse one. `null` if no source has it. Never a Scholar snippet (reject values that start or end with `…`; an ellipsis inside is allowed). Never an empty string. Never a lone UTF-16 surrogate: every source refuses that abstract claim and counts it as `abstract_surrogate` (§Pipeline 2, TASK-229). The snapshot build caps it at 20,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
-| `authors` | list[str] | Display order. |
+| `authors` | list[str] | Display order. The snapshot build caps each name at 1,000 characters (§Pipeline 2, decision-053). |
 | `venue` | enum | `NeurIPS` \| `ICLR` \| `ICML` \| `AAAI` \| `AIES` \| `FAccT` \| `IASEAI` (`vocab.VENUES`; decision-049). Extensible. `RECORD_SCHEMA_VERSION` is 9 since TASK-232: the `aaai_library` source (an `abstract` claim only, on AAAI 1980–2008 dblp records only; the model refuses it elsewhere; decision-051); 8 was milestone C: the `openalex` source (an `abstract` claim only, on AAAI, AIES and FAccT only; the record model refuses it on any other field or venue, `record.OPENALEX_VENUES`) and the derived `abstract_kind` (below); 7 was milestone B: the `crossref` and `facct_site` sources, the `doi-<toc>.<n>` native id, `dblp-` ids for AAAI 1980–2008, and the `pmlr-` native id widened from ICML to FAccT (PMLR v81, 2018; decision-049; 6 added the four venues, five tracks and the `ojs` source). Every venue has a source: AAAI 1980–2008 comes from the pinned dblp release and 2010+ from OJS (none was held in 1981, 1985, 1989, 1995, 2001, 2003 or 2009), AIES 2018–2023 from Crossref and 2024+ from OJS, FAccT 2018 from PMLR v81 and 2019+ from Crossref (plus the official abstracts of 2022, 2025 and 2026), IASEAI 2026 from OJS. AAAI 1980–2008's abstracts come from archived copies of AAAI's own paper pages (§Sources, AAAI library row); OpenAlex fills the abstract of AAAI, AIES and FAccT records no official source gives (§Sources, OpenAlex row). |
 | `year` | int | Conference year, not the arXiv year. A year before the venue was held under its name (NeurIPS 1987, ICLR 2013, ICML 1988, AAAI 1980, AIES 2018, FAccT 2018, IASEAI 2025; `vocab.CONFERENCES`) is refused. |
 | `track` | enum | See the taxonomy below. Never defaults to `main`. Unknown stays `unknown`. |
 | `status` | enum | `accepted` \| `rejected` \| `withdrawn` \| `desk_rejected` \| `unknown` |
 | `presentation` | str \| null | `oral` / `spotlight` / `poster`, when the source states it (§Presentation). |
-| `venue_id_raw` | str \| null | OpenReview `content.venueid` verbatim, e.g. `NeurIPS.cc/2023/Track/Datasets_and_Benchmarks`. |
-| `urls` | object | `forum`, `pdf`, `proceedings`, `doi`, each optional. |
-| `keywords` | list[str] | Stored and displayed, **not searched** (guarantee 2). |
+| `venue_id_raw` | str \| null | OpenReview `content.venueid` verbatim, e.g. `NeurIPS.cc/2023/Track/Datasets_and_Benchmarks`. One over 500 characters never fills it after the snapshot build; its claim keeps it cut, as text (§Pipeline 2, decision-053). |
+| `urls` | object | `forum`, `pdf`, `proceedings`, `doi`, each optional. A URL over 2,048 characters or a DOI over 1,000 never fills its slot after the snapshot build (its claim keeps it cut, as text), unless the URL already is the page of the record's own id: then it is kept whole and flagged, bounded only by the id (TASK-281; §Pipeline 2, decision-053). |
+| `keywords` | list[str] | Stored and displayed, **not searched** (guarantee 2). The snapshot build caps each at 2,000 characters (§Pipeline 2, decision-053). |
 | `provenance` | list[Claim] | For each field: the source, URL, fetch time and evidence (scholarmend's claim/ledger pattern). Two claim fields are provenance only, never a record field (record schema 4, decision-029): `twin`, the ids of a v1 copy's linked twins (§Pipeline, TASK-159), and `invitation`, a v1 note's OpenReview submission invitation from scholarmend 0.1.5 (§Sources, RIS row; TASK-157). |
 | `content_hash` | str | sha256 of the canonical JSON of the searchable and filterable fields. |
 | `venue_name` | str | **Derived, never stored** (TASK-112): the venue string of spec 04 §Exports, `vocab.venue_name(venue, year)`, e.g. `International Conference on Learning Representations (ICLR 2024)`. A pydantic computed field: sent wherever the record is (`GET /papers/{id}`'s `paper`), left out of `records.jsonl` (`record.DERIVED`, `snapshot.record_line`), so snapshots, their hashes, `RECORD_SCHEMA_VERSION` and `content_hash` don't change, and stored data that names it is refused as an extra field. |
@@ -259,6 +259,54 @@ the OJS, AAAI 1980–2008, Crossref, FAccT site, OpenAlex and AAAI library rows 
    longest abstract is 4,995 characters and its longest run of marks is 1. It rebuilds byte-identically. Two
    sources' texts that differ only past a cap compare equal once trimmed, so they get no `conflicts.csv` row;
    their claims still carry the note.
+
+   **Every other stored string** has a length cap too (`caps.FIELD_CAPS`, decision-053, TASK-279), for size: none is
+   tokenized, but each is written whole into every snapshot, export and API response. The owner chose to trim and flag
+   as decision-026 does, never to refuse, so every record stays whole (2026-10-22). Each cap is at least 2.7 times the
+   longest value in snapshot 2026-10-16-03eab0ef56c4 (173,518 records, every claim included;
+   `docs/results/2026-10-22-stored-string-lengths.md`), so it trims none of them:
+
+   | Field | Cap (characters) | Longest held |
+   |---|---|---|
+   | DOI (`urls.doi`) | 1,000 | 34 |
+   | each URL (`urls.forum`, `urls.pdf`, `urls.proceedings`) | 2,048 | 154 |
+   | each author name | 1,000 | 81 |
+   | each keyword | 2,000 | 733 |
+   | `venue_id_raw` | 500 | 65 |
+   | an `invitation` claim's value | 500 | none |
+   | a claim's `url` | 2,048 | 154 |
+   | a claim's `evidence`, its notes included | 4,000 | 469 |
+
+   - Authors and keywords on the record, and every claim, are cut alike (the `urls` slots and `venue_id_raw` are
+     re-resolved, below), counted and cut as a title is (NFKD, before the last
+     space that fits), then stripped of whitespace, in the same pass as the caps above (`caps.cap_record`).
+   - A cut claim's evidence ends with `trimmed at ingest (decision-053): <what>`: the value cut from and to, how many
+     names or keywords were cut, a claim url dropped, or the evidence cut. A cut evidence keeps its start and the
+     notes within 4,000. The manifest's `trimmed` names the record too (§5).
+   - **A cut DOI, URL or venue id never fills the record.** Its claim keeps the cut value as plain text, shown in the
+     paper page's provenance beside the note. The record's `urls` slot or `venue_id_raw` never takes it: dedup takes
+     the next-ranked claim that wasn't cut, else null, so no link, export or DOI join (the OpenAlex fill) uses it. That
+     record's exports then carry no DOI or URL from it; the paper page's provenance and the manifest's `trimmed` are
+     where the cut shows. A cut venue id (which can read as another track's id) is no id: it counts against Creative AI, as the whole id
+     would, and the record shows the next source's venue id, if any (display only: its track comes from the track claims). A
+     claim's own `url` is only ever a link, so one over the cap is dropped.
+   - **A cut URL names its paper only if the cut changed nothing it names.** When the cut value's proceedings id,
+     forum id or page parts differ from the whole URL's (a forum URL's `id` cut short is a valid id of another
+     paper), the note adds `not read as an id` and dedup reads no id from it (§Pipeline 4, the forum link). A long query
+     string cut after a proceedings page's path still names that page. A page whose cut would change what it names
+     first drops its query, parameters and fragment instead, when that fits and names all the whole did (its track
+     token included). A URL the record's own id was read from, which neither keeps naming it, becomes an address of
+     that id's page instead, rebuilt from the parsed id (flagged `rebuilt as the page of the record id it names`; a
+     cut, so it fills no slot; a URL that already is that address is kept, a valid link): it still
+     names the record, and only the id's own length (TASK-281) takes it past the cap. An `iclr_archive` target, whose
+     id hashes the whole URL, is cut and unread like any other; dedup still takes that record as standing for itself
+     (and keeps it apart from another paper), but only by the crawler's own target claim. The page is decided from the
+     value and the id alone; the archive exception reads the `not read as an id` note, but only on the `iclr_archive`
+     crawler's own `urls.proceedings` claim on an `iclr-` id, whose evidence no import writes.
+   - **Not capped:** `id` (identity: cutting it would rename the paper; the `pmlr-`, `dblp-`, `ojs-` and `doi-`
+     forms have no length bound, TASK-281; the longest is 53), a `twin` claim's ids (each must be a record of the
+     snapshot), the enums and `year`, and how many authors or keywords a record has (95 and 54 at most; TASK-280).
+
    **Control characters in a title (TASK-180, decision-036).** A record's title holds no control character (Unicode category
    `Cc`: C0, DEL, C1), and a source can leave one in: a PDF's soft line break pasted as U+0002
    (`A SPEC␂TRUM FROM …`, ICLR 2026 `xHMNX3l8rx`; ICLR 2024 `PqjQmLNuJt`), a trailing NUL (NeurIPS 2026
@@ -360,7 +408,8 @@ the OJS, AAAI 1980–2008, Crossref, FAccT site, OpenAlex and AAAI library rows 
 4. **Deduplicate.** The same paper appears on OpenReview and in the proceedings (NeurIPS, ICML 2023+).
    `ingest/dedup.py`. Merge on (a) an identical id (the same forum ID in the same venue and year, or the
    same proceedings id), then (a′) the forum link (TASK-105): records naming the same OpenReview forum id,
-   as their id or in a `urls.forum` claim (PMLR's index links the forum from ICML 2023), merge in the same
+   as their id or in a `urls.forum` claim (never one the ingest caps cut so that it names something else, §2,
+   decision-053; PMLR's index links the forum from ICML 2023), merge in the same
    venue and year whatever their titles say; a link across venue-years, against the track rule below, or
    shared by two listings is a `conflicts.csv` row, never a merge. Then (b) a normalized title (the token contract over the title's NFC form, so every canonically equivalent spelling, NFC, NFD or marks stored in another order, has one key: TASK-168) with the same venue and year. Two
    records are merged **only** when venue and year agree. That lesson comes from venuetriage: records
@@ -520,7 +569,8 @@ the OJS, AAAI 1980–2008, Crossref, FAccT site, OpenAlex and AAAI library rows 
    §Deploy, decision-022): the record keeps everything but its `abstract` (null) and its abstract claims,
    and the manifest names those ids (`withheld`) and counts them per venue-year and track
    (`abstract_withheld`, `abstract_withheld_by_track`), apart from the missing abstracts. When the ingest caps
-   trimmed any title or abstract claim of a record (§2, decision-026), `trimmed` lists those ids, sorted. A
+   trimmed any claim of a record (§2: a title or abstract, decision-026; any other capped value, a claim's url or
+   evidence, decision-053), `trimmed` lists those ids, sorted. A
    claim that precedence overruled counts. A record whose takedown withheld its only trimmed claim does not. The key is
    absent when nothing was trimmed, so it is additive with no format bump. With any RIS
    report it also holds `query_dates: {"ris": "utc" | "local"}`: `utc` only when every RIS report has a
