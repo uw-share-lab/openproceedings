@@ -4,6 +4,7 @@ title: logs.scrub's URL-userinfo pattern is quadratic on a long alphanumeric run
 status: To Do
 assignee: []
 created_date: '2026-10-20 15:18'
+updated_date: '2026-10-22 22:23'
 labels:
   - logging
   - security
@@ -21,3 +22,9 @@ Found by TASK-272's security sweep (2026-10-20), pre-existing: logs.py _URL_USER
 <!-- AC:BEGIN -->
 - [ ] #1 scrub's userinfo redaction is linear with identical output (exhaustive short-string comparison), with a CPU-growth test
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+TASK-281 review (2026-10-22): a NeurIPS listing warning also logs its see-also links uncapped, so a hostile listing can put long text through scrub(); fixing scrub's growth here covers it.
+<!-- SECTION:NOTES:END -->
