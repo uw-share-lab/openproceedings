@@ -47,7 +47,7 @@ record past a bound refused, record schema 9 → 10.
   record comes within 2× of a cap.
 
 ## Follow-ups
-- TASK-282: the dblp year parsers still trust `str.isdigit()` (see the closing addendum).
+- TASK-282: `http._seconds` and the dblp year readers still trust `str.isdigit()` (see the closing addendum).
 - TASK-275 (note added): a NeurIPS listing warning logs its see-also links uncapped through `scrub()`.
 
 ## Propagated to
@@ -114,7 +114,10 @@ record past a bound refused, record schema 9 → 10.
 
 ## Addendum — 2026-10-22 (closing)
 - **The `isdigit` fix was made where the bound was, not everywhere `isdigit` is.** `ris._int` gained `isascii()`, but
-  `sources/dblp.py` and `sources/dblp_aaai.py` still read a year with `raw.isdigit()`: `int('²')` raises and
-  `int('١٩٨٠')` reads 1980. The input is the pinned, digest-checked dblp release, so it was filed (TASK-282) rather
-  than fixed after merge. Lesson: once a primitive is found unsafe, grep the repo for it (`isdigit()`), not only the
-  files the task touched.
+  three readers still trust `str.isdigit()`: `sources/http.py` `_seconds` (the `Retry-After` and `ratelimit-reset`
+  headers of a 429 or 5xx, which urllib decodes as latin-1, so one `0xB2` byte from any crawled host makes
+  `float('²')` abort the run), and the dblp year readers in `sources/dblp.py` and `sources/dblp_aaai.py` (`int('²')`
+  raises, `int('١٩٨٠')` reads 1980). Filed as TASK-282 rather than fixed in this backlog-only PR after review. The
+  closing docs review found the network-facing one; the addendum's first draft named only dblp. Lesson: once a
+  primitive is found unsafe, run `grep -rn isdigit backend/src` and check every hit, not only the files the task
+  touched.
