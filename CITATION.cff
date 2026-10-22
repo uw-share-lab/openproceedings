@@ -6,10 +6,11 @@ message: >-
 type: software
 version: 0.5.0
 date-released: 2026-10-22
-title: "openproceedings: exact, reproducible Boolean search over NeurIPS, ICLR and ICML titles and abstracts"
+title: "openproceedings: exact, reproducible Boolean search over NeurIPS, ICLR, ICML, AAAI, AIES, FAccT and IASEAI titles and abstracts"
 abstract: >-
-  openproceedings is exact, reproducible Boolean search over the titles and abstracts of NeurIPS, ICLR and
-  ICML papers, built for systematic reviews. A query matches only on exact normalized tokens (no stemming or
+  openproceedings is exact, reproducible Boolean search over the titles and abstracts of NeurIPS (from 1987),
+  ICLR (from 2013), ICML (from 1988), AAAI (from 1980), AIES (from 2018), FAccT (from 2018) and IASEAI (2026)
+  papers, built for systematic reviews. A query matches only on exact normalized tokens (no stemming or
   synonyms), filters live in the query string, default track and status filters report how many records they
   exclude, and every result set is pinned to an immutable index_version, so a saved search record replays to
   the same ids while its pinned index is served. Exports (RIS, CSV, BibTeX, JSONL) name each abstract's source.
@@ -30,3 +31,7 @@ keywords:
   - NeurIPS
   - ICLR
   - ICML
+  - AAAI
+  - AIES
+  - FAccT
+  - IASEAI
