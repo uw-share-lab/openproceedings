@@ -85,4 +85,5 @@ the proof was run:
 
 **Propagated to:** `.claude/agents/release-manager.md` (§How you work, step 1: the security reviewer keeps off the
 shared checkout; step 2: choose MINOR or PATCH from the release's Added section, not from `changelog.py`; and step 1's
-release-branch summary: check `CITATION.cff`'s title, abstract and keywords against the README's venues and years).
+release-branch summary: check `CITATION.cff`'s title, abstract and keywords, and `backend/pyproject.toml`'s
+`description`, against the README's venues and years).

@@ -28,7 +28,7 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    `git diff` or its own `git worktree add --detach`, never a checkout in the shared one, 2026-10-22); verify the index (the served one, or a new one when
    `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy changes) and replay sampled records with `--json`
    (`reproduced` or `drifted` as the versions say; `mismatch` blocks); freeze `dev` and cut `release/X.Y.Z`:
-   bump `backend/pyproject.toml` and `frontend/package.json`, relock, set `CITATION.cff`'s `version` (= the release version) and `date-released` (the planned tag day; spec 08 §Release step 4, checked again at step 6 before tagging), and check its title, abstract and keywords against the README's venues and years (2026-10-22), add the `docs/releases.toml` table
+   bump `backend/pyproject.toml` and `frontend/package.json`, relock, set `CITATION.cff`'s `version` (= the release version) and `date-released` (the planned tag day; spec 08 §Release step 4, checked again at step 6 before tagging), and check its title, abstract and keywords, and `backend/pyproject.toml`'s `description`, against the README's venues and years (2026-10-22), add the `docs/releases.toml` table
    from the index manifest, `make changelog RELEASE=X.Y.Z` (never hand-edit `CHANGELOG.md`),
    `/record-learnings`, `/review-gate`, `/open-pr`; promote with `gh pr create --base main --head dev` (not
    `/open-pr`), which requires green checks but no mandatory approving review under the
