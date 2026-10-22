@@ -114,10 +114,10 @@ record past a bound refused, record schema 9 → 10.
 
 ## Addendum — 2026-10-22 (closing)
 - **The `isdigit` fix was made where the bound was, not everywhere `isdigit` is.** `ris._int` gained `isascii()`, but
-  three readers still trust `str.isdigit()`: `sources/http.py` `_seconds` (the `Retry-After` header of a 429 or 5xx,
-  and `ratelimit-remaining`/`ratelimit-reset` on every 200 via `_respect_budget`; urllib decodes headers as latin-1,
-  so one `0xB2` byte from any crawled host makes `float('²')` abort the run), and the dblp year readers in `sources/dblp.py` and `sources/dblp_aaai.py` (`int('²')`
-  raises, `int('١٩٨٠')` reads 1980). Filed as TASK-282 rather than fixed in this backlog-only PR after review. The
-  closing docs review found the network-facing one; the addendum's first draft named only dblp. Lesson: once a
-  primitive is found unsafe, run `grep -rn isdigit backend/src` and check every hit, not only the files the task
-  touched.
+  three readers still trust `str.isdigit()`: `sources/http.py` `_seconds` (the `Retry-After` header of a 429 or 5xx, and
+  `ratelimit-remaining`/`ratelimit-reset` on every 200 via `_respect_budget`; urllib decodes headers as latin-1, so one
+  `0xB2` byte from any crawled host makes `float('²')` abort the run), and the dblp year readers in `sources/dblp.py`
+  and `sources/dblp_aaai.py` (`int('²')` raises, `int('١٩٨٠')` reads 1980). Filed as TASK-282 rather than fixed in this
+  backlog-only PR after review. The closing docs review found the network-facing one; the addendum's first draft named
+  only dblp. Lesson: once a primitive is found unsafe, run `grep -rn isdigit backend/src` and check every hit, not only
+  the files the task touched.
