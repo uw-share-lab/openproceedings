@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-21 23:01'
-updated_date: '2026-10-22 05:03'
+updated_date: '2026-10-22 05:30'
 labels:
   - ingest
   - security
@@ -38,3 +38,9 @@ Follow-up from TASK-274. decision-026 (ingest/caps.py, CAPPED = title, abstract)
 5. Docs as built: record-schema and snapshots skills, spec 01, CLAUDE.md layout line, decision-026 cross-reference.
 6. Verify no version bump needed (caps return records unchanged within them), make test/lint/tooling, learnings, review gate, finalize, PR, merge queue.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Measured over snapshot 2026-10-16-03eab0ef56c4 (173,518 records, every claim): DOI 34, URL 154 (claim url 154), author 81, keyword 733 (an abstract split into keywords, ICLR 2025 d8hURACo0P), venue_id_raw 65, invitation none, evidence 469, id 53; at most 95 authors and 54 keywords per record. Caps: DOI 1,000, URL and claim url 2,048, author 1,000, keyword 2,000, venue_id_raw and invitation 500, evidence 4,000 (notes included). cap_record over every record of that snapshot returned each unchanged (changed=0; the 26 decision-026 already lists stay), so records.jsonl, snapshot_hash and index_version are unchanged: no RECORD_SCHEMA_VERSION, TOKENIZER_VERSION or SCHEMA_VERSION bump (the caps belong to the build, as decision-026's do). A cut URL whose cut changed what it names is not read as an id (unread_identifier); one whose cut left it alone still names its paper, so a long query string never refuses the build at dedup's self-naming check. Local: make test (9205 passed, 3 skipped; frontend 4954 passed), make lint, make tooling green; mutate-changed: no mutants cover the diff. Follow-up (file at the end): cap the number of authors and keywords per record.
+<!-- SECTION:NOTES:END -->
