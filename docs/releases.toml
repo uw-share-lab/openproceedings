@@ -76,3 +76,12 @@ schema_version = "4"
 tantivy_version = "0.26.2"
 query_version = "2"
 notes = "Verified on the same served index as 0.4.2, 78d2e70310f3 of the 173,518-paper snapshot of 2026-10-16, with the same tokenizer, schema, query and Tantivy versions, so search records saved on a retained supported index still replay as reproduced. The question of OpenAlex's terms (TASK-135) is still open: it has yet to go to the university copyright office, the public launch waits on its answer, and the OpenAlex abstract fill is unchanged until then. Promotion does not deploy data."
+
+[releases."0.5.0"]
+index_version = "78d2e70310f3"
+snapshot_hash = "03eab0ef56c4d768ca25c1942207d1c9eaf14a1d852bd276a05e013ae17210c7"
+tokenizer_version = "3"
+schema_version = "4"
+tantivy_version = "0.26.2"
+query_version = "2"
+notes = "Verified on the same served index as 0.4.3, 78d2e70310f3 of the 173,518-paper snapshot of 2026-10-16, with the same tokenizer, schema, query and Tantivy versions, so search records saved on a retained supported index still replay as reproduced. The new ingest length caps (decision-053) apply from the next snapshot build; they change no record of the current snapshot, so the served index is unchanged. The question of OpenAlex's terms (TASK-135) is still open: it has yet to go to the university copyright office, the public launch waits on its answer, and the OpenAlex abstract fill is unchanged until then. Promotion does not deploy data."
