@@ -602,7 +602,10 @@ def _cluster(members: Sequence[PaperRecord], rid: str | None = None) -> _Cluster
     rid = rid or members[0].id
     summary, _ = resolve(rid, [c for r in members for c in r.provenance])  # rows come from the final resolve
     claims = summary.provenance  # kept claims only: the output record carries nothing else
-    pids = proceedings_ids(claims)
+    # an `iclr_archive` record whose own target the caps cut still names its own id (the crawler read it from the whole
+    # target), so the never-merge guards still see it (decision-053)
+    archived = {m.native for m in members if _archive_target_cut(m)}
+    pids = proceedings_ids(claims) | archived
     sources = _sources(members)
     return _Cluster(
         id=rid, members=tuple(members), summary=summary, sources=sources,

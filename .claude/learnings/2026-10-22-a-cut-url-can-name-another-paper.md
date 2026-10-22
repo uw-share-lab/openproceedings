@@ -3,7 +3,7 @@
 **Key lesson:** When a length cap trims an identifier (a DOI or URL), keep the cut text only as display text: never fill the record's link slot from it (the next uncut claim does, else none), and stop identity reads from using it whenever the cut changed what it names. A cut that leaves the id alone must still count, or a record that names itself only by that URL stops the whole build.
 
 - **Date:** 2026-10-22 · **Task:** task-279 · **Area:** ingest
-- **Artifacts:** `backend/src/openproceedings/ingest/caps.py` (`FIELD_CAPS`, `cut_identifier`, `unread_identifier`, `names_own_record`), `backend/src/openproceedings/ingest/dedup.py` (`resolve`, `resolved_value`, `proceedings_ids`, `forum_ids`, `_own_ids`, `_names_creative_ai`), `docs/results/2026-10-22-stored-string-lengths.md`, `backend/tests/unit/ingest/test_caps.py`, decision-053
+- **Artifacts:** `backend/src/openproceedings/ingest/caps.py` (`FIELD_CAPS`, `cut_identifier`, `unread_identifier`, `_names`, `_own_page`), `backend/src/openproceedings/ingest/dedup.py` (`resolve`, `resolved_value`, `proceedings_ids`, `forum_ids`, `_names_creative_ai`, `_archive_target_cut`), `docs/results/2026-10-22-stored-string-lengths.md`, `backend/tests/unit/ingest/test_caps.py`, decision-053
 
 ## What we set out to do
 Cap every stored string field that decision-026 left uncapped (DOI, URLs, author names, keywords, venue_id_raw,
@@ -107,4 +107,16 @@ refused.
   (TASK-281) bounds it. The hash-derived `iclr_archive` id is left out: its target is cut and unread like any other,
   and dedup lets that record stand for itself only by the crawler's own claim (`dedup._archive_target_cut`), which no
   import can write. Lesson: whenever a rule says "keep it whole", ask what bounds "whole", and test the case where
-  junk follows the part that matters (`test_an_identifying_url_never_passes_its_cap_by_more_than_its_id`).
+  junk follows the part that matters (now `test_a_listing_whose_own_page_url_a_cut_would_unname_becomes_its_page_and_builds`).
+
+## Addendum — 2026-10-22 (review round 3)
+- **"Cut just past the id" was a guess about URL shapes, and the shapes said no.** Round 3 found that it aborted the
+  build for a NeurIPS or ICLR page whose track token after the hash is long (the path must end `-Abstract….html`) and
+  for a PMLR raw GitHub asset (the key sits mid-path), let leading zeros take a URL past the cap (`v000…235`), and never
+  checked that the whole URL named the record's own id (a claim for `…/v235/abcddd…` was cut to name `abc`). The rule
+  now rebuilds the id's canonical page from the parsed id, per form (`caps._own_page`), and keeps it only if it names
+  the same id. Lesson: when a value must keep naming something, build it from the thing it names rather than trimming
+  the source's text toward it.
+- **An exception that drops an id from a set weakens every guard that reads the set.** The `iclr_archive` exception
+  left the record's own id out of its cluster's proceedings ids, so the two-ids guard let it title-merge into another
+  ICLR paper. `_cluster` now adds it back for those records (`test_an_archive_record_with_its_target_cut_is_still_kept_apart_from_another_paper`).

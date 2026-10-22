@@ -22,7 +22,7 @@ build.
 | `status` | enum | `accepted` \| `rejected` \| `withdrawn` \| `desk_rejected` \| `unknown` |
 | `presentation` | str \| null | `oral` / `spotlight` / `poster`, when the source states it (§Presentation). |
 | `venue_id_raw` | str \| null | OpenReview `content.venueid` verbatim, e.g. `NeurIPS.cc/2023/Track/Datasets_and_Benchmarks`. One over 500 characters never fills it after the snapshot build; its claim keeps it cut, as text (§Pipeline 2, decision-053). |
-| `urls` | object | `forum`, `pdf`, `proceedings`, `doi`, each optional. A URL over 2,048 characters or a DOI over 1,000 never fills its slot after the snapshot build; its claim keeps it cut, as text (§Pipeline 2, decision-053). |
+| `urls` | object | `forum`, `pdf`, `proceedings`, `doi`, each optional. A URL over 2,048 characters or a DOI over 1,000 never fills its slot after the snapshot build (its claim keeps it cut, as text), unless the URL already is the page of the record's own id: then it is kept whole and flagged, bounded only by the id (TASK-281; §Pipeline 2, decision-053). |
 | `keywords` | list[str] | Stored and displayed, **not searched** (guarantee 2). The snapshot build caps each at 2,000 characters (§Pipeline 2, decision-053). |
 | `provenance` | list[Claim] | For each field: the source, URL, fetch time and evidence (scholarmend's claim/ledger pattern). Two claim fields are provenance only, never a record field (record schema 4, decision-029): `twin`, the ids of a v1 copy's linked twins (§Pipeline, TASK-159), and `invitation`, a v1 note's OpenReview submission invitation from scholarmend 0.1.5 (§Sources, RIS row; TASK-157). |
 | `content_hash` | str | sha256 of the canonical JSON of the searchable and filterable fields. |
@@ -263,7 +263,8 @@ the OJS, AAAI 1980–2008, Crossref, FAccT site, OpenAlex and AAAI library rows 
    **Every other stored string** has a length cap too (`caps.FIELD_CAPS`, decision-053, TASK-279), for size: none is
    tokenized, but each is written whole into every snapshot, export and API response. The owner chose to trim and flag
    as decision-026 does, never to refuse, so every record stays whole (2026-10-22). Each cap is at least 2.7 times the
-   longest value in snapshot 2026-10-16-03eab0ef56c4 (173,518 records, every claim included), so it trims none of them:
+   longest value in snapshot 2026-10-16-03eab0ef56c4 (173,518 records, every claim included;
+   `docs/results/2026-10-22-stored-string-lengths.md`), so it trims none of them:
 
    | Field | Cap (characters) | Longest held |
    |---|---|---|
@@ -293,11 +294,13 @@ the OJS, AAAI 1980–2008, Crossref, FAccT site, OpenAlex and AAAI library rows 
      forum id or page parts differ from the whole URL's (a forum URL's `id` cut short is a valid id of another
      paper), the note adds `not read as an id` and dedup reads no id from it (§Pipeline 4, the forum link). A long query
      string cut after a proceedings page's path still names that page. A URL the record's own id was read from, which
-     a cut at the cap would unname, is cut just past that id instead (flagged `just past the record id it names`; one
-     already ending there is kept), so it still names the record and is no longer than the URL up to its id: only the
-     id's own length (TASK-281) takes it past the cap. An `iclr_archive` target, whose id hashes the whole URL, is cut
-     and unread like any other; dedup still takes that record as standing for itself, but only by the crawler's own
-     target claim. Both are decided from the value, the id and the claim's source, never from evidence text.
+     a cut at the cap would unname, becomes that id's page address instead, rebuilt from the parsed id (flagged
+     `rebuilt as the page of the record id it names`; a URL that already is that page is kept, a valid link): it still
+     names the record, and only the id's own length (TASK-281) takes it past the cap. An `iclr_archive` target, whose
+     id hashes the whole URL, is cut and unread like any other; dedup still takes that record as standing for itself
+     (and keeps it apart from another paper), but only by the crawler's own target claim. The page is decided from the
+     value and the id alone; the archive exception reads the `not read as an id` note, but only on the `iclr_archive`
+     crawler's own `urls.proceedings` claim on an `iclr-` id, whose evidence no import writes.
    - **Not capped:** `id` (identity: cutting it would rename the paper; the `pmlr-`, `dblp-`, `ojs-` and `doi-`
      forms have no length bound, TASK-281; the longest is 53), a `twin` claim's ids (each must be a record of the
      snapshot), the enums and `year`, and how many authors or keywords a record has (95 and 54 at most; TASK-280).

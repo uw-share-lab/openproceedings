@@ -47,9 +47,10 @@ slot or `venue_id_raw` is taken from it (`cut_identifier`: `dedup.resolve`, and 
 claim's own url, which is only ever a link, is dropped when it is over its cap. Dedup still reads a cut URL as naming
 its paper when the cut left what it names unchanged (a long query string after a proceedings page's path), and reads
 nothing from one whose cut changed it (`unread_identifier`: a forum URL's `id` cut short is a valid id of another
-paper). A URL the record's own id was read from, which a cut at the cap would unname, is cut just past that id
-instead (`_own_prefix`), so it still names the record; only the id bounds it (TASK-281). An `iclr_archive` target,
-whose id hashes the whole URL, is cut and unread like any other (`dedup` accepts that record as naming itself).
+paper). A URL the record's own id was read from, which a cut at the cap would unname, is replaced by that id's page
+address rebuilt from the id (`_own_page`), so it still names the record and only the id bounds it (TASK-281). An
+`iclr_archive` target, whose id hashes the whole URL, is cut and unread like any other (`dedup` accepts that record as
+standing for itself, by the crawler's own claim only).
 """
 
 from __future__ import annotations
@@ -58,6 +59,7 @@ import re
 import unicodedata
 from collections.abc import Iterable
 from functools import lru_cache
+from urllib.parse import urlparse
 
 from openproceedings.ingest import urls
 from openproceedings.ingest.record import Claim, ClaimField, PaperRecord
@@ -100,8 +102,8 @@ CUT = "trimmed at ingest (decision-053):"  # how a claim's evidence says one of 
 _CUT_NOTE = re.compile(rf"(?:^|\s\(){re.escape(CUT)} ([0-9a-z ,;]+)\)?\Z")
 _VALUE_CUT = "value cut from "
 _UNREAD = "not read as an id"  # a cut URL that no longer names what it named whole
-# a URL cut there rather than at the cap, so that it still names the record (`_own_prefix`)
-_OWN = "just past the record id it names"
+# a URL replaced by its page's address rebuilt from the record's id, so that it still names the record (`_own_page`)
+_OWN = "rebuilt as the page of the record id it names"
 _URL_SLOTS = ("urls.forum", "urls.pdf", "urls.proceedings", "urls.doi")
 
 
@@ -306,22 +308,41 @@ def _names(c: Claim, url: str) -> tuple[object, ...]:
         return (object(),)
 
 
-def _own_prefix(c: Claim, url: str, own: str) -> str | None:
-    """`url` cut just past the first place it spells the record's own proceedings id `own` (`urls.native` read
-    `own` from it), when that prefix still names `own`; else None. Its length is the id's position, so only the id
-    itself (TASK-281) bounds it. An `iclr_archive` id hashes the whole URL and is never `urls.native`'s, so no prefix
-    names it."""
-    tail = own.split("-", 2)[2] if own.startswith("pmlr-") else own.split("-", 1)[1]
-    at = url.lower().find(tail.lower())
-    prefix = url[: at + len(tail)] if at >= 0 else None
-    return prefix if prefix is not None and _names(c, prefix)[0] == own else None
+def _own_page(c: Claim, url: str, own: str) -> str | None:
+    """The canonical page address of the record's own proceedings id `own`, built from what `url` names, when `url`
+    names `own` (`urls.native` read the id from it); else None (decision-053). Each form's page is rebuilt from the
+    parsed id alone, so its length is the id's plus a fixed host and path, and leading zeros or any text past the id
+    are gone: a NeurIPS or ICLR page `…/paper_files/paper/<year>/hash/<hash>-Abstract[-<round>].html` on its own host,
+    a PMLR paper `proceedings.mlr.press/v<N>/<key>.html`, a dblp record page, an OJS article on its journal, a DOI
+    link. Kept only if it names `own` too. An `iclr_archive` id hashes the whole URL and is never `urls.native`'s, so
+    nothing is built for it."""
+    if _names(c, url)[0] != own:  # only a URL the record's own id was read from (never another paper's)
+        return None
+    parsed = urlparse(url)
+    page: str | None = None
+    if (parts := urls.proceedings_parts(url)) is not None:
+        rounds = "".join(
+            f"-{r}" for r in own.split("-")[2:]
+        )  # the 2021 D&B host's round (`proceedings_native`)
+        page = f"https://{parsed.netloc.lower()}/paper_files/paper/{parts[1]}/hash/{parts[2]}-Abstract{rounds}.html"
+    elif (paper := urls.pmlr(url)) is not None:
+        page = f"https://proceedings.mlr.press/v{paper[0]}/{paper[1]}.html"
+    elif (key := urls.dblp_icml(url)) is not None:
+        page = urls.dblp_record_url(f"conf/icml/{key}")
+    elif (key := urls.dblp_aaai(url)) is not None:
+        page = urls.dblp_record_url(f"conf/aaai/{key}")
+    elif (article := urls.ojs_article(url)) is not None:
+        page = f"https://ojs.aaai.org/index.php/{parsed.path.split('/')[2]}/article/view/{article}"
+    elif (doi := urls.acm_doi(url)) is not None:
+        page = f"https://doi.org/{doi}"
+    return page if page is not None and _names(c, page)[0] == own else None
 
 
 def _claim(c: Claim, own: str | None = None) -> Claim:
     """`c` under every cap: its title or abstract (`cap`), its value or each item of it (`FIELD_CAPS`), its url and
     its evidence, flagged in its evidence (`c` itself when nothing changes). `own` is the record's own proceedings
-    id: a URL the id was read from, which a cut at the cap would unname, is cut just past the id instead
-    (`_own_prefix`, decision-053). That is decided from the value and the id alone, so no text a source writes can
+    id: a URL the id was read from, which a cut at the cap would unname, becomes the id's page address instead
+    (`_own_page`, decision-053). That is decided from the value and the id alone, so no text a source writes can
     claim it."""
     value, url, notes, said = c.value, c.url, [], []
     if c.field in CAPPED and isinstance(value, str):
@@ -331,8 +352,8 @@ def _claim(c: Claim, own: str | None = None) -> Claim:
     if most is not None and isinstance(value, str) and (kept := cut(value, most)) is not None:
         whole = _names(c, value)
         if c.field in _URL_SLOTS and _names(c, kept) != whole:  # its prefix names another paper, or none
-            if own is not None and (to_own := _own_prefix(c, value, own)) is not None:
-                if to_own != value:
+            if own is not None and (to_own := _own_page(c, value, own)) is not None:
+                if to_own != value:  # its page's address, rebuilt from the id: it names the record still
                     said.append(f"{_VALUE_CUT}{len(value):,} to {len(to_own):,} characters, {_OWN}")
                     value = to_own
                 # it ends at the id: kept whole, still a valid link, and flagged once (not again on a second pass)

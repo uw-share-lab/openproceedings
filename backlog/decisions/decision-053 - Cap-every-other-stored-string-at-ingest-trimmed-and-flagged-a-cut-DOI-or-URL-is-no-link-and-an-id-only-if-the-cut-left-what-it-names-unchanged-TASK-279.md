@@ -63,13 +63,16 @@ Two readings were considered:
    build, the opposite of what the owner chose. The review found the same for a record whose id itself is over 2,000
    characters (a hostile PMLR key or OJS article id): its own page URL is cut inside the id.
 2. **A cut DOI or URL is never a link, and is an id only if the cut left what it names unchanged; a URL the record's
-   own id was read from is cut just past that id instead.** This is the one adopted. The review reached it in three
-   steps. Round 1 answered the long-id case with a note (`it named its own record`) that dedup read to keep the record
+   own id was read from becomes that id's page address instead.** This is the one adopted. The review reached it in
+   four steps. Round 1 answered the long-id case with a note (`it named its own record`) that dedup read to keep the record
    naming itself. Round 2 showed that a source could forge that note in RIS evidence (which repeats a venue id) to make
    any record a listing, and that after a merge it named the wrong record, so the URL was kept whole instead. An
    automated security review then showed that keeping it whole had no bound (an `iclr_archive` target's id hashes the
-   whole URL, so any length passed), which defeats the cap. The rule adopted reads no evidence, and bounds the value
-   by the id it names.
+   whole URL, so any length passed), which defeats the cap. Cutting just past the first place the URL spells the id
+   came next, but round 3 showed it failed where a page's form goes on past the id (a NeurIPS or ICLR page's track
+   token of any length after its hash; a PMLR GitHub asset), refusing the build, that leading zeros took it past the
+   cap, and that it never checked the whole URL named the id. The rule adopted rebuilds the id's own page address
+   from the parsed id: it reads no evidence, works for every form, and only the id bounds it.
 
 ## Decision
 
@@ -113,21 +116,24 @@ Each cap is at least 2.7 times the longest value held, so no record of the curre
   `urls.proceedings` target's id (it hashes the whole URL). If anything differs, the note adds `not read as an id`
   (`caps.unread_identifier`). Dedup's identity reads then skip the claim: `proceedings_ids`, `forum_ids` and the
   Creative AI evidence. A long query string after a proceedings page's path leaves what the URL names unchanged.
-- **A URL the record's own id was read from is cut just past that id.** If a cut at the cap would unname the URL
-  but the whole names the record's own proceedings id (`urls.native`: the miner read the id from it), the cut falls
-  just past the first place the URL spells the id instead (`caps._own_prefix`, kept only if that prefix still names
-  the id), flagged `value cut from <n> to <m> characters, just past the record id it names`. It is a cut, so it fills
-  no slot, but it still names the record, so dedup's input check passes. A URL that already ends at the id is kept
-  and flagged once (`value of <n> characters kept, …`); it is whole, so it stays a valid link. Either way the value is
-  no longer than the URL up to the id, so only the id's own length (TASK-281) takes it past the cap. It can only arise
-  when the id itself sits past character 2,048, a hostile PMLR key or OJS article id (the native forms have no length
-  bound). It is decided from the value and the record's id, never from evidence, so no text a source writes can claim
-  it.
+- **A URL the record's own id was read from becomes that id's page address.** If a cut at the cap would unname the
+  URL but the whole names the record's own proceedings id (`urls.native`: the miner read the id from it), the value
+  becomes the id's canonical page, rebuilt from the parsed id (`caps._own_page`): a NeurIPS or ICLR page
+  `…/paper_files/paper/<year>/hash/<hash>-Abstract[-<round>].html` on its own host, a PMLR paper
+  `proceedings.mlr.press/v<N>/<key>.html`, a dblp record page, an OJS article on its journal, a DOI link. It is kept
+  only if it names the same id. Flagged `value cut from <n> to <m> characters, rebuilt as the page of the record id it
+  names`, it counts as a cut, so it fills no slot, but it still names the record, so dedup's input check passes. A
+  URL that already is that page is kept whole and flagged once (`value of <n> characters kept, …`); it stays a valid
+  link. The page is the id's length plus a fixed host and path, so leading zeros and any text past the id are gone,
+  and only an id longer than the cap (a hostile PMLR key, dblp key or OJS article id; the native forms have no length
+  bound, TASK-281) takes it past the cap. It is decided from the value and the record's id, never from evidence, so no
+  text a source writes can claim it.
 - **An `iclr_archive` target is cut like any other.** Its id hashes the whole target, so no prefix names it: an
   over-cap target is cut at the cap and unread. Dedup's input check then accepts the record as standing for itself
   (`dedup._archive_target_cut`), as it did whole, but only when the unread claim is the `iclr_archive` crawler's own
   `urls.proceedings` claim and the id is an `iclr-` one: no import writes that claim, so none can claim the
-  exception. The record's own id is then missing from its cluster's proceedings ids (below, "A hidden id").
+  exception. Dedup also puts the record's own id back among its cluster's proceedings ids, so the two-ids guard still
+  keeps it apart from another ICLR paper with the same title.
 - **Reserved.** No miner or importer may end a claim's evidence with the `CUT` note. `cut_identifier` and
   `unread_identifier` read it, as `dedup.is_absence` reads `not listed:`. A forged one can only take a value out of
   the record's slots or Creative AI evidence (the safe direction), and it changes no listing or merge.
@@ -142,12 +148,15 @@ Each cap is at least 2.7 times the longest value held, so no record of the curre
 ## Consequences
 
 - **Code.** `ingest/caps.py` (`FIELD_CAPS`, `MAX_DOI`, `MAX_URL`, `MAX_AUTHOR`, `MAX_KEYWORD`, `MAX_VENUE_ID`,
-  `MAX_INVITATION`, `MAX_EVIDENCE`, `IDENTIFIERS`, `cut`, `cut_identifier`, `unread_identifier`),
+  `MAX_INVITATION`, `MAX_EVIDENCE`, `IDENTIFIERS`, `cut`, `cut_identifier`, `unread_identifier`, `_names`,
+  `_own_page`),
   `ingest/dedup.py` (`resolve`, `resolved_value`, `proceedings_ids`, `forum_ids`, `_names_creative_ai`,
-  `_archive_target_cut`), `eval/scholar_compare.py` (no cut DOI as a join key). Tests are in
+  `_archive_target_cut`, `_cluster`), `eval/scholar_compare.py` (no cut DOI as a join key). Tests are in
   `backend/tests/unit/ingest/test_caps.py`: each field at cap−1, cap and cap+1, the identifier rules (a forum id cut
-  short, a query string cut, a URL cut just past its own record's id (PMLR, OJS, junk past the id, an id spelled twice), an `iclr_archive`
-  target cut and still standing for its record (and only by the crawler's own claim), a prefix check, an OJS id past Python's int digit
+  short, a query string cut, a URL rebuilt as its own record's page (junk past the id, an id spelled twice, a NeurIPS or ICLR track
+  token, a PMLR GitHub asset, leading zeros), an `iclr_archive` target cut and still standing for its record (only by
+  the crawler's own claim, and still kept apart from another paper), a page rebuilt only for the record's own id, a
+  forged venue-id note, an OJS id past Python's int digit
   limit, a cut venue id and a cut page as Creative AI evidence, a slot taken from the next claim), a cut that keeps
   evidence and notes within the cap, two Hypothesis properties (a cut never passes its cap and text within it is
   unchanged; a capped record is within every cap and capping it again changes nothing), and a snapshot build that cuts
@@ -163,12 +172,14 @@ Each cap is at least 2.7 times the longest value held, so no record of the curre
     snapshot hash, as any content change does. `op snapshot diff` shows it.
 - **Exactness.** A trimmed DOI or URL is wrong, as the owner accepted. It is never presented as a working link, and
   never used as an id that names a paper it didn't name whole.
-  - **No refusal, and no unbounded value.** A record whose own page URL a cut at the cap would unname keeps it cut
-    just past its id, and an `iclr_archive` record stands for itself with its target cut, so dedup's input check
-    passes. No URL is kept past the id it names: the one stored string still unbounded is the id itself (TASK-281).
+  - **No refusal, and no unbounded value.** A record whose own page URL a cut at the cap would unname gets its id's
+    page address, and an `iclr_archive` record stands for itself with its target cut, so dedup's input check passes.
+    No URL is longer than its cap but by the id it names: the one stored string still unbounded is the id itself
+    (TASK-281).
   - **A hidden id.** An unread cut URL hides what the whole URL named from the never-merge guards too (two distinct
-    forum ids, two proceedings ids). That only happens when the id sits past character 2,048, which no real URL
-    reaches; the other rules (venue, year, track, titles) still apply.
+    forum ids, two proceedings ids). That only happens when a URL passes 2,048 characters with an id that isn't the
+    record's own (a record's own id stays seen: its page, or an `iclr_archive` record's id). No real URL does
+    (the longest is 154); the other rules (venue, year, track, titles) still apply.
   - **Losing the slot.** A record whose only DOI is cut loses its DOI link, and with it the OpenAlex fill's DOI
     route.
 - **Docs.** Spec 01 (§Record schema, §Pipeline 2, §5's `trimmed`), the record-schema skill (§The ingest caps), the
