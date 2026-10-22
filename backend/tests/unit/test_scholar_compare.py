@@ -43,6 +43,7 @@ from openproceedings.eval.scholar_compare import (
     with_variants,
 )
 from openproceedings.ingest import volumes
+from openproceedings.ingest.caps import CUT
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.query.ast import Node, _Node
 from openproceedings.query.canonical import render
@@ -1058,6 +1059,21 @@ def test_a_doi_only_a_claim_carries_matches() -> None:
     index = MatchIndex.build([claim_only])
     [r] = read_ris(entry("x", year=2022, doi="10.52202/068431-0101"), NAME)
     assert (index.match(r).op_id, index.match(r).rule) == (nid("doi00001", 2022), "doi")
+
+
+def test_a_doi_the_ingest_caps_cut_is_never_a_match_key() -> None:
+    """A cut DOI's prefix is no DOI of the paper (decision-053): one that equals a row's DOI matches nothing."""
+    record = paper("doi00001", "Trust", year=2022, urls_doi="10.52202/068431-0101")
+    cut = f"citation_doi ({CUT} value cut from 1,001 to 20 characters)"
+    provenance = tuple(
+        c.model_copy(update={"evidence": cut}) if c.field == "urls.doi" else c for c in record.provenance
+    )
+    assert any(c.field == "urls.doi" for c in provenance)
+    claim_only = record.model_copy(
+        update={"urls": record.urls.model_copy(update={"doi": None}), "provenance": provenance}
+    )
+    [r] = read_ris(entry("x", year=2022, doi="10.52202/068431-0101"), NAME)
+    assert MatchIndex.build([claim_only]).match(r).rule != "doi"
 
 
 def test_a_scopus_export_is_matched_by_doi_never_across_year() -> None:

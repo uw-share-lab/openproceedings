@@ -76,6 +76,7 @@ from functools import cache
 from typing import Any, Literal, Protocol
 
 from openproceedings.ingest import classify, urls
+from openproceedings.ingest.caps import cut_identifier, unread_identifier
 from openproceedings.ingest.record import Claim, ClaimField, PaperRecord, Source, Urls
 from openproceedings.query.normalize import normalize
 
@@ -408,11 +409,13 @@ def _one_per_field_and_source(record_id: str, claims: Iterable[Claim]) -> tuple[
 
 
 def resolve(record_id: str, claims: Iterable[Claim]) -> tuple[PaperRecord, list[Conflict]]:
-    """The record the claims describe, each field from its best-ranked source (PRECEDENCE)."""
+    """The record the claims describe, each field from its best-ranked source (PRECEDENCE). A DOI, URL or venue id
+    the ingest caps cut is text, never a link (`caps.cut_identifier`, decision-053): it fills no `urls` slot and no
+    `venue_id_raw`, and the next-ranked claim that wasn't cut does, if any."""
     kept, conflicts = _one_per_field_and_source(record_id, claims)
     best: dict[str, Claim] = {}
     for fld, order in PRECEDENCE.items():
-        ranked = sorted((c for c in kept if c.field == fld), key=lambda c: order.index(c.source))
+        ranked = _ranked(kept, fld, order)
         if not ranked:
             continue
         best[fld] = win = ranked[0]
@@ -445,6 +448,20 @@ def resolve(record_id: str, claims: Iterable[Claim]) -> tuple[PaperRecord, list[
         provenance=tuple(kept),
     )  # fmt: skip
     return record, conflicts
+
+
+def _ranked(kept: Iterable[Claim], fld: ClaimField, order: tuple[Source, ...]) -> list[Claim]:
+    """`kept`'s claims of `fld` that may answer it, best-ranked first (never a cut DOI, URL or venue id)."""
+    return sorted(
+        (c for c in kept if c.field == fld and not cut_identifier(c)), key=lambda c: order.index(c.source)
+    )
+
+
+def resolved_value(claims: Iterable[Claim], fld: ClaimField) -> object:
+    """The value `resolve` gives `fld` from these claims (None when no claim may answer it): the ingest caps set a
+    record's `urls` slot or `venue_id_raw` with it, so a capped record still equals what its claims resolve to."""
+    ranked = _ranked(_one_per_field_and_source("", claims)[0], fld, PRECEDENCE[fld])
+    return ranked[0].value if ranked else None
 
 
 class _Clusters:
@@ -496,9 +513,11 @@ class _Cluster:
 
 
 def proceedings_ids(claims: Iterable[Claim]) -> set[str]:
+    """The proceedings ids the `urls.proceedings`/`urls.pdf` claims name; never from a URL whose cut by the ingest
+    caps changed what it names (`caps.unread_identifier`, decision-053)."""
     found: set[str] = set()
     for claim in claims:
-        if claim.field not in _URL_FIELDS or not isinstance(claim.value, str):
+        if claim.field not in _URL_FIELDS or not isinstance(claim.value, str) or unread_identifier(claim):
             continue
         native = urls.native(claim.value)
         if native is None and claim.source == "iclr_archive" and claim.field == "urls.proceedings":
@@ -509,11 +528,23 @@ def proceedings_ids(claims: Iterable[Claim]) -> set[str]:
     return found
 
 
+def _archive_target_cut(record: PaperRecord) -> bool:
+    """Did the ingest caps cut an `iclr_archive` record's own target so that it no longer reads (decision-053)? Its id
+    hashes the whole target, so no prefix of it names the record: the record still stands for itself (as it did whole)
+    though its target is unread. Only the crawler writes an `iclr_archive` claim's evidence, so no import can say so."""
+    return record.native.startswith("iclr-") and any(
+        c.source == "iclr_archive" and c.field == "urls.proceedings" and unread_identifier(c)
+        for c in record.provenance
+    )
+
+
 def forum_ids(record: PaperRecord) -> frozenset[str]:
-    """The record's own forum id and every forum id its kept `urls.forum` claims name."""
+    """The record's own forum id and every forum id its kept `urls.forum` claims name (never one a cut changed,
+    `caps.unread_identifier`)."""
     linked = {
         f for c in record.provenance
-        if c.field == "urls.forum" and isinstance(c.value, str) and (f := urls.forum_id(c.value))
+        if c.field == "urls.forum" and isinstance(c.value, str) and not unread_identifier(c)
+        and (f := urls.forum_id(c.value))
     }  # fmt: skip
     if record.forum_id is not None:
         linked.add(record.forum_id)
@@ -537,9 +568,13 @@ def _names_creative_ai(claims: Sequence[Claim], year: int) -> bool:
     said: list[bool] = []
     for c in claims:
         if c.field == "venue_id_raw" and isinstance(c.value, str):
-            said.append(classify.is_creative_ai_venueid(c.value, year))
+            # a venue id the ingest caps cut can read as Creative AI where the whole didn't: never evidence for it
+            said.append(not cut_identifier(c) and classify.is_creative_ai_venueid(c.value, year))
         elif (
-            c.field in _URL_FIELDS and isinstance(c.value, str) and (parts := urls.proceedings_parts(c.value))
+            c.field in _URL_FIELDS
+            and isinstance(c.value, str)
+            and not unread_identifier(c)
+            and (parts := urls.proceedings_parts(c.value))
         ):
             said.append(parts[:2] == ("NeurIPS", year) and parts[3] == classify.CREATIVE_AI)
     return bool(said) and all(said)
@@ -567,7 +602,10 @@ def _cluster(members: Sequence[PaperRecord], rid: str | None = None) -> _Cluster
     rid = rid or members[0].id
     summary, _ = resolve(rid, [c for r in members for c in r.provenance])  # rows come from the final resolve
     claims = summary.provenance  # kept claims only: the output record carries nothing else
-    pids = proceedings_ids(claims)
+    # an `iclr_archive` record whose own target the caps cut still names its own id (the crawler read it from the whole
+    # target), so the never-merge guards still see it (decision-053)
+    archived = {m.native for m in members if _archive_target_cut(m)}
+    pids = proceedings_ids(claims) | archived
     sources = _sources(members)
     return _Cluster(
         id=rid, members=tuple(members), summary=summary, sources=sources,
@@ -691,7 +729,11 @@ def _dedup(records: Iterable[PaperRecord]) -> DedupResult:
         again, _ = resolve(r.id, r.provenance)
         if again != r:
             raise ValueError(f"{r.id}: fields don't match its own claims; dedup would silently change it")
-        if r.forum_id is None and r.native not in proceedings_ids(r.provenance):
+        if (
+            r.forum_id is None
+            and r.native not in proceedings_ids(r.provenance)
+            and not _archive_target_cut(r)
+        ):
             raise ValueError(f"{r.id}: a proceedings record must name itself in a urls.proceedings/pdf claim")
 
     # Step 1: identical id: the same forum id in the same venue and year, or the same proceedings id.
