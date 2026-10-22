@@ -76,6 +76,7 @@ from functools import cache
 from typing import Any, Literal, Protocol
 
 from openproceedings.ingest import classify, urls
+from openproceedings.ingest.caps import cut_identifier, unread_identifier
 from openproceedings.ingest.record import Claim, ClaimField, PaperRecord, Source, Urls
 from openproceedings.query.normalize import normalize
 
@@ -408,11 +409,14 @@ def _one_per_field_and_source(record_id: str, claims: Iterable[Claim]) -> tuple[
 
 
 def resolve(record_id: str, claims: Iterable[Claim]) -> tuple[PaperRecord, list[Conflict]]:
-    """The record the claims describe, each field from its best-ranked source (PRECEDENCE)."""
+    """The record the claims describe, each field from its best-ranked source (PRECEDENCE). A DOI or URL the ingest
+    caps cut is text, never a link (`caps.cut_identifier`, decision-053): it fills no `urls` slot."""
     kept, conflicts = _one_per_field_and_source(record_id, claims)
     best: dict[str, Claim] = {}
     for fld, order in PRECEDENCE.items():
-        ranked = sorted((c for c in kept if c.field == fld), key=lambda c: order.index(c.source))
+        ranked = sorted(
+            (c for c in kept if c.field == fld and not cut_identifier(c)), key=lambda c: order.index(c.source)
+        )
         if not ranked:
             continue
         best[fld] = win = ranked[0]
@@ -496,9 +500,11 @@ class _Cluster:
 
 
 def proceedings_ids(claims: Iterable[Claim]) -> set[str]:
+    """The proceedings ids the `urls.proceedings`/`urls.pdf` claims name; never from a URL whose cut by the ingest
+    caps changed what it names (`caps.unread_identifier`, decision-053)."""
     found: set[str] = set()
     for claim in claims:
-        if claim.field not in _URL_FIELDS or not isinstance(claim.value, str):
+        if claim.field not in _URL_FIELDS or not isinstance(claim.value, str) or unread_identifier(claim):
             continue
         native = urls.native(claim.value)
         if native is None and claim.source == "iclr_archive" and claim.field == "urls.proceedings":
@@ -510,10 +516,12 @@ def proceedings_ids(claims: Iterable[Claim]) -> set[str]:
 
 
 def forum_ids(record: PaperRecord) -> frozenset[str]:
-    """The record's own forum id and every forum id its kept `urls.forum` claims name."""
+    """The record's own forum id and every forum id its kept `urls.forum` claims name (never one a cut changed,
+    `caps.unread_identifier`)."""
     linked = {
         f for c in record.provenance
-        if c.field == "urls.forum" and isinstance(c.value, str) and (f := urls.forum_id(c.value))
+        if c.field == "urls.forum" and isinstance(c.value, str) and not unread_identifier(c)
+        and (f := urls.forum_id(c.value))
     }  # fmt: skip
     if record.forum_id is not None:
         linked.add(record.forum_id)
@@ -539,7 +547,10 @@ def _names_creative_ai(claims: Sequence[Claim], year: int) -> bool:
         if c.field == "venue_id_raw" and isinstance(c.value, str):
             said.append(classify.is_creative_ai_venueid(c.value, year))
         elif (
-            c.field in _URL_FIELDS and isinstance(c.value, str) and (parts := urls.proceedings_parts(c.value))
+            c.field in _URL_FIELDS
+            and isinstance(c.value, str)
+            and not unread_identifier(c)
+            and (parts := urls.proceedings_parts(c.value))
         ):
             said.append(parts[:2] == ("NeurIPS", year) and parts[3] == classify.CREATIVE_AI)
     return bool(said) and all(said)

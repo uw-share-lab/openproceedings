@@ -14,19 +14,33 @@ from pathlib import Path
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+from openproceedings.ingest import urls
 from openproceedings.ingest.caps import (
     CAPPED,
+    CUT,
+    FIELD_CAPS,
     MAX_ABSTRACT,
+    MAX_AUTHOR,
+    MAX_DOI,
+    MAX_EVIDENCE,
+    MAX_KEYWORD,
     MAX_MARKS,
     MAX_TITLE,
+    MAX_URL,
+    MAX_VENUE_ID,
     TRIMMED,
     cap,
     cap_marks,
+    cap_record,
     cap_records,
+    cut,
+    cut_identifier,
     is_mark,
     is_trimmed,
+    unread_identifier,
 )
-from openproceedings.ingest.dedup import attribution, title_key
+from openproceedings.ingest.dedup import attribution, forum_ids, proceedings_ids, resolve, title_key
+from openproceedings.ingest.record import Urls
 from openproceedings.ingest.snapshot import build, ingest_ris, load_records
 from openproceedings.query.normalize import tokenize
 
@@ -396,3 +410,239 @@ def test_tokenizing_the_largest_capped_abstract_stays_linear() -> None:
     capped, base = min(secs(worst) for _ in range(5)), min(secs(plain) for _ in range(5))
     assert capped < max(base, 0.002) * 20
     assert capped < 0.5  # the budget: a stored abstract at the cap tokenizes in well under half a second
+
+
+# --- the other stored strings (decision-053, TASK-279) ---------------------------------------------------------------
+
+
+def _sized(field: str, n: int) -> str:
+    """A value of `field` exactly `n` characters long, with no space (so a cut keeps exactly the cap)."""
+    if field == "urls.doi":
+        return "10.1234/" + "d" * (n - 8)
+    if field.startswith("urls."):
+        return "https://example.org/" + "u" * (n - 20)
+    return "v" * n
+
+
+# claims for every field `record()` holds, so it resolves to itself (`dedup.resolve`) once its urls are added
+_RESOLVABLE = (
+    claim("title", "Trust Calibration in LLMs"),
+    claim("abstract", "We study trust."),
+    claim("venue", "ICLR"),
+    claim("year", 2024),
+    claim("track", "main"),
+    claim("status", "accepted", evidence="venueid=ICLR.cc/2024/Conference"),
+)
+
+
+_STRING_FIELDS = sorted(f for f in FIELD_CAPS if f not in ("authors", "keywords"))
+
+
+@pytest.mark.parametrize("field", _STRING_FIELDS)
+@pytest.mark.parametrize("delta", [-1, 0, 1])
+def test_a_string_claim_is_cut_only_past_its_cap_and_flagged(field: str, delta: int) -> None:
+    most = FIELD_CAPS[field]
+    value = _sized(field, most + delta)
+    r = record(provenance=(claim(field, value, source="ris", evidence="mended.ris:UR"),))
+    out = cap_record(r)
+    if delta <= 0:
+        assert out is r and not is_trimmed(out)
+        return
+    [c] = out.claims(field)
+    assert c.value == value[:most] and len(c.value) == most
+    assert c.evidence == f"mended.ris:UR ({CUT} value cut from {most + 1:,} to {most:,} characters)"
+    assert is_trimmed(out)
+    assert cut_identifier(c) is field.startswith("urls.")
+
+
+@pytest.mark.parametrize(("field", "most"), [("authors", MAX_AUTHOR), ("keywords", MAX_KEYWORD)])
+@pytest.mark.parametrize("delta", [-1, 0, 1])
+def test_each_name_and_keyword_is_cut_only_past_its_cap_and_flagged(
+    field: str, most: int, delta: int
+) -> None:
+    items = ("A. Author", "w" * (most + delta))
+    r = record(**{field: items}, provenance=(claim(field, items, evidence="content." + field),))
+    out = cap_record(r)
+    if delta <= 0:
+        assert out is r
+        return
+    assert getattr(out, field) == ("A. Author", "w" * most)  # the record's field and its claim alike
+    [c] = out.claims(field)
+    assert c.value == getattr(out, field)
+    assert c.evidence == f"content.{field} ({CUT} 1 value cut to at most {most:,} characters)"
+    assert is_trimmed(out) and not cut_identifier(c)
+
+
+@pytest.mark.parametrize("delta", [-1, 0, 1])
+def test_venue_id_raw_is_cut_only_past_its_cap_on_the_record_and_its_claim(delta: int) -> None:
+    vid = "ICLR.cc/2024/Conference/" + "x" * (MAX_VENUE_ID - 24 + delta)
+    r = record(venue_id_raw=vid, provenance=(claim("venue_id_raw", vid, evidence="content.venueid"),))
+    out = cap_record(r)
+    assert (out is r) is (delta <= 0)
+    assert out.venue_id_raw == vid[:MAX_VENUE_ID] and out.claims("venue_id_raw")[0].value == out.venue_id_raw
+
+
+@pytest.mark.parametrize(("slot", "most"), [("doi", MAX_DOI), ("forum", MAX_URL), ("pdf", MAX_URL)])
+@pytest.mark.parametrize("delta", [-1, 0, 1])
+def test_a_doi_or_url_past_its_cap_leaves_its_urls_slot_empty(slot: str, most: int, delta: int) -> None:
+    value = _sized(f"urls.{slot}", most + delta)
+    r = record(
+        authors=(), keywords=(), venue_id_raw=None, urls=Urls(**{slot: value}),
+        provenance=(*_RESOLVABLE, claim(f"urls.{slot}", value, evidence="citation")),
+    )  # fmt: skip
+    out = cap_record(r)
+    assert getattr(out.urls, slot) == (value if delta <= 0 else None)
+    # a cut one is text in its claim, never a link: the record still equals what its own claims resolve to
+    assert resolve(out.id, out.provenance)[0] == out
+    assert [c.value for c in out.claims(f"urls.{slot}")] == [value[:most]]
+
+
+@pytest.mark.parametrize("delta", [-1, 0, 1])
+def test_a_claims_own_url_past_its_cap_is_dropped_and_flagged(delta: int) -> None:
+    url = _sized("urls.pdf", MAX_URL + delta)
+    r = record(provenance=(claim("abstract", "We study trust.", url=url, evidence="content.abstract"),))
+    out = cap_record(r)
+    [c] = out.claims("abstract")
+    if delta <= 0:
+        assert out is r and c.url == url
+        return
+    assert c.url is None and c.value == "We study trust."
+    assert c.evidence == f"content.abstract ({CUT} url of {MAX_URL + 1:,} characters dropped)"
+    assert is_trimmed(out)
+
+
+@pytest.mark.parametrize("delta", [-1, 0, 1])
+def test_evidence_past_its_cap_is_cut_with_its_note_inside_the_cap(delta: int) -> None:
+    route = "scholarmend:proceedings_page https://proceedings.neurips.cc/paper/2024/hash/x-Abstract.html "
+    evidence = route + "e" * (MAX_EVIDENCE - len(route) + delta)  # one long last word: a cut falls before it
+    r = record(provenance=(claim("abstract", "We study trust.", source="ris", evidence=evidence),))
+    out = cap_record(r)
+    [c] = out.claims("abstract")
+    if delta <= 0:
+        assert out is r
+        return
+    assert c.evidence is not None and len(c.evidence) <= MAX_EVIDENCE
+    # the route and its url stay first (`attribution`); the cut falls before the last space, as a title's does
+    assert c.evidence == f"{route.strip()} ({CUT} evidence cut from {MAX_EVIDENCE + 1:,} characters)"
+    assert is_trimmed(out) and cap_record(out) is out  # capped once: a second pass changes nothing
+
+
+def test_a_title_cut_and_an_evidence_cut_keep_both_notes_inside_the_cap() -> None:
+    title, evidence = "Trust " * 400, "e" * MAX_EVIDENCE
+    r = record(title=title.strip(), provenance=(claim("title", title.strip(), evidence=evidence),))
+    out = cap_record(r)
+    [c] = out.claims("title")
+    assert c.evidence is not None and len(c.evidence) <= MAX_EVIDENCE and c.evidence.startswith("eee")
+    assert c.evidence.endswith(
+        f"e ({TRIMMED} cut from 2,399 to 995 characters) ({CUT} evidence cut from 4,000 characters)"
+    )
+    assert is_trimmed(out) and cap_record(out) is out
+
+
+def test_a_cut_forum_url_that_names_another_paper_is_never_read_as_its_id() -> None:
+    # hostile: padding before the id, so the cut leaves `id=` a valid forum id of some other paper
+    whole = "https://openreview.net/forum?pad=" + "p" * (MAX_URL - 43) + "&id=Other12345" + "6" * 20
+    r = record(provenance=(claim("urls.forum", whole, evidence="note.id"),))
+    out = cap_record(r)
+    [c] = out.claims("urls.forum")
+    assert urls.forum_id(str(c.value)) == "Other1"  # the prefix names another (valid) forum id
+    assert unread_identifier(c) and cut_identifier(c)
+    assert "Other1" not in forum_ids(out)
+    assert c.evidence is not None and c.evidence.endswith("characters; not read as an id)")
+
+
+def test_a_cut_query_string_still_names_its_proceedings_paper() -> None:
+    # a long tracking query after a proceedings page's path: the cut keeps the path, so the page still names itself
+    page = "https://proceedings.neurips.cc/paper_files/paper/2024/hash/00112233445566778899aabbccddeeff-Abstract.html"
+    whole = page + "?utm=" + "q" * MAX_URL
+    r = record(
+        provenance=(claim("urls.proceedings", whole, source="neurips_proceedings", evidence="listing"),)
+    )
+    out = cap_record(r)
+    [c] = out.claims("urls.proceedings")
+    assert cut_identifier(c) and not unread_identifier(c)  # no link, still its id
+    assert proceedings_ids(out.provenance) == {"nips-00112233445566778899aabbccddeeff"}
+
+
+def test_a_cut_proceedings_url_that_loses_its_page_names_nothing() -> None:
+    whole = "https://proceedings.mlr.press/v235/" + "k" * MAX_URL + ".html"
+    r = record(provenance=(claim("urls.proceedings", whole, source="pmlr", evidence="listing"),))
+    out = cap_record(r)
+    [c] = out.claims("urls.proceedings")
+    assert unread_identifier(c) and proceedings_ids(out.provenance) == set()
+
+
+def test_only_a_doi_or_url_claim_is_an_identifier() -> None:
+    vid = "x" * (MAX_VENUE_ID + 1)
+    out = cap_record(record(venue_id_raw=vid, provenance=(claim("venue_id_raw", vid),)))
+    [c] = out.claims("venue_id_raw")
+    assert is_trimmed(out) and not cut_identifier(c) and not unread_identifier(c)
+
+
+@pytest.mark.parametrize(
+    ("evidence", "flagged"),
+    [
+        (f"{CUT} value cut from 2,049 to 2,048 characters", True),
+        (f"citation ({CUT} value cut from 2,049 to 2,048 characters)", True),
+        (
+            f"citation {CUT} value cut from 2,049 to 2,048 characters",
+            False,
+        ),  # mid-evidence, not the note's form
+        (f"citation ({CUT} value cut) and more", False),  # not at the end
+    ],
+)
+def test_only_the_cut_notes_own_form_flags_a_record_or_a_cut_identifier(evidence: str, flagged: bool) -> None:
+    r = record(provenance=(claim("urls.doi", "10.1234/x", evidence=evidence),))
+    assert is_trimmed(r) is flagged and cut_identifier(r.provenance[0]) is flagged
+
+
+_TEXT = st.text(st.sampled_from("ab ́ﬁ.\u00a0-/"), max_size=60)
+
+
+@given(_TEXT, st.integers(min_value=1, max_value=40))
+def test_a_cut_never_passes_its_cap_and_text_within_it_is_unchanged(text: str, most: int) -> None:
+    kept = cut(text, most)
+    length = len(unicodedata.normalize("NFKD", text))
+    if length <= most:
+        assert kept is None  # within the cap: the value itself, never touched
+    else:
+        assert kept is not None and len(unicodedata.normalize("NFKD", kept)) <= most
+        assert text.lstrip().startswith(kept)  # a prefix of the text, stripped: nothing added or moved
+
+
+@given(
+    st.lists(st.text(st.sampled_from("ab ́"), max_size=12), max_size=4).map(tuple),
+    st.text(st.sampled_from("ab/"), max_size=12),
+    st.integers(min_value=0, max_value=3),
+)
+def test_a_capped_record_is_within_every_cap_and_capping_it_again_changes_nothing(
+    names: tuple[str, ...], tail: str, scale: int
+) -> None:
+    # values near each cap: `scale` copies of the cap's worth of text, so some are within it and some past it
+    author = "n" * (MAX_AUTHOR - 6 + scale) + "".join(names)
+    doi = "10.1234/" + "d" * (MAX_DOI - 10 + scale) + tail
+    r = record(
+        authors=(author, *names),
+        urls=Urls(doi=doi),
+        provenance=(claim("authors", (author, *names)), claim("urls.doi", doi, evidence="citation_doi")),
+    )
+    out = cap_record(r)
+    assert all(len(unicodedata.normalize("NFKD", a)) <= MAX_AUTHOR for a in out.authors)
+    assert out.urls.doi is None or len(out.urls.doi) <= MAX_DOI
+    assert cap_record(out) is out
+    assert (out is r) is (not is_trimmed(out))
+
+
+def test_a_snapshot_cuts_a_long_author_name_and_names_its_record(tmp_path: Path) -> None:
+    long_name = "N" * (MAX_AUTHOR + 50)
+    ingest_ris(
+        [source(tmp_path, edit=lambda t: t.replace("AU  - Noe, N", f"AU  - Noe, {long_name}"))],
+        tmp_path / "c",
+    )
+    result = build(tmp_path / "c", tmp_path / "snapshots", BUILT)
+    trimmed = load_records(result.path)[REJECTED]
+    assert all(len(a) <= MAX_AUTHOR for a in trimmed.authors)
+    assert all(CUT in (c.evidence or "") for c in trimmed.claims("authors"))
+    assert long_name not in (result.path / "records.jsonl").read_text(encoding="utf-8")
+    manifest = json.loads((result.path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["trimmed"] == [REJECTED]

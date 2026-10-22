@@ -1,5 +1,6 @@
-"""The ingest caps on indexed text (spec 01 §Pipeline 2; decision-026, TASK-155): a run of combining marks keeps
-at most `MAX_MARKS` marks, a title at most `MAX_TITLE` characters and an abstract at most `MAX_ABSTRACT`.
+"""The ingest caps (spec 01 §Pipeline 2). On indexed text (decision-026, TASK-155): a run of combining marks keeps
+at most `MAX_MARKS` marks, a title at most `MAX_TITLE` characters and an abstract at most `MAX_ABSTRACT`. On every
+other stored string, a length cap each (decision-053, TASK-279; the last paragraph).
 
 CPython's NFKC canonical reordering is superlinear in a run of marks whose combining classes alternate
 (`a` + `\\u0301\\u0338` × n), so one hostile abstract would cost the index build and every search that
@@ -34,6 +35,18 @@ every shape of run the mark rule might miss; real titles are at most 192 charact
 Nothing is trimmed silently: each claim whose value changed says what and why in its evidence (`TRIMMED`, shown
 on the paper page), and the snapshot manifest names the records (`trimmed`). Text within both caps is returned
 as it is, so a corpus with none over them snapshots byte-identically.
+
+The other stored strings have length caps too (decision-053, TASK-279), for size alone: none is tokenized, but every
+one is written whole into every snapshot, export and API response. `FIELD_CAPS` gives a DOI 1,000 characters, a URL
+2,048, an author name 1,000, a keyword 2,000, a `venue_id_raw` or `invitation` 500, each counted and cut as a title is
+(`_cut`), and a claim's url 2,048 and its evidence 4,000. Each is at least 2.7 times the longest value in the
+2026-10-16 snapshot, so they trim no record of it. An over-cap value is trimmed and flagged in its claim's evidence
+(`CUT`), never refused, so every record stays whole. A cut DOI or URL is no longer a valid link, so it is kept only as
+text for people to read: the claim keeps the cut value (the paper page shows it as text, flagged), the record's `urls`
+slot holds none (`cap_record`, and `dedup.resolve` skips it: `cut_identifier`), and a claim's own url, which is only
+ever a link, is dropped when it is over its cap. Dedup still reads a cut URL as naming its paper when the cut left what
+it names unchanged (a long query string after a proceedings page's path), and reads nothing from one whose cut changed
+it (`unread_identifier`: a forum URL's `id` cut short is a valid id of another paper).
 """
 
 from __future__ import annotations
@@ -43,6 +56,7 @@ import unicodedata
 from collections.abc import Iterable
 from functools import lru_cache
 
+from openproceedings.ingest import urls
 from openproceedings.ingest.record import Claim, PaperRecord
 from openproceedings.query.normalize import KEEP, SUB, latex_mask
 
@@ -54,6 +68,29 @@ TRIMMED = "trimmed at ingest (decision-026):"  # how a claim's evidence says its
 # the note as `_claim` writes it, ending the evidence: the whole of it, or after the source's own in parentheses
 _NOTE = re.compile(rf"(?:^|\s\(){re.escape(TRIMMED)} [0-9a-z ,;]+\)?\Z")
 CAPPED = ("title", "abstract")  # the indexed text fields
+
+# The other stored strings (decision-053, TASK-279): characters counted in NFKD and cut as a title is (`_cut`). The
+# longest of each in snapshot 2026-10-16-03eab0ef56c4 (173,518 records, every claim included): DOI 34, URL 154 (a
+# claim's url 154), author 81, keyword 733 (an abstract a source split into keywords), venue_id_raw 65, invitation
+# none, evidence 469.
+MAX_DOI = 1_000
+MAX_URL = 2_048
+MAX_AUTHOR = 1_000
+MAX_KEYWORD = 2_000
+MAX_VENUE_ID = 500
+MAX_INVITATION = 500
+MAX_EVIDENCE = 4_000  # a claim's whole evidence, the trim notes included
+IDENTIFIERS = ("urls.forum", "urls.pdf", "urls.proceedings", "urls.doi")  # a cut one names nothing
+FIELD_CAPS: dict[str, int] = {
+    "urls.forum": MAX_URL, "urls.pdf": MAX_URL, "urls.proceedings": MAX_URL, "urls.doi": MAX_DOI,
+    "authors": MAX_AUTHOR, "keywords": MAX_KEYWORD, "venue_id_raw": MAX_VENUE_ID, "invitation": MAX_INVITATION,
+}  # fmt: skip
+_SLOTS = {"forum": MAX_URL, "pdf": MAX_URL, "proceedings": MAX_URL, "doi": MAX_DOI}  # the record's `urls`
+CUT = "trimmed at ingest (decision-053):"  # how a claim's evidence says one of these was cut
+# the note as `_claim` writes it, always last: the whole evidence, or after the rest in parentheses
+_CUT_NOTE = re.compile(rf"(?:^|\s\(){re.escape(CUT)} ([0-9a-z ,;]+)\)?\Z")
+_VALUE_CUT = "value cut from "
+_UNREAD = "not read as an id"  # a cut URL that no longer names what it named whole
 
 
 @lru_cache(maxsize=4096)
@@ -197,25 +234,131 @@ def cap(field: str, text: str) -> tuple[str, str | None]:
     return (capped, f"{TRIMMED} {'; '.join(notes)}") if notes else (text, None)
 
 
+def _length(text: str) -> int:
+    """`text`'s length as the caps count it: its NFKD form's (`_cut`)."""
+    return len(text) if text.isascii() else sum(len(_nfkd(ch)) for ch in text)
+
+
+def cut(text: str, most: int) -> str | None:
+    """`text` cut to `most` characters as a title is (`_cut`: counted in NFKD, before the last space that fits) and
+    stripped of whitespace at both ends, or None when it fits (decision-053)."""
+    kept = _cut(text, most)
+    return None if kept is None else kept.strip()
+
+
+def _items(values: tuple[str, ...], most: int) -> tuple[tuple[str, ...], int]:
+    """`values` with each cut to `most` (`cut`), and how many were (`values` itself when none was)."""
+    cuts = [cut(v, most) for v in values]
+    n = sum(x is not None for x in cuts)
+    return (tuple(v if x is None else x for v, x in zip(values, cuts, strict=True)), n) if n else (values, 0)
+
+
+def _evidence(evidence: str | None, notes: list[str]) -> str | None:
+    """`evidence` with each note after it, in parentheses (a note with none before it is the whole evidence), cut
+    first if need be so that the whole holds at most `MAX_EVIDENCE` characters. `notes[-1]` is the `CUT` note when
+    there is one, and a cut adds `evidence cut from <n> characters` to it."""
+
+    def joined(head: str | None, tail: list[str]) -> str | None:
+        out = head
+        for note in tail:
+            out = note if not out else f"{out} ({note})"
+        return out
+
+    whole = joined(evidence, notes)
+    if evidence is None or whole is None or _length(whole) <= MAX_EVIDENCE:
+        return whole
+    said = f"evidence cut from {len(evidence):,} characters"
+    if notes and notes[-1].startswith(CUT):
+        notes = [*notes[:-1], f"{notes[-1]}; {said}"]
+    else:
+        notes = [*notes, f"{CUT} {said}"]
+    room = (
+        MAX_EVIDENCE - _length(joined("x", notes) or "") + 1
+    )  # what the notes leave for the source's evidence
+    return joined(cut(evidence, room) or None, notes)
+
+
+def _names(c: Claim, url: str) -> tuple[object, ...]:
+    """What dedup reads `url` as naming when `c` claims it: a proceedings id (`urls.native`; an `iclr_archive`
+    target's, whose id hashes the whole URL), a forum id, and a proceedings page's parts (`dedup.proceedings_ids`,
+    `forum_ids`, `_names_creative_ai`)."""
+    archive = (
+        urls.iclr_archive_target(url) if (c.source, c.field) == ("iclr_archive", "urls.proceedings") else None
+    )
+    return urls.native(url), urls.forum_id(url), urls.proceedings_parts(url), archive
+
+
 def _claim(c: Claim) -> Claim:
-    if c.field not in CAPPED or not isinstance(c.value, str):
+    """`c` under every cap: its title or abstract (`cap`), its value or each item of it (`FIELD_CAPS`), its url and
+    its evidence, flagged in its evidence (`c` itself when nothing changes)."""
+    value, url, notes, said = c.value, c.url, [], []
+    if c.field in CAPPED and isinstance(value, str):
+        value, note = cap(c.field, value)
+        notes += [note] if note else []
+    most = FIELD_CAPS.get(c.field)
+    if most is not None and isinstance(value, str) and (kept := cut(value, most)) is not None:
+        said.append(f"{_VALUE_CUT}{len(value):,} to {len(kept):,} characters")
+        if c.field in IDENTIFIERS and _names(c, kept) != _names(
+            c, value
+        ):  # its prefix names another paper, or none
+            said.append(_UNREAD)
+        value = kept
+    elif most is not None and isinstance(value, tuple):
+        value, n = _items(value, most)
+        said += [f"{n} value{'' if n == 1 else 's'} cut to at most {most:,} characters"] if n else []
+    if (
+        url is not None and _length(url) > MAX_URL
+    ):  # a claim's url is only ever a link: a cut one would mislead
+        said.append(f"url of {len(url):,} characters dropped")
+        url = None
+    notes += [f"{CUT} {'; '.join(said)}"] if said else []
+    evidence = _evidence(c.evidence, notes)
+    if not notes and evidence == c.evidence:
         return c
-    value, note = cap(c.field, c.value)
-    if note is None:
-        return c
-    # the note goes last: an RIS abstract's evidence starts with its route and url (`dedup.attribution`)
-    evidence = note if c.evidence is None else f"{c.evidence} ({note})"
-    return Claim.model_validate({**c.model_dump(), "value": value, "evidence": evidence})
+    # the notes go last: an RIS abstract's evidence starts with its route and url (`dedup.attribution`)
+    return Claim.model_validate({**c.model_dump(), "value": value, "url": url, "evidence": evidence})
+
+
+def _cut_parts(c: Claim) -> str:
+    """What the `CUT` note ending a DOI or URL claim's evidence says ('' when there is none)."""
+    m = _CUT_NOTE.search(c.evidence or "") if c.field in IDENTIFIERS else None
+    return m.group(1) if m else ""
+
+
+def cut_identifier(c: Claim) -> bool:
+    """Is `c` a DOI or URL claim whose value the caps cut (decision-053)? A cut DOI or URL is no link: dedup fills
+    no `urls` slot from it (`dedup.resolve`), so no page, export or DOI join uses it."""
+    return _VALUE_CUT in _cut_parts(c)
+
+
+def unread_identifier(c: Claim) -> bool:
+    """Is `c` a URL claim whose cut changed what it names (decision-053): a forum id, a proceedings id or page
+    parts that the whole URL didn't name, or none where it named one? Dedup then reads no id from it. A cut that
+    left what it names alone (a long query string after a proceedings page's path) still names its paper."""
+    return _UNREAD in _cut_parts(c)
 
 
 def cap_record(record: PaperRecord) -> PaperRecord:
-    """`record` with its title, abstract and their claims capped alike (`record` itself when none changes)."""
+    """`record` with every capped field and every claim capped alike (`record` itself when none changes). A DOI or
+    URL over its cap leaves its `urls` slot empty: its claim keeps it cut, flagged, as text (`cut_identifier`)."""
     provenance = tuple(_claim(c) for c in record.provenance)
     update: dict[str, object] = {}
     for field in CAPPED:
         text = getattr(record, field)
         if text is not None and (capped := cap(field, text))[1] is not None:
             update[field] = capped[0]
+    for field, most in (("authors", MAX_AUTHOR), ("keywords", MAX_KEYWORD)):
+        if (items := _items(getattr(record, field), most))[1]:
+            update[field] = items[0]
+    if record.venue_id_raw is not None and (venue_id := cut(record.venue_id_raw, MAX_VENUE_ID)) is not None:
+        update["venue_id_raw"] = venue_id
+    over = {
+        s: None
+        for s, most in _SLOTS.items()
+        if (u := getattr(record.urls, s)) is not None and _length(u) > most
+    }
+    if over:
+        update["urls"] = record.urls.model_copy(update=over)
     if not update and all(a is b for a, b in zip(provenance, record.provenance, strict=True)):
         return record
     return record.model_copy(update={**update, "provenance": provenance})
@@ -227,5 +370,9 @@ def cap_records(records: Iterable[PaperRecord]) -> list[PaperRecord]:
 
 
 def is_trimmed(record: PaperRecord) -> bool:
-    """Was any of `record`'s title or abstract claims trimmed at ingest (the manifest's `trimmed`)?"""
-    return any(c.field in CAPPED and _NOTE.search(c.evidence or "") for c in record.provenance)
+    """Was any of `record`'s claims trimmed at ingest (the manifest's `trimmed`): a title or abstract
+    (decision-026), or any other capped value, url or evidence (decision-053)?"""
+    return any(
+        _CUT_NOTE.search(c.evidence or "") or (c.field in CAPPED and _NOTE.search(c.evidence or ""))
+        for c in record.provenance
+    )

@@ -251,7 +251,7 @@ def load_sources(cache: Path) -> tuple[list[PaperRecord], list[ImportReport], li
         mined, crawls = replay_all(cache)
     except SourceError as e:
         raise SnapshotError(f"the crawl cache can't be replayed: {e}", reason=e.reason) from e
-    records = cap_records([*records, *mined])  # the ingest caps, before dedup (decision-026)
+    records = cap_records([*records, *mined])  # the ingest caps, before dedup (decision-026, decision-053)
     if not reports and not crawls:
         raise SnapshotError(
             f"nothing cached under {cache.name}; run `op ingest ris <mended.ris>...`, "
@@ -583,8 +583,8 @@ def render(
     # what the RIS window's ends are (TASK-077, decision-025): converted to UTC, or (any entry) local wall time
     if reports:
         manifest["query_dates"] = {"ris": UTC_QUERY_DATES if all(r.utc_offset for r in reports) else LOCAL}
-    # the records whose title or abstract the ingest caps trimmed (decision-026), written only when there are
-    # any: a snapshot trimming nothing has the manifest it had before. Additive, like WITHHELD_KEYS
+    # the records any of whose claims the ingest caps trimmed (decisions 026, 053), written only when there are any:
+    # a snapshot trimming nothing has the manifest it had before. Additive, like WITHHELD_KEYS
     if trimmed := [r.id for r in records if is_trimmed(r)]:
         manifest["trimmed"] = trimmed
     # the records whose abstract OpenAlex filled (decision-049), per venue-year and per track, written only when
@@ -666,7 +666,7 @@ def build(
     snapshot_hash = manifest["snapshot_hash"]
     target = snapshots / f"{manifest['crawl_date']}-{snapshot_hash[:SHORT]}"
     trimmed = len(manifest.get("trimmed", ()))
-    if trimmed:  # the build changed source text (decision-026): worth a look, once per build, never the ids
+    if trimmed:  # the build changed source text (decision-026, -053): worth a look once a build, never ids
         log.warning("snapshot_trimmed", extra={"snapshot": target.name, "trimmed": trimmed})
     with storage.exclusive(snapshots):
         storage.sweep(snapshots)

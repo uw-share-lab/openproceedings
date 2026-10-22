@@ -145,7 +145,7 @@ refusing a proxied request puts `compare_refused: proxied` on its 403 (spec 04 Â
 each named by its event: the list's size on a load, the records a build withheld on `snapshot_built`, the
 records of the body on an export's access line (the build's JSON gives the ids themselves, `withheld_ids`). `snapshot_built` / `snapshot_exists` carry
 `abstracts_withheld`, `takedowns_followed`, `takedowns_unmatched` and `takedowns_twins` counts, and `trimmed`: how many records
-the ingest caps trimmed (decision-026), never their ids. When it is non-zero the build also logs one WARNING
+the ingest caps trimmed (decision-026, decision-053), never their ids. When it is non-zero the build also logs one WARNING
 `snapshot_trimmed` with the count. An export's access line carries
 `abstracts_withheld` (its `X-Abstracts-Withheld`). `op takedown check` logs one `takedown_checked` (INFO, WARNING when
 it found problems) with `listed`, `index_versions` and `problems` counts: never an id's text or a requester.
