@@ -3,11 +3,11 @@ id: TASK-279
 title: >-
   Decide: ingest length caps for uncapped stored string fields (DOI, URLs,
   authors, keywords, venue_id_raw, claim url and evidence)
-status: In Progress
+status: Done
 assignee:
   - '@jeevan'
 created_date: '2026-10-21 23:01'
-updated_date: '2026-10-22 08:09'
+updated_date: '2026-10-22 08:28'
 labels:
   - ingest
   - security
@@ -55,4 +55,12 @@ Review round 3: cutting a self-naming URL just past its id failed where a page's
 Review round 4: a page with a tail of symbols only was cut inside .html and rebuilt without its Creative AI token; now a page first drops its query/params/fragment when that fits and names all the whole did (caps._page_only), and only a page whose path is past the cap is rebuilt. Tests now cover every rebuild form (dblp ICML/AAAI, OJS AIES/IASEAI, doi.org/dx/percent-encoded DOI, upper-case host), the own-id guard, and the archive id kept in its cluster by native. The D&B round in the rebuild was unreachable and removed. Docs: the Reserved bullet now says what a forged unread note could do and why no claim can carry one.
 
 Review round 5: no Must; QA's Should (the own-id guard in _own_page untestable beside the final check) fixed by removing the early guard (the page is built from what the URL names, so the final check names-own test is the guard); tests pin the page-only length boundary and that a cut leaving what a URL names keeps its prefix. Docs: a forged cut note also lists the record as trimmed; the tail step named before the rebuild.
+
+Review round 6: all roles approve; three wording nits fixed (8f419e3c). Final local runs at b899f66d/e50dc67c: make test (backend 9253 passed, 3 skipped; frontend 4954 passed), make lint, make tooling green; the measurement rerun at b899f66d: records=173518 changed=0 flagged=26.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+decision-053 (owner's 'cap + trim', 2026-10-22) caps every stored string decision-026 left uncapped: DOI 1,000; each URL and a claim's url 2,048; author name 1,000; keyword 2,000; venue_id_raw and an invitation claim's value 500; a claim's evidence 4,000 with its notes. Each cap is at least 2.7x the longest value in snapshot 2026-10-16-03eab0ef56c4, measured by a committed script (docs/results/2026-10-22-stored-string-lengths.md): no record changes, so records.jsonl, snapshot_hash and index_version are unchanged and no version is bumped. Over-cap values are cut as decision-026 cuts a title and flagged in the claim's evidence ('trimmed at ingest (decision-053): ...') and the manifest's trimmed, never refused. A cut DOI, URL or venue id never fills the record (no link, export or DOI join uses it; a cut venue id counts against Creative AI); a cut URL is read as an id only when the cut left what it names unchanged; a page past its cap first drops its query, and a URL the record's own id was read from becomes an address of that id's page rebuilt from the id, so no record stops naming itself and only the id's own length (TASK-281) bounds such a value. ingest/caps.py, ingest/dedup.py (resolve, resolved_value, identity reads, the iclr_archive exception), eval/scholar_compare.py; tests per field at cap-1/cap/cap+1, per identifier rule and rebuild form, two Hypothesis properties, a snapshot build; spec 01, the record-schema, snapshots, dedup-rules and logging-standards skills, CLAUDE.md. Six review rounds plus an automated security review; every finding fixed or dispositioned. Follow-ups: TASK-280 (number of authors/keywords), TASK-281 (native id length; ojs.py int()).
+<!-- SECTION:FINAL_SUMMARY:END -->
