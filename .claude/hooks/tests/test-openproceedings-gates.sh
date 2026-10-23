@@ -1173,6 +1173,21 @@ check $R block "push.default=matching in the repo"    "$(payload_bash 'git push 
 g config --unset push.default
 g config push.followTags true
 check $R block "push.followTags in the repo"          "$(payload_bash 'git push origin')"
+# git_bool reads a number as git does, nonzero is true, and only ASCII digits are one (TASK-282)
+g config push.followTags 1
+check $R block "push.followTags=1 in the repo"        "$(payload_bash 'git push origin')"
+g config push.followTags -0010
+check $R block "push.followTags=-0010 in the repo"    "$(payload_bash 'git push origin')"
+g config push.followTags "$(printf '9%.0s' $(seq 5000))"
+check $R block "push.followTags of 5,000 nines"       "$(payload_bash 'git push origin')"
+g config push.followTags 000
+check $R allow "push.followTags=000 in the repo"      "$(payload_bash 'git push origin')"
+g config push.followTags -0
+check $R allow "push.followTags=-0 in the repo"       "$(payload_bash 'git push origin')"
+g config push.followTags ²
+check $R allow "push.followTags=² (not a number; git refuses it)" "$(payload_bash 'git push origin')"
+g config push.followTags --1
+check $R allow "push.followTags=--1 (not a number)"   "$(payload_bash 'git push origin')"
 g config --unset push.followTags
 # the matching refspec ':' pushes every branch that exists on both sides
 check $R block "git push origin : (matching)"          "$(payload_bash 'git push origin :')"

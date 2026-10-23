@@ -2164,6 +2164,24 @@
   "new": "        if False:"
  },
  {
+  "label": "cmdparse: git_bool takes any Unicode digit as a number",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        digits.isascii() and digits.isdigit() and digits.strip(\"0\") != \"\"",
+  "new": "        digits.isdigit() and digits.strip(\"0\") != \"\""
+ },
+ {
+  "label": "cmdparse: git_bool reads zero as true",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": " and digits.strip(\"0\") != \"\"\n",
+  "new": "\n"
+ },
+ {
+  "label": "cmdparse: git_bool reads a negative number as no number",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    digits = v.removeprefix(\"-\")\n",
+  "new": "    digits = v\n"
+ },
+ {
   "label": "cmdparse: git_bool reads false as true",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "    return v in (\"\", \"true\", \"yes\", \"on\") or (",

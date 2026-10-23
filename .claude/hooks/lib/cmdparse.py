@@ -2459,9 +2459,14 @@ def push_config(argv: list[str], directory: str) -> dict[str, str]:
 
 
 def git_bool(value: str) -> bool:
-    """git's reading of a boolean config value ('' is a key set with no value: true)."""
+    """git's reading of a boolean config value ('' is a key set with no value: true; a number is true when not
+    zero). Only ASCII digits are a number, and they are never passed to int(): '²' made it raise, and so would
+    5,000 digits (TASK-282)."""
     v = value.strip().lower()
-    return v in ("", "true", "yes", "on") or (v.lstrip("-").isdigit() and int(v) != 0)
+    digits = v.removeprefix("-")
+    return v in ("", "true", "yes", "on") or (
+        digits.isascii() and digits.isdigit() and digits.strip("0") != ""
+    )
 
 
 def push_config_risk(config: dict[str, str]) -> str | None:

@@ -134,8 +134,10 @@ record past a bound refused, record schema 9 → 10.
   and `scripts/aaai_library_census.py`, fixed the same way, with a length bound before `int()` (the scripts have no
   test harness). The `.claude/scripts` hits read curl's `%{http_code}` and git's numstat, ASCII by construction. Of
   the 9 `.claude/hooks` hits, most are fd-redirect checks with no `int()`; `require-review.sh:366` reads git numstat;
-  `cmdparse.git_bool` runs `int()` on a git config value, so a '²' there raises, but every hook turns an exception into
-  exit 2 (the push is refused, fail closed), so it was left to the lead. The dblp years are bounded to four digits.
+  `cmdparse.git_bool` ran `int()` on a git config value, so `push.followTags=²` (or `--1`, or 5,000 digits) raised in
+  the push hook. `require-review.sh` turns that into exit 2, so it failed closed, but a refused push for a config
+  value git reads as no number is still wrong: `git_bool` now reads ASCII digits without `int()` (nonzero after
+  stripping zeros), with case-table rows and three mutants. The dblp years are bounded to four digits.
 - **"Never an exception" covers every parser on the path, not only the one in the bug report.** With `_seconds`
   fixed, a hostile `Retry-After` still crashed the crawl through the HTTP-date branch: `parsedate_to_datetime` raises
   `OverflowError` (not `ValueError`) for a year like 99999999999 or a huge offset. `retry_after` now catches it. And

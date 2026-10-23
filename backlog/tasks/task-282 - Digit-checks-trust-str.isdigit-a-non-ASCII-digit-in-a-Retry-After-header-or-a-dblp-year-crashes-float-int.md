@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-22 22:23'
-updated_date: '2026-10-23 02:53'
+updated_date: '2026-10-23 03:08'
 labels:
   - ingest
   - security
@@ -28,6 +28,7 @@ Found by the TASK-281 review and the closing reviews (2026-10-22). str.isdigit()
 - [x] #2 http._seconds reads only ASCII digits (one optional '.'); a non-ASCII value is no hint, never an exception, with tests for a latin-1 '²' in Retry-After on a 429 and in ratelimit-remaining on a 200 (_respect_budget, called outside the fetch try)
 - [x] #3 http.retry_after treats a Retry-After HTTP-date parsedate_to_datetime refuses with OverflowError as no hint, and takedown_check.retry_after converts at most two digits after leading zeros (longer is the 60s cap), with tests
 - [x] #4 eval/coverage_report._cell_key and scripts/{openalex,dblp_aaai,aaai_library}_census.py check isascii() and bound the digits before int(); the coverage_report heading test covers '²', an Arabic-Indic year and 5,000 digits (the scripts have no test harness)
+- [x] #5 .claude/hooks/lib/cmdparse.py git_bool reads only ASCII digits as a number and never calls int() (push.followTags=² or 5,000 digits no longer raise in require-review.sh), with case-table rows in test-openproceedings-gates.sh and mutants in gates.json
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -56,4 +57,6 @@ Round 1 validation: make test (backend 9371 passed, 3 skipped; frontend 4954 pas
 Review round 2 (2026-10-22): the dblp year readers (and scripts/dblp_aaai_census.py) also bound the year to four digits (int() raises past 4,300; rows of 5,000 nines added); coverage_report's year heading likewise (<= 4); openalex_census and aaai_library_census bound their header and CDX length to 18 digits. The round-1 note's 'reported to the lead, not changed here' for coverage_report.py is superseded: fixed in round 1. .claude/hooks sweep: 9 hits, mostly fd-redirect checks with no int(); require-review.sh:366 reads git numstat; cmdparse.git_bool runs int() on a git config value, so '²' raises, but the hooks turn an exception into exit 2 (fail closed), so it is left to the lead (not changed: a hooks change routes to security and qa with mutants).
 
 Round 2 validation: make test (backend 9373 passed, 3 skipped; frontend 4954 passed), make lint, make tooling green.
+
+Round 3 (lead's direction, 2026-10-22): cmdparse.git_bool fixed after all (supersedes the round-2 note leaving it to the lead): digits = v.removeprefix('-'); a number is ASCII digits that are not all zeros, no int(). Old code raised on '²', '--1' and 5,000 digits (require-review.sh turned it into exit 2, fail closed). Rows: push.followTags 1, -0010, 5,000 nines (block); 000, -0, ², --1 (allow). Three mutants added to gates.json (Unicode digit, zero, negative); mutate.py --match git_bool --jobs 2: 4 of 4 killed. mutate.py --changed --check: 276 mutants, 0 unrunnable; the full --changed run (276 cmdparse mutants, ~2 min each here) was not run locally: nightly runs every mutant. make tooling (test-openproceedings-gates.sh 1650 passed) and make lint green.
 <!-- SECTION:NOTES:END -->
