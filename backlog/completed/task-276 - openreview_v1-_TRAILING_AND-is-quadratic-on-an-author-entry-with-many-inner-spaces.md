@@ -3,11 +3,11 @@ id: TASK-276
 title: >-
   openreview_v1 _TRAILING_AND is quadratic on an author entry with a long run of
   spaces
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-20 15:18'
-updated_date: '2026-10-23 14:45'
+updated_date: '2026-10-23 21:10'
 labels:
   - ingest
 dependencies: []
@@ -39,3 +39,9 @@ Anchor _TRAILING_AND at a whitespace run's start (the candidate); time every pat
 
 2026-10-23 review round 1: the description's 791 ms is _split_entry as a whole (each of its two patterns about 400 ms alone). qa-auditor: (?<![ \n]) passed the growth cases, quadratic on tabs; a case with each kind of whitespace \s reads now catches it. A replay of split_authors over the 30,060 notes in the local v1 crawl cache gave no difference (dedup-auditor).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+openreview_v1._split_entry is linear: _TRAILING_AND and the \s+and\s+ alternative of _AUTHOR_SEPARATOR (also quadratic, 344 ms on 20k spaces) start only at a whitespace run's first character ((?<!\s)). Identical splits: exhaustive comparison of _split_entry with the old patterns over every string up to 7 characters of 'and ,\nx' (960,800), and a replay over the 30,060 notes of the local v1 crawl cache (dedup-auditor). CPU-growth tests on each kind of whitespace.
+<!-- SECTION:FINAL_SUMMARY:END -->

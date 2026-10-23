@@ -1,11 +1,11 @@
 ---
 id: TASK-275
 title: logs.scrub's URL-userinfo pattern is quadratic on a long alphanumeric run
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-20 15:18'
-updated_date: '2026-10-23 18:25'
+updated_date: '2026-10-23 21:10'
 labels:
   - logging
   - security
@@ -50,3 +50,9 @@ TASK-281 review (2026-10-22): a NeurIPS listing warning also logs its see-also l
 
 2026-10-23 review round 5: scrub's structure changed under TASK-283 (union of spans, logs.secret_spans); see TASK-283's notes.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+logs.scrub is linear in its text: each pattern starts once per run (lookbehinds), takes runs possessively and checks secret words with a lookahead. Beside the reported userinfo pattern, the secret-query pattern was quadratic too (452 ms on ?+token x4,000) and is fixed. At the owner's request the review gaps were fixed here: -.% in query names, # and ; starts, every log key scrubbed (two that scrub alike kept as key#2, in linear time), the text format escaping every control character, JSON lines escaping U+0085/2028/2029. Exhaustive old-vs-new comparisons and CPU-growth tests; TASK-283 then reworked scrub into a union of spans.
+<!-- SECTION:FINAL_SUMMARY:END -->

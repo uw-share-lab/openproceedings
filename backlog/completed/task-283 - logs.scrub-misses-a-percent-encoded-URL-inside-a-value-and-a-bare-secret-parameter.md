@@ -3,11 +3,11 @@ id: TASK-283
 title: >-
   logs.scrub misses a percent-encoded URL inside a value, a bare secret
   parameter, and a JSON-shaped secret
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-23 15:06'
-updated_date: '2026-10-23 20:49'
+updated_date: '2026-10-23 21:10'
 labels:
   - logging
   - security
@@ -63,3 +63,9 @@ At the owner's request (2026-10-23), in TASK-275's branch: a parameter name star
 
 2026-10-23 review round 9: correction to an earlier note: the bearer early-stop lookahead is not bounded in length (its separator run is unbounded); it is linear because the run is possessive and each bearer is seen from at most two stopping points. qa-auditor's test gaps closed: the property test's oracle writes its separator out (a {1,2} separator mutant leaked Bearer%20%20%20SECRET), \r joins the pieces, the stop's own refusal and the replay's ;/% value characters are pinned, and the clear allowance is each start's exact context. Escapes other than %XX and JSON \n/\r/\t before Bearer start no match (documented; security-reviewer lists them out of scope).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+scrub now redacts the union of six patterns' secrets over the text as given (logs.secret_spans): userinfo, encoded userinfo, a secret parameter wherever its name starts (a bare token=, a quoted value whole, a userinfo inside the value), encoded parameters, a quoted key's quoted value (JSON, a dict's repr, b''), and bearer tokens (after %XX or JSON \n\r\t, %20/%09/\t/+ separators, ending before another bearer it runs into). The union also replays origin/dev's two passes, linearly, so everything origin/dev redacted is redacted by construction. Out of scope and documented: double encoding, a value quoted with JSON-escaped quotes, escapes ending in a letter before Bearer. Ten review rounds; whole-scrub superset tests against origin/dev, property tests for the bearer stop, growth tests on every shape.
+<!-- SECTION:FINAL_SUMMARY:END -->
