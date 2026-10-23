@@ -80,8 +80,8 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
     repr, `b'abc'`), also when an earlier value looks like a quoted key; a value that is not quoted, and JSON
     escaped inside a string, are left;
   - the word after a whole-word `bearer` (or one right after an escape: `%3A%20Bearer`, a JSON `\tBearer`) and
-    whitespace, `%20`, `%09`, a JSON `\t` or `+`, never a second `bearer` (`Bearer Bearer <token>`)
-    (`Bearer <token>`, an escape such as `\/` or `%2B` inside it included; prose `a bearer of` loses `of`).
+    whitespace, `%20`, `%09`, a JSON `\t` or `+` (`Bearer <token>`, an escape such as `\/` or `%2B` inside it
+    included), never a second `bearer` (`Bearer Bearer <token>`); prose `a bearer of` loses `of`.
 
   It also redacts secret-shaped keys (starting or ending with a secret word: `password…`, `…_token`, `auth_…`,
   `secret…`, `bearer…`, `…api_key`) case-insensitively at any depth, while ordinary fields like

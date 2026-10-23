@@ -144,6 +144,6 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
 - **Then make the superset hold by construction.** Round 7 found a third shape of the same family
   (`?token='a://b'#y@SECRET`: the quoted value took the `://` the userinfo alternative needed). Patching shapes
   one by one never closes it. `secret_spans` now also replays origin/dev's two passes, linearly (its userinfo
-  pass with NULs in place of each secret, then its query pattern made linear and shown exact in TASK-275), and
+  pass with NULs in place of each secret, then its query pattern, origin/dev's words and all, made linear and tested equal to the original), and
   adds their spans to the union. The superset is then a property of the code, and the tests check the replay
   against the original quadratic patterns instead of being the only guard.

@@ -175,10 +175,14 @@ def bind(**fields: object) -> Iterator[None]:
         _context.reset(token)
 
 
-# origin/dev's query pattern before TASK-275, made linear (the same matches, shown exhaustively in TASK-275):
+# origin/dev's query pattern before TASK-275, its words and all, made linear (the same matches: tests/unit/
+# test_logs.py compares it with the original over every short string):
 # `secret_spans` replays origin/dev's two passes with it, so scrub redacts everything origin/dev did whatever the
 # new patterns miss (a userinfo pass that took a `#` out of a value before this one read it, round 7).
-_LEGACY_QUERY = re.compile(rf"[?&](?=[a-z0-9_]*(?:{_WORDS}))[a-z0-9_]*+=(?P<v>[^&\s#]*)", re.IGNORECASE)
+_LEGACY_QUERY = re.compile(
+    r"[?&](?=[a-z0-9_]*(?:token|key|secret|password|passwd|auth|sig|signature))[a-z0-9_]*+=(?P<v>[^&\s#]*)",
+    re.IGNORECASE,
+)
 
 
 def _legacy_spans(text: str) -> Iterator[tuple[int, int]]:

@@ -697,10 +697,19 @@ def test_text_format_escapes_control_characters(ctl: str) -> None:
 
 def test_scrub_redacts_everything_it_did_before_where_a_userinfo_sits_in_a_value() -> None:
     """origin/dev's userinfo pass took a `#` or `&` out of a URL's userinfo before its query pass read the value,
-    so the value ran on past the `@` (`?token=a://x#y@SECRET`); the shortest such string is 6 pieces (7 to leak a character after the `@`), past the
-    joins above. Every `?<word>=<s1>a://<s2><#|&><s3>@<s4>` over short parts, quotes included (26,244)."""
+    so the value ran on past the `@` (`?token=a://x#y@SECRET`); the shortest such string is 6 pieces (7 to leak a
+    character after the `@`), past the joins above. Every `?<word>=<s1>a://<s2><#|&><s3>@<s4>` over short parts,
+    quotes included (26,244)."""
     parts = ["", "x", "#", "&", "@", "a://", " ", "'", '"']
     for word in ("token", "sig"):
         for sep in "#&":
             for s1, s2, s3, s4 in product(parts, repeat=4):
                 _assert_superset(f"?{word}={s1}a://{s2}{sep}{s3}@{s4}")
+
+
+def test_the_replayed_query_pattern_is_origin_devs_on_every_short_string() -> None:
+    """`_legacy_spans` replays origin/dev with `_LEGACY_QUERY`: the same spans as the original quadratic pattern
+    over every string up to 6 characters of `?&=sig #` and `?&=key_` (299,593 and 137,257)."""
+    for text in [*_strings("?&=sig #", 6), *_strings("?&=key_", 6)]:
+        old = [(m.end("k") + 1, m.end()) for m in _PRE275_QUERY.finditer(text)]
+        assert [m.span("v") for m in logs._LEGACY_QUERY.finditer(text)] == old, text
