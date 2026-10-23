@@ -525,7 +525,10 @@ def test_scrub_redacts_everything_it_did_before_on_every_short_join_of_pieces() 
         ("Bearer A\\fbearer+SECRET", "Bearer [redacted]"),  # no match starts after `\\f`: one token
         ("Bearer A\\xbearer%20SECRET", "Bearer [redacted]"),
         ("Bearer A%bearer SECRET", "Bearer [redacted]%bearer [redacted]"),  # one starts after a bare `%`
-        ("Bearer A/Bearer Bearer SECRET", "Bearer [redacted] Bearer [redacted]"),  # no stop before a doubled one
+        (
+            "Bearer A/Bearer Bearer SECRET",
+            "Bearer [redacted] Bearer [redacted]",
+        ),  # no stop before a doubled one
         ("Bearer A\\/Bearer SECRET", "Bearer [redacted]\\/Bearer [redacted]"),
         ("Bearer A\\Bearer SECRET", "Bearer [redacted]\\Bearer [redacted]"),
         ("Bearer A%0ABearer SECRET", "Bearer [redacted]%0ABearer [redacted]"),
