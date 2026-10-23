@@ -66,23 +66,46 @@ SECRET_PREFIXES = ("password", "passwd", "secret", "auth_", "bearer", "credentia
 NOT_SECRET = frozenset({"token_count", "tokens", "token_total"})
 REDACTED = "[redacted]"
 
-# Each run of scheme characters is tried once, at its start, so scrub is linear in its text (TASK-275): tried at
-# every character of a long run, the pattern read the rest of the run each time. A scheme starts at a run's
-# first letter: `pre` is the run's digits and `+.-` before it, put back as they were, so `1a://user@` and
-# `.a://user@` still lose their userinfo (a lookbehind alone would leave them).
-_URL_USERINFO = re.compile(
-    r"(?<![a-zA-Z0-9+.-])(?P<pre>[0-9+.-]*+)(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*+://)[^/\s@]+@"
+# What scrub redacts: in each pattern the `v` group is the secret, replaced by REDACTED, the rest kept as written.
+# Every pattern is tried once per run it starts (a lookbehind, or a literal start), takes its runs possessively
+# and checks a secret word with a lookahead, so scrub is linear in its text (TASK-275): tried at every character
+# of a long run, a pattern read the rest of the run each time, and a lazy scan for the word re-read the rest of a
+# name once per place the word appears in it.
+_WORDS = "token|key|secret|password|passwd|auth|sig|signature"
+_NAME = r"[a-z0-9_.%-]"  # a parameter name's characters (`X-Amz-Signature`, `api%5Fkey`, `client.secret`)
+_ENC_NAME = r"(?:[a-z0-9_.-]|%5F|%2D|%2E)"  # the same, percent-encoded
+_SCRUBS = (
+    # userinfo (`user:pass@`). A scheme starts at its run's first letter, after the run's digits and `+.-`, so
+    # `1a://user@` and `.a://user@` lose their userinfo (a lookbehind alone would leave them).
+    re.compile(r"(?<![a-zA-Z0-9+.-])[0-9+.-]*+[a-zA-Z][a-zA-Z0-9+.-]*+://(?P<v>[^/\s@]+)@"),
+    # the same, percent-encoded in a value (`?next=https%3A%2F%2Fu%3Ap%40h`, TASK-283)
+    re.compile(
+        r"(?<![a-z0-9+.%-])[0-9+.-]*+[a-z][a-z0-9+.-]*+%3A%2F%2F(?P<v>(?:[^%/\s@]|%(?!2F|40)[0-9a-f]{2})++)%40",
+        re.IGNORECASE,
+    ),
+    # a parameter whose name holds a secret word, wherever its name starts (`?access_token=`, `#access_token=`,
+    # `;token=`, a bare `token=`, TASK-283); prose such as `monkey=1` loses its value too
+    re.compile(rf"(?<!{_NAME})(?={_NAME}*(?:{_WORDS})){_NAME}*+=(?P<v>[^&\s#]*)", re.IGNORECASE),
+    # the same, percent-encoded in a value (`?next=https%3A%2F%2Fh%2F%3Ftoken%3Dabc`, TASK-283)
+    re.compile(
+        rf"(?:%3F|%26|%23|%3B)(?={_ENC_NAME}*(?:{_WORDS})){_ENC_NAME}*+%3D"
+        r"(?P<v>(?:[a-z0-9_.~+-]|%(?!26|23)[0-9a-f]{2})*+)",
+        re.IGNORECASE,
+    ),
+    # a quoted key holding a secret word and its quoted value (`{"access_token": "abc"}`, a dict's repr, TASK-283)
+    re.compile(
+        rf"(?P<q>[\"'])(?={_NAME}*(?:{_WORDS})){_NAME}*+(?P=q)\s*+:\s*+(?P=q)"
+        r"(?P<v>(?:(?!(?P=q))[^\\]|\\[\s\S])*+)(?P=q)",
+        re.IGNORECASE,
+    ),
+    # `Authorization: Bearer …` quoted in exception text: the word after a whole-word `bearer` and whitespace that
+    # is no line break; an escape inside it (`\/`, JSON) is part of it, an escaped quote ends it
+    re.compile(
+        r"\bbearer[^\S\n\r\v\f\x1c-\x1e\x85\u2028\u2029]++(?P<v>(?:[^\s\"',;\\]|\\[^\s\"'\\])++)",
+        re.IGNORECASE,
+    ),
 )
-# A parameter's whole name, read once, when it has a secret word anywhere in it (`?access_token=`,
-# `?X-Amz-Signature=`, `?api%5Fkey=`, a fragment's `#access_token=`, `;token=`): a lazy scan for the word re-read
-# the rest of the name once per place the word appears in it (TASK-275).
-_SECRET_QUERY = re.compile(
-    r"(?P<k>[?&#;](?=[a-z0-9_.%-]*(?:token|key|secret|password|passwd|auth|sig|signature))[a-z0-9_.%-]*+)"
-    r"=[^&\s#]*",
-    re.IGNORECASE,
-)
-# An `Authorization: Bearer …` header quoted in exception text; one try per `bearer`, so linear.
-_BEARER = re.compile(r"(?P<b>\bbearer[^\S\r\n]+)[^\s\"',;\\]+", re.IGNORECASE)
+
 
 # Attributes every LogRecord has; anything else on a record came from `extra=` or `bind()`.
 _STANDARD = frozenset(vars(logging.LogRecord("", 0, "", 0, "", None, None))) | {"message", "asctime"}
@@ -124,11 +147,18 @@ def bind(**fields: object) -> Iterator[None]:
         _context.reset(token)
 
 
+def _redact(m: re.Match[str]) -> str:
+    whole, start = m.group(0), m.start()
+    a, b = m.span("v")
+    return whole[: a - start] + REDACTED + whole[b - start :]
+
+
 def scrub(text: str) -> str:
-    """Remove credentials from `text`: URL userinfo (`user:pass@`), secret-looking query params, bearer tokens."""
-    text = _URL_USERINFO.sub(r"\g<pre>\g<scheme>" + REDACTED + "@", text)
-    text = _SECRET_QUERY.sub(r"\g<k>=" + REDACTED, text)
-    return _BEARER.sub(r"\g<b>" + REDACTED, text)
+    """Remove credentials from `text`: URL userinfo (`user:pass@`), secret-looking parameters and quoted keys, bearer
+    tokens, as written or percent-encoded in a value (`_SCRUBS`)."""
+    for pattern in _SCRUBS:
+        text = pattern.sub(_redact, text)
+    return text
 
 
 def _sensitive(key: str, log_query_text: bool) -> bool:
@@ -206,17 +236,20 @@ class _JsonFormatter(_Formatter):
             ),  # backstop: %-formatted variable data is banned, but never leaks
         }
         line.update(self._extras(record))
-        return json.dumps(line, default=str, ensure_ascii=False)
+        return json.dumps(line, default=str, ensure_ascii=False).translate(_LINE_BREAKS)
 
 
-# Every character `str.splitlines` breaks a line at, escaped, so no text can start a forged log line: JSON leaves
-# U+0085, U+2028 and U+2029 as they are, and the message is not JSON-encoded.
+# Every character `str.splitlines` breaks a line at, as a JSON escape: json.dumps leaves U+0085, U+2028 and
+# U+2029 as they are, so a reader that splits on them would cut a JSON line in two (`\u2028` is the same string).
 _LINE_BREAKS = str.maketrans({c: f"\\u{ord(c):04x}" for c in "\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029"})
+# The text line escapes every control character too (C0, DEL, C1: line breaks, ESC, backspace), so no text can
+# start a forged line or move the terminal's cursor; the message is not JSON-encoded.
+_CONTROLS = str.maketrans({chr(c): f"\\u{c:04x}" for c in [*range(0x20), *range(0x7F, 0xA0), 0x2028, 0x2029]})
 
 
 class _TextFormatter(_Formatter):
     def format(self, record: logging.LogRecord) -> str:
-        # Values are JSON-encoded, and so is a key that is not a plain name; then every line break left is escaped.
+        # Values are JSON-encoded, and so is a key that is not a plain name; then every control character left.
         parts = [
             f"{k if k.isascii() and k.isidentifier() else json.dumps(k, ensure_ascii=False)}="
             f"{json.dumps(v, default=str, ensure_ascii=False)}"
@@ -225,7 +258,7 @@ class _TextFormatter(_Formatter):
         line = f"{record.levelname:<7} {record.name}: {scrub(record.getMessage())}" + (
             "  " + " ".join(parts) if parts else ""
         )
-        return line.translate(_LINE_BREAKS)
+        return line.translate(_CONTROLS)
 
 
 # The server's loggers (task-034). `uvicorn` (and `uvicorn.error` under it) goes through our handler, so its

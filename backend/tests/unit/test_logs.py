@@ -285,43 +285,44 @@ def test_prefix_rule_still_spares_ordinary_fields(stream: io.StringIO, field: st
 
 # --- scrub in linear time (TASK-275) ---------------------------------------------------------------------------
 
-# the patterns as they were before TASK-275; the userinfo one with an empty `pre` group, which matches nothing, so
-# today's `scrub` (whose replacement names `pre`) runs on them unchanged
-_PRE275 = {
-    "_URL_USERINFO": re.compile(r"(?P<pre>)(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s@]+@"),
-    "_SECRET_QUERY": re.compile(
-        r"(?P<k>[?&](?:[a-z0-9_]*?(?:token|key|secret|password|passwd|auth|sig|signature)[a-z0-9_]*))=[^&\s#]*",
-        re.IGNORECASE,
-    ),
-}
+# scrub's two patterns as they were before TASK-275 (origin/dev at 88df9322), frozen here as the reference
+_PRE275_USERINFO = re.compile(r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s@]+@")
+_PRE275_QUERY = re.compile(
+    r"(?P<k>[?&](?:[a-z0-9_]*?(?:token|key|secret|password|passwd|auth|sig|signature)[a-z0-9_]*))=[^&\s#]*",
+    re.IGNORECASE,
+)
+_USERINFO, _QUERY = logs._SCRUBS[0], logs._SCRUBS[2]
 
 
-def _scrubbed(texts: list[str], patterns: dict[str, re.Pattern[str]] | None = None) -> list[str]:
-    """`logs.scrub` of each text, with `patterns` put on `logs` for the calls when given."""
-    saved = {name: getattr(logs, name) for name in patterns or {}}
-    try:
-        for name, pattern in (patterns or {}).items():
-            setattr(logs, name, pattern)
-        return [logs.scrub(t) for t in texts]
-    finally:
-        for name, pattern in saved.items():
-            setattr(logs, name, pattern)
+def _strings(alphabet: str, longest: int) -> list[str]:
+    return ["".join(chars) for n in range(longest + 1) for chars in product(alphabet, repeat=n)]
 
 
-# every character each pattern reads: a letter, a digit, `.` for the other scheme punctuation, `:/@`, a space,
-# and `#`, which ends a query value; `?&=` and `sig` (a secret word whose letters are also name characters), a
-# space and `,`, which no pattern reads here (`bearer` can't form without a `b`). Since TASK-275 `-.%` are name characters and `#;` start a name too,
-# so they are left out of the query alphabet: what they add is only more redaction (examples below).
-@pytest.mark.parametrize("alphabet", ["a1.:/@ #", "?&=sig ,"])
-def test_scrub_gives_what_it_gave_before_on_every_short_string(alphabet: str) -> None:
-    """Every string up to 6 characters (299,593 per alphabet): the same text out, so a log line reads as
-    before. A difference first shown at 7 characters (`.a://b@`, a scheme after punctuation) is a named example.
-    Once, not in CI: each pattern alone over every string up to 7 characters (userinfo over `a1.:/@ #`, 2.4M;
-    the query over `?&=sigx #`, 5.4M) showed no difference."""
-    texts = ["".join(chars) for n in range(7) for chars in product(alphabet, repeat=n)]
-    before = _scrubbed(texts, _PRE275)
-    for text, now, then in zip(texts, _scrubbed(texts), before, strict=True):
-        assert now == then, text
+# every character the userinfo pattern reads: a letter, a digit, `.` for the other scheme punctuation, `:/@`, a
+# space, and `#`; no other pattern can match these strings (no secret word, quote, `%` or `bearer`)
+def test_userinfo_is_redacted_as_before_on_every_short_string() -> None:
+    """Every string up to 6 characters (299,593): the same text out. A difference first shown at 7 characters
+    (`.a://b@`, a scheme after punctuation) is a named example. Once, not in CI: the pattern alone over every
+    string up to 7 (2.4M) showed no difference."""
+    for text in _strings("a1.:/@ #", 6):
+        assert logs.scrub(text) == _PRE275_USERINFO.sub(r"\g<scheme>[redacted]@", text), text
+
+
+def _redacted(spans: list[tuple[int, int]]) -> set[int]:
+    return {i for a, b in spans for i in range(a, b)}
+
+
+# `?&=` and `sig` (a secret word whose letters are also name characters), `#`, which ends a value and now starts a
+# name, and a space. Since TASK-275 a name starts after any character that is not a name character, so the
+# query pattern redacts more than it did (a bare `sig=`); it must still redact every character it did.
+def test_every_query_value_redacted_before_is_redacted_on_every_short_string() -> None:
+    """Every string up to 6 characters (299,593): each character the old pattern redacted falls in a value the
+    new one redacts, and a value it redacted empty (`?sig=`) is still matched."""
+    for text in _strings("?&=sig #", 6):
+        old = [(m.end("k") + 1, m.end()) for m in _PRE275_QUERY.finditer(text)]
+        new = [m.span("v") for m in _QUERY.finditer(text)]
+        assert _redacted(old) <= _redacted(new), text
+        assert {b for a, b in old if a == b} <= {b for a, b in new}, text
 
 
 @pytest.mark.parametrize(
@@ -348,12 +349,46 @@ def test_scrub_gives_what_it_gave_before_on_every_short_string(alphabet: str) ->
         ("https://h/cb#access_token=ab&x=1", "https://h/cb#access_token=[redacted]&x=1"),  # a fragment
         ("https://h/x?a=1;token=2", "https://h/x?a=1;token=[redacted]"),
         ("Authorization: Bearer ab.c-d", "Authorization: Bearer [redacted]"),
-        ('{"authorization": "bearer ab"}', '{"authorization": "bearer [redacted]"}'),
+        ('{"authorization": "bearer ab"}', '{"authorization": "[redacted]"}'),  # `auth` in the key: all of it
+        ('{"h": "bearer ab"}', '{"h": "bearer [redacted]"}'),
         ("a bearer of news", "a bearer [redacted] news"),  # a backstop: an ordinary `bearer` loses a word
         ("a forbearer of x", "a forbearer of x"),  # `bearer` only as a whole word
         ('\\"Bearer ab\\"', '\\"Bearer [redacted]\\"'),  # JSON-escaped: the escape stays
-        ("Bearer\u00a0ab", "Bearer\u00a0[redacted]"),  # any whitespace but a line break
+        ("Bearer\u00a0ab", "Bearer\u00a0[redacted]"),  # any whitespace that is no line break
         ("Bearer\nab", "Bearer\nab"),
+        ("Bearer\u2028ab", "Bearer\u2028ab"),
+        ("Bearer\x85ab", "Bearer\x85ab"),
+        ("Bearer\vab", "Bearer\vab"),
+        ("Bearer\fab", "Bearer\fab"),
+        ("Bearer\x1dab", "Bearer\x1dab"),
+        (
+            '{"h": "Bearer ab\\/cd+ef=="}',
+            '{"h": "Bearer [redacted]"}',
+        ),  # an escape inside the token is the token
+        ("Bearer ab\\u002Fcd", "Bearer [redacted]"),
+        # TASK-283: a bare parameter, wherever its name starts
+        ("access_token=abc page=2", "access_token=[redacted] page=2"),
+        ("retry with token=abc", "retry with token=[redacted]"),
+        ("page=2 count=3 size=4", "page=2 count=3 size=4"),  # no secret word: untouched
+        ("monkey=1", "monkey=[redacted]"),  # a backstop: a word inside a name counts, as `?designer=` did
+        # TASK-283: percent-encoded in a value (a redirect target)
+        (
+            "https://h/x?next=https%3A%2F%2Fh%2F%3Ftoken%3Dabc%26p%3D1",
+            "https://h/x?next=https%3A%2F%2Fh%2F%3Ftoken%3D[redacted]%26p%3D1",
+        ),
+        ("?next=%2F%3Fa%3D1%26API%5FKEY%3Dz%23f", "?next=%2F%3Fa%3D1%26API%5FKEY%3D[redacted]%23f"),
+        ("?next=https%3A%2F%2Fu%3Ap%40h%2Fz", "?next=https%3A%2F%2F[redacted]%40h%2Fz"),
+        (
+            "?r=%2Fcb%23access_token%3Dab%26x%3D1",
+            "?r=%2Fcb%23access_token%3D[redacted]%26x%3D1",
+        ),  # `#`, encoded
+        ("?r=%2Fx%3Ba%3D1%3Btoken%3Dab", "?r=%2Fx%3Ba%3D1%3Btoken%3D[redacted]"),  # `;`, encoded
+        ("?next=%2F%3Fpage%3D2", "?next=%2F%3Fpage%3D2"),
+        # TASK-283: a quoted key and its quoted value (JSON, a dict's repr)
+        ('{"access_token": "abc", "n": 1}', '{"access_token": "[redacted]", "n": 1}'),
+        ("{'client_secret': 'a\\'b', 'x': 'y'}", "{'client_secret': '[redacted]', 'x': 'y'}"),
+        ('{"token":"a\\"b"}', '{"token":"[redacted]"}'),  # an escaped quote stays inside the value
+        ('{"tokens": 3, "page": "2"}', '{"tokens": 3, "page": "2"}'),  # a value that is not quoted is left
         (
             "https://h/x?designer=1",
             "https://h/x?designer=[redacted]",
@@ -379,12 +414,25 @@ def test_scrub_examples(value: str, expected: str) -> None:
         lambda n: "#" * n,
         lambda n: "bearer" + " " * n,
         lambda n: "bearer " * (n // 7),
+        lambda n: "bearer " + "\\" * n,
+        lambda n: "a=" * (n // 2),  # TASK-283: a name may start at every other character
+        lambda n: "token" * (n // 5),
+        lambda n: "%3Ftoken" * (n // 8),
+        lambda n: "%3F" + "%5F" * (n // 3),
+        lambda n: "%3Ftoken%3D" + "%41" * (n // 3),
+        lambda n: "a%3A%2F%2F" * (n // 10),
+        lambda n: "https%3A%2F%2F" + "u" * n,
+        lambda n: "'token':'" * (n // 9),
+        lambda n: '"' * n,
+        lambda n: "'" + "a" * n,
+        lambda n: "'token': '" + "\\a" * (n // 2),
+        lambda n: ('"token": "' + "a" * 50) * (n // 60),
     ],
 )
 def test_scrub_is_linear_on_a_long_run(build: object) -> None:
     """About 20k characters took 97-760 ms before TASK-275 by shape (292 ms on a run of letters, 758 ms on
     `?` + `token` x 4,000), 16 times 5k's: crawled text reaching a log line. The `-.%`, `#` and `bearer` shapes
-    guard what TASK-275 added (the old patterns didn't read them)."""
+    guard what TASK-275 added (the old patterns didn't read them), the rest what TASK-283 added."""
     assert_near_linear(logs.scrub, build, 5_000)  # type: ignore[arg-type]
 
 
@@ -450,3 +498,29 @@ def test_many_keys_that_scrub_alike_are_all_kept_in_linear_time() -> None:
     small, large = build(2_000), build(8_000)
     ratio, pairs = growth(lambda: logs._clean(small, False), lambda: logs._clean(large, False))
     assert ratio < 8, (ratio, pairs)
+
+
+def test_a_real_suffixed_key_is_kept_when_keys_collide_after_it() -> None:
+    out = logs._clean(
+        {"https://[redacted]@h#2": "real", "https://a@h": 1, "https://b@h": 2}, log_query_text=False
+    )
+    assert out == {"https://[redacted]@h#2": "real", "https://[redacted]@h": 1, "https://[redacted]@h#3": 2}
+
+
+@pytest.mark.parametrize("brk", ["\x85", "\u2028", "\u2029"])
+def test_a_json_line_is_one_line_to_any_reader(stream: io.StringIO, brk: str) -> None:
+    """json.dumps leaves these as they are; escaped, `str.splitlines` keeps the line whole and it parses the same."""
+    logging.getLogger("openproceedings.x").info(f"e{brk}", extra={f"k{brk}": f"v{brk}"})
+    (line,) = stream.getvalue().splitlines()
+    rec = json.loads(line)
+    assert rec["event"] == f"e{brk}" and rec[f"k{brk}"] == f"v{brk}"
+
+
+@pytest.mark.parametrize("ctl", ["\x1b[2K", "\x08", "\x00", "\x7f", "\x9b", "\t"])
+def test_text_format_escapes_control_characters(ctl: str) -> None:
+    """ESC, backspace and the other C0/C1 controls, in the message or a value, never reach the terminal raw."""
+    buf = io.StringIO()
+    logs.configure_logging("INFO", "text", stream=buf)
+    logging.getLogger("openproceedings.x").info("e %s", f"m{ctl}", extra={"k": f"v{ctl}"})
+    out = buf.getvalue().rstrip("\n")
+    assert not any(ord(c) < 0x20 or 0x7F <= ord(c) < 0xA0 for c in out), repr(out)

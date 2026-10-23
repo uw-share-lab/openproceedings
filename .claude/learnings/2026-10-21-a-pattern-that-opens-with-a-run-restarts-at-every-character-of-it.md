@@ -74,7 +74,7 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
   8 (2.0M), `_AUTHOR_SEPARATOR` over `and ,\nx` up to 8 (6.7M): no difference. The tests compare the functions
   themselves, up to 6 (scrub) and 7 (`_split_entry`).
 - **The exhaustive length hides the punctuation before a scheme.** qa-auditor found `(?P<pre>[0-9]*+)` (no
-  `+.-`) passed every test and leaked `.a://u@h`: the shortest string that shows it has 7 characters. Named
+  `+.-`) passed every test and leaked `.a://u@h` (the shortest such string, `.a://b@`, has 7 characters). Named
   examples (`.a://`, `-a://`, `+a://`) cover it. Likewise one stand-in per class in a growth case lets a
   narrower lookbehind through: `(?<![a-zA-Z0-9.])` is quadratic on `a+a+…`, `(?<![ \n])` on a tab run, so the
   growth cases now run each scheme punctuation character and each kind of whitespace `\s` reads. An alphabet
@@ -91,7 +91,7 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
   survivor dropped `.` from the lookahead's class only: `?client.secret=` leaked while `auth.v2` (word before the
   dot) passed. And a growth case with the word once at the end (`?a-%.…token`) kills nothing: the old lazy form
   is slow only when the word repeats (`?-token-token…`).
-- Round 3 also made `#` and `;` start a parameter (`#access_token=` fragments) and redacts `Bearer <token>`;
+- Round 2 also made `#` and `;` start a parameter (`#access_token=` fragments) and redacts `Bearer <token>`;
   percent-encoded URLs inside a value and a bare `token=` with nothing before it are TASK-283.
 - **A fix for a collision can be the next quadratic.** `_put`'s first form walked `#2, #3, …` from the start for
   every colliding key: 4,000 keys took 1.1 s (observability-reviewer, round 3). It now remembers each name's last
@@ -102,3 +102,17 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
   neighbouring patterns, a growth case per character a lookbehind refuses); `.claude/skills/logging-standards/SKILL.md`
   (what scrub redacts, keys included); tests in `backend/tests/unit/test_logs.py` and
   `backend/tests/unit/ingest/test_openreview_v1_authors.py`.
+
+## Addendum 2026-10-23 (TASK-283, fixed in the same branch at the owner's request)
+- **Widening a start turns an equality test into a superset test.** Once a parameter name may start after any
+  character that is not a name character (a bare `token=`), scrub redacts more than before, so "the same text out"
+  no longer holds. The test now compares spans: every character the frozen old pattern redacted falls inside a
+  `v` span of the new one. That needs each pattern to name its secret as one group (`v`), which also let `scrub`
+  become one loop over `_SCRUBS` with one replacement function.
+- **Percent-encoding hides a whole URL inside one name run.** `%` is a name character, so
+  `https%3A%2F%2Fh%2F%3Ftoken%3Dabc` is one run with no `=`. The encoded forms get their own patterns, whose name
+  class spells `_` `-` `.` encoded (`%5F`, `%2D`, `%2E`) and whose value stops at `%26`/`%23`.
+- **A quoted key's pattern catches more than the bearer one.** `{"authorization": "bearer ab"}` now loses the
+  whole value (`auth` is in the key), not just the word after `bearer`.
+- **Measure growth on an idle machine.** Prototype ratios of 18-30x for 4x the input were load from a parallel
+  `make test` and review agents' probes; best-of-3 thread time at 20k against 80k showed every shape linear.

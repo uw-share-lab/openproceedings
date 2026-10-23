@@ -60,13 +60,20 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 - Never log abstracts, author lists, OpenReview credentials, tokens, cookies, `.env` values, or request
   bodies. Never log `Diagnostic.message` or `OpenProceedingsError.message`: they quote user input. Log
   the `code` (a `UserInputError` at DEBUG, an `InternalError` at ERROR with the traceback). Never log IPs beyond what the rate limiter needs in memory.
-- Exceptions from HTTP clients can carry URLs with credentials or tokens. `logs.py` scrubs `user:pass@` and
-  secret-looking query parameters (after `?&#;`, a name of letters, digits and `_.%-` holding `token`, `key`,
-  `secret`, `password`, `auth` or `sig`: `?access_token=`, `?X-Amz-Signature=`, `?api%5Fkey=`,
-  `#access_token=`) and the word after a whole-word `bearer` (`Bearer <token>`; prose `a bearer of` loses `of`)
-  from every string value, every key at any depth (two keys that scrub
-  alike are both kept, the second as `key#2`), and exception and stack text, in time linear in the text
-  (TASK-275); a percent-encoded URL inside a value is not decoded (TASK-283). It also redacts secret-shaped keys (starting or ending with a secret word: `password…`, `…_token`, `auth_…`,
+- Exceptions from HTTP clients can carry URLs with credentials or tokens. `logs.scrub` redacts, from every string
+  value, every key at any depth (two keys that scrub alike are both kept, the second as `key#2`), and exception
+  and stack text, in time linear in the text (TASK-275, TASK-283):
+  - URL userinfo (`user:pass@`);
+  - the value of a parameter whose name (letters, digits, `_.%-`, starting after any other character) holds
+    `token`, `key`, `secret`, `password`, `auth` or `sig`: `?access_token=`, `?X-Amz-Signature=`,
+    `#access_token=`, a bare `token=` (prose such as `monkey=1` loses its value too);
+  - both of those percent-encoded inside a value (`?next=https%3A%2F%2Fh%2F%3Ftoken%3Dabc`, `%3A%2F%2Fu%3Ap%40`);
+  - the quoted value of a quoted key holding such a word (`{"access_token": "abc"}`, a dict's repr; a value
+    that is not quoted, and JSON escaped inside a string, are left);
+  - the word after a whole-word `bearer` (`Bearer <token>`, an escape such as `\/` inside it included; prose
+    `a bearer of` loses `of`).
+
+  It also redacts secret-shaped keys (starting or ending with a secret word: `password…`, `…_token`, `auth_…`,
   `secret…`, `bearer…`, `…api_key`) case-insensitively at any depth, while ordinary fields like
   `tokenizer_version`, `token_count` and `author_count` stay visible.
   That is a backstop, not permission: still never pass credentials to a log call.
