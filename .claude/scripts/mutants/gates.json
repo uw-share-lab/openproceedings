@@ -2206,6 +2206,24 @@
   "new": "fullmatch(value.strip())"
  },
  {
+  "label": "cmdparse: git_bool reads a key with no value as false",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(?:0x0+|0+)",
+  "new": "(?:0x0+|0*)"
+ },
+ {
+  "label": "cmdparse: push_config reads lines, not NUL records",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "\"config\", \"-z\", \"--get-regexp\", PUSH_CONFIG",
+  "new": "\"config\", \"--get-regexp\", PUSH_CONFIG"
+ },
+ {
+  "label": "cmdparse: push_config splits a record at its first space",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            key, _, value = record.partition(\"\\n\")",
+  "new": "            key, _, value = record.partition(\" \")"
+ },
+ {
   "label": "enforce: repo push config not read",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
   "old": "    if not refspecs and repo_config is not None:",

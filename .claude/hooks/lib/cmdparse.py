@@ -2448,13 +2448,16 @@ def push_config(argv: list[str], directory: str) -> dict[str, str]:
     """The repo's effective push config for a `git ...` argv (local, global and system files, of its -C /
     --git-dir / GIT_DIR repo), keys lower-cased; a key set without a value is ''. A refspec-less push reads it
     (TASK-067 review gate: `git config remote.origin.push x:refs/heads/dev`, then `git push origin`). Config
-    this can't read (GIT_COMMON_DIR, GIT_CONFIG_*, …) is `git_config_opaque`, which the gates refuse first."""
+    this can't read (GIT_COMMON_DIR, GIT_CONFIG_*, …) is `git_config_opaque`, which the gates refuse first.
+    Read with `-z` (records end in NUL, the key ends at the first newline): a value may hold a newline and a remote
+    name a space, so splitting lines on the first space let a value forge a key, or hid a remote's key (TASK-282)."""
     _, eff, _, gitdir, _ = _git_options(argv, directory)
-    out = git(eff, *(["--git-dir", gitdir] if gitdir else []), "config", "--get-regexp", PUSH_CONFIG)
+    out = git(eff, *(["--git-dir", gitdir] if gitdir else []), "config", "-z", "--get-regexp", PUSH_CONFIG)
     found = {}
-    for line in out.splitlines():
-        key, _, value = line.partition(" ")
-        found[key.lower()] = value
+    for record in out.split("\0"):
+        if record:
+            key, _, value = record.partition("\n")
+            found[key.lower()] = value
     return found
 
 

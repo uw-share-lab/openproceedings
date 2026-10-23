@@ -147,8 +147,11 @@ record past a bound refused, record schema 9 → 10.
   `git push origin` mirror every ref unreviewed (security review, round 3). `git_bool` now fails toward true: false
   only for git's false words and a zero in strtoimax's forms (sign, `0x`, octal zeros, a k/m/g unit); anything else,
   including what git refuses, is true. Lesson: for a gate, ask which direction a misread fails, not only whether it
-  raises. Evidence: the `push.followTags` and `remote.origin.mirror` rows in `test-openproceedings-gates.sh`, and the
-  seven `git_bool` mutants in `.claude/scripts/mutants/gates.json`.
+  raises. The same review round found what feeds it had the same flaw: `push_config` split `--get-regexp` output on
+  lines and the first space, so `remote.pushdefault` set to `x`, a newline and `remote.origin.mirror 0` made the gate
+  read mirror as 0 while git mirrors, and a remote named `x y` hid its keys. It now reads `git config -z`. Evidence:
+  the `push.followTags`, `remote.origin.mirror`, no-value key, forged-line and `remote.<x y>` rows in
+  `test-openproceedings-gates.sh`, and the `git_bool` and `push_config` mutants in `.claude/scripts/mutants/gates.json`.
 - **A test of "no hint" must tell no hint apart from a hint.** A '²' `Retry-After` on a 429 now waits the first
   back-off step (5 s), and a '²' `ratelimit-reset` with `ratelimit-remaining: 0` waits the 60 s default; an
   Arabic-Indic year inside the checked range (`١٩٩٠`) was read as 1990 before, so the test asserts the message's

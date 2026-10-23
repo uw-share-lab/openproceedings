@@ -1193,6 +1193,40 @@ done
 g config remote.origin.mirror 0x0
 check $R allow "remote.origin.mirror=0x0 (git: not a mirror)" "$(payload_bash 'git push origin')"
 g config --unset remote.origin.mirror
+for v in 0g 0M; do
+  g config push.followTags "$v"
+  check $R allow "push.followTags=$v (git: false)"   "$(payload_bash 'git push origin')"
+done
+for v in 0t 0kk +-0; do
+  g config push.followTags "$v"
+  check $R block "push.followTags=$v (git refuses it)" "$(payload_bash 'git push origin')"
+done
+g config --unset push.followTags
+# a key with no value is true to git; --get-regexp prints it with value ''
+printf '[push]\n\tfollowTags\n' >> "$REPO/.git/config"
+check $R block "push.followTags with no value (git: true)" "$(payload_bash 'git push origin')"
+g config --unset push.followTags
+printf '[remote "origin"]\n\tmirror\n' >> "$REPO/.git/config"
+check $R block "remote.origin.mirror with no value (git: a mirror)" "$(payload_bash 'git push origin')"
+g config --unset remote.origin.mirror
+# push config is read NUL-separated (-z): a value with a newline can't forge a key, a remote name with a space
+# can't hide one (TASK-282 review)
+g config remote.origin.mirror true
+g config remote.pushdefault "$(printf 'x\nremote.origin.mirror 0')"
+check $R block "a mirror a forged remote.pushdefault line can't undo" "$(payload_bash 'git push origin')"
+g config --unset remote.pushdefault
+g config --unset remote.origin.mirror
+g config push.followTags true
+g config remote.pushdefault "$(printf 'x\npush.followtags 0')"
+check $R block "push.followTags a forged line can't undo" "$(payload_bash 'git push origin')"
+g config --unset remote.pushdefault
+g config --unset push.followTags
+g config "remote.x y.mirror" true
+check $R block "remote.<x y>.mirror (a space in the remote name)" "$(payload_bash 'git push origin')"
+g config --unset "remote.x y.mirror"
+g config "remote.x y.push" refs/heads/other2:refs/heads/other2
+check $R block "remote.<x y>.push (a space in the remote name)" "$(payload_bash 'git push origin')"
+g config --unset "remote.x y.push"
 # the matching refspec ':' pushes every branch that exists on both sides
 check $R block "git push origin : (matching)"          "$(payload_bash 'git push origin :')"
 check $R block "git push origin +: (forced matching)"  "$(payload_bash 'git push origin +:')"

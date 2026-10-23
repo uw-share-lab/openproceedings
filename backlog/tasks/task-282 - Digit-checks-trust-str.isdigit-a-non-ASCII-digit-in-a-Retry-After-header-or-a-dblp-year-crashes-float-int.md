@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-22 22:23'
-updated_date: '2026-10-23 03:36'
+updated_date: '2026-10-23 04:13'
 labels:
   - ingest
   - security
@@ -29,6 +29,7 @@ Found by the TASK-281 review and the closing reviews (2026-10-22). str.isdigit()
 - [x] #3 http.retry_after treats a Retry-After HTTP-date parsedate_to_datetime refuses with OverflowError as no hint, and takedown_check.retry_after converts at most two digits after leading zeros (longer is the 60s cap), with tests
 - [x] #4 eval/coverage_report._cell_key and scripts/{openalex,dblp_aaai,aaai_library}_census.py check isascii() and bound the digits before int(); the coverage_report heading test covers '²', an Arabic-Indic year and 5,000 digits (the scripts have no test harness)
 - [x] #5 cmdparse.git_bool fails toward true: false only for what git reads as false (false/no/off, and a zero with optional sign, 0x prefix and k/m/g unit); 1k, 1K, 1m, 0x1, 0X1, +1, '²' and 5,000 digits read as true, never raising; case-table rows in test-openproceedings-gates.sh (push.followTags and remote.origin.mirror) and mutants in gates.json, each killed
+- [x] #6 cmdparse.push_config reads git config -z (NUL records, key to the first newline), so a value with a newline can't forge a push key and a remote name with a space can't hide one; case-table rows for a forged remote.pushdefault, 'remote.x y.mirror'/.push and no-value followTags/mirror keys, and mutants, each killed
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -63,4 +64,8 @@ Round 3 (lead's direction, 2026-10-22): cmdparse.git_bool fixed after all (super
 Round 3 review (2026-10-22): security found git_bool fails open: git 2.42 (checked in a scratch repo, config only) reads 1k, 1K, 1m, 1g, 0x1, 0X1, +1, -1 and 010 as true, and 0, 00, 0k, -0, +0, -0k, 0x0, -0x0 as false, and refuses ², --1, 0x, 1t, 08 and 22-digit values; the round-3 git_bool read 1k/0x1/+1 as false, so remote.origin.mirror=1k let a bare git push origin mirror every ref unreviewed. Lead's decision: fix here. git_bool is now 'not GIT_FALSE.fullmatch(...)' with GIT_FALSE = false|no|off|[+-]?(?:0x0+|0+)[kmg]? (lowercased): everything else, including what git refuses, is true. The previous round-3 note's git_bool description is superseded. Case rows: push.followTags 1 1k 1K 1m 1g 0x1 0X1 +1 -1 010 ² --1 0x 1t and 5,000 nines block; 0 00 0k 0K -0 +0 -0k 0x0 0X0 -0x0 false No OFF allow; remote.origin.mirror 1k 0x1 +1 block, 0x0 allow. Mutants: the old 3 replaced by 7 (false-as-true updated; number-under-read, unit, hex, sign, false word, case). QA round 3: rows added for a five-digit year (dblp, dblp_aaai: '10000'; coverage_report: 'ICLR 20140 main') and two-digit takedown Retry-After ('45', '045'); the dblp tests renamed test_a_year_not_of_at_most_four_ascii_digits_is_no_year. openalex_census strips leading zeros before its 18-digit bound (code-review nit). CLAUDE.md §Enforced gates: a gate misreads only toward refusal.
 
 Round 3 validation: mutate.py --match git_bool --jobs 2: 7 of 7 killed; make tooling (test-openproceedings-gates.sh 1675 passed), make lint, make test (backend 9377 passed, 3 skipped; frontend 4954 passed) green.
+
+Review round 4 (2026-10-22): QA found (1) no row for a key set with no value (git: true; --get-regexp prints value ''), so GIT_FALSE mutants making '' false survived: rows appended to .git/config ('[push] followTags', '[remote "origin"] mirror') block, mutant 'git_bool reads a key with no value as false' added; and (2) push_config parsed --get-regexp by lines and the first space: remote.pushdefault set to 'x<newline>remote.origin.mirror 0' made the gate read mirror=0 while git mirrors, and a remote named 'x y' hid its mirror/push key. push_config now reads -z (records end in NUL, the key ends at the first newline). Rows: forged mirror and forged followTags block, remote 'x y' mirror and push block. Mutants: -z dropped, partition on a space. Nit rows: followTags 0g/0M allow, 0t/0kk/+-0 block. test-openproceedings-gates.sh 1686 passed.
+
+Round 4 validation: mutate.py --match 'key with no value' and --match push_config: 3 of 3 killed; make tooling (gates 1686, enforce-pr-workflow 419 passed), make lint, make test (backend 9377 passed, 3 skipped; frontend 4954 passed) green.
 <!-- SECTION:NOTES:END -->
