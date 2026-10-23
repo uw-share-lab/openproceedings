@@ -3,11 +3,11 @@ id: TASK-282
 title: >-
   Digit checks trust str.isdigit(): a non-ASCII digit in a Retry-After header or
   a dblp year crashes float()/int()
-status: In Progress
+status: Done
 assignee:
   - '@jeevan'
 created_date: '2026-10-22 22:23'
-updated_date: '2026-10-23 05:52'
+updated_date: '2026-10-23 06:02'
 labels:
   - ingest
   - security
@@ -82,3 +82,9 @@ Round 5 QA nit (2026-10-23): git_bool stripped whitespace before matching the fa
 
 Round 5b validation: mutate.py --match git_bool --jobs 2: 14 of 14 killed; make tooling (gates 1696, enforce-pr-workflow 421), make lint, make test (backend 9377 passed, 3 skipped; frontend 4954 passed) green.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+str.isdigit() is true for any Unicode digit, so readers that called int()/float() after it crashed on '²' (latin-1 0xB2 in a header) or silently read Arabic-Indic digits. http._seconds, both dblp year readers, eval/coverage_report._cell_key and three census scripts now take ASCII digits only, with a length bound before int(); http.retry_after catches OverflowError from an HTTP-date past what a datetime holds; takedown_check.retry_after converts at most two digits after leading zeros. The sweep reached the hooks: cmdparse.git_bool now fails toward true (false only for git's false words and zeros in strtoimax's forms; git 2.42 checked), so remote.origin.mirror=1k or push.followTags=0x1 no longer pass the review gate, and push_config reads git config -z and keeps the remote name's case, so a forged value or a case-colliding remote can't hide a mirror or push. Verified: tests through the scripted fetch path and the dblp/coverage/takedown units, case-table rows in both hook tables, 14 git_bool and 3 push_config mutants killed, make test (backend 9377 passed, 3 skipped; frontend 4954), make lint and make tooling green; seven review rounds, all findings fixed.
+<!-- SECTION:FINAL_SUMMARY:END -->
