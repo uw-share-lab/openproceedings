@@ -69,8 +69,9 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
 - **Swapping the old patterns back needs the new group.** `scrub`'s replacement now names `pre`, so the old
   userinfo pattern goes back on `logs` with an empty `(?P<pre>)` in front, which matches nothing; the comparison
   then runs today's `scrub` itself, as the swap rule above asks.
-- **Evidence.** 16.5M short strings (lengths 7-8 over each pattern's characters) showed no difference; the tests
-  keep 6 (scrub) and 7 (`_split_entry`). On the old patterns all seven growth cases failed; seven wrong patterns
+- **Evidence.** A one-off run compared each pattern alone, old against new, over 16.5M short strings of its
+  characters (scrub's two up to 7, 7.8M; `_split_entry`'s two up to 8, 8.7M): no difference. The tests compare
+  the functions themselves, up to 6 (scrub) and 7 (`_split_entry`). On the old patterns all seven growth cases failed; seven wrong patterns
   (the digit-less lookbehind, `(?<! )` for `(?<!\s)`, `_` dropped from the name class, …) were each killed.
 - Propagated to: `.claude/skills/testing-standards/SKILL.md` §7 (the word-in-a-run shape, and timing the
   neighbouring patterns); tests in `backend/tests/unit/test_logs.py` and

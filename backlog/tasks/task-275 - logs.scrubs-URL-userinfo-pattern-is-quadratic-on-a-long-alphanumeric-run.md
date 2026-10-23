@@ -1,10 +1,10 @@
 ---
 id: TASK-275
 title: logs.scrub's URL-userinfo pattern is quadratic on a long alphanumeric run
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-20 15:18'
-updated_date: '2026-10-22 22:23'
+updated_date: '2026-10-23 14:32'
 labels:
   - logging
   - security
@@ -20,11 +20,13 @@ Found by TASK-272's security sweep (2026-10-20), pre-existing: logs.py _URL_USER
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 scrub's userinfo redaction is linear with identical output (exhaustive short-string comparison), with a CPU-growth test
+- [x] #1 scrub's userinfo redaction is linear with identical output (exhaustive short-string comparison), with a CPU-growth test
 <!-- AC:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 TASK-281 review (2026-10-22): a NeurIPS listing warning also logs its see-also links uncapped, so a hostile listing can put long text through scrub(); fixing scrub's growth here covers it.
+
+2026-10-23: _URL_USERINFO now (?<![a-zA-Z0-9+.-])(?P<pre>[0-9+.-]*+)(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*+://)[^/\s@]+@ (the reviewer's candidate). Timing every pattern in scrub found a second: _SECRET_QUERY took 452 ms on '?' + 'token' x 4,000 (16x for 4x), its lazy scan re-reading the name once per secret word; now a lookahead for the word and a possessive name run. Tests compare scrub against the old patterns (swapped back on logs) over every string up to 6 characters of two alphabets; a one-off run compared each pattern alone over every string up to 7 (7.8M): no difference. Growth checks on four shapes fail on the old patterns and pass now. Tests: backend/tests/unit/test_logs.py.
 <!-- SECTION:NOTES:END -->

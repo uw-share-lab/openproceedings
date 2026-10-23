@@ -313,7 +313,8 @@ def _scrubbed(texts: list[str], patterns: dict[str, re.Pattern[str]] | None = No
 @pytest.mark.parametrize("alphabet", ["a1.:/@ #", "?&=sig #"])
 def test_scrub_gives_what_it_gave_before_on_every_short_string(alphabet: str) -> None:
     """Every string up to 6 characters (299,593 per alphabet): the same text out, so a log line reads as
-    before; 16.5M strings up to 7 and 8 characters showed no difference either when the patterns changed."""
+    before; each pattern alone, compared over every string up to 7 characters (7.8M in all), showed no
+    difference either."""
     texts = ["".join(chars) for n in range(7) for chars in product(alphabet, repeat=n)]
     before = _scrubbed(texts, _PRE275)
     for text, now, then in zip(texts, _scrubbed(texts), before, strict=True):

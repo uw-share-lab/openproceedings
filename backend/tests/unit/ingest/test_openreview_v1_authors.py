@@ -220,7 +220,8 @@ def _split(entries: list[str], patterns: dict[str, re.Pattern[str]] | None = Non
 
 def test_an_entry_splits_as_before_on_every_short_string() -> None:
     """Every string up to 7 characters of `and`, a space, a newline (where `$` also matches), a comma and one
-    other letter (335,923): the same pieces; 8.7M strings up to 8 characters showed no difference either."""
+    other letter (960,800): the same pieces; each pattern alone, compared over every string up to 8 characters
+    (8.7M in all), showed no difference either."""
     entries = ["".join(chars) for n in range(8) for chars in product("and \n,x", repeat=n)]
     before = _split(entries, _PRE276)
     for entry, now, then in zip(entries, _split(entries), before, strict=True):
