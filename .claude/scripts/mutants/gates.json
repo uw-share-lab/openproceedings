@@ -2172,7 +2172,7 @@
  {
   "label": "cmdparse: git_bool reads a number but zero as false (1k, 0x1, +1 under-read)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "GIT_FALSE = re.compile(r\"false|no|off|[+-]?(?:0x0+|0+)[kmg]?\")",
+  "old": "GIT_FALSE = re.compile(r\"false|no|off|[ \\t\\n\\v\\f\\r]*[+-]?(?:0x0+|0+)[kmg]?\")",
   "new": "GIT_FALSE = re.compile(r\"false|no|off|[+-]?(?:0x[0-9a-f]+|[0-9]+)[kmg]?|.*[^0-9]\")"
  },
  {
@@ -2190,8 +2190,8 @@
  {
   "label": "cmdparse: git_bool reads a signed zero as true",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "|[+-]?(?:0x0+|0+)",
-  "new": "|(?:0x0+|0+)"
+  "old": "[+-]?(?:0x0+|0+)",
+  "new": "(?:0x0+|0+)"
  },
  {
   "label": "cmdparse: git_bool reads a false word as true",
@@ -2202,8 +2202,8 @@
  {
   "label": "cmdparse: git_bool reads git's false words case-sensitively",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "fullmatch(value.lstrip(\" \\t\\n\\v\\f\\r\").lower())",
-  "new": "fullmatch(value.lstrip(\" \\t\\n\\v\\f\\r\"))"
+  "old": "fullmatch(value.lower())",
+  "new": "fullmatch(value)"
  },
  {
   "label": "cmdparse: git_bool reads a key with no value as false",
@@ -2226,14 +2226,26 @@
  {
   "label": "cmdparse: git_bool strips trailing whitespace git refuses",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "value.lstrip(\" \\t\\n\\v\\f\\r\")",
-  "new": "value.strip(\" \\t\\n\\v\\f\\r\")"
+  "old": "fullmatch(value.lower())",
+  "new": "fullmatch(value.strip().lower())"
  },
  {
-  "label": "cmdparse: git_bool strips whitespace git doesn't skip",
+  "label": "cmdparse: git_bool skips whitespace git doesn't",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "value.lstrip(\" \\t\\n\\v\\f\\r\")",
-  "new": "value.lstrip()"
+  "old": "[ \\t\\n\\v\\f\\r]*[+-]?",
+  "new": "\\s*[+-]?"
+ },
+ {
+  "label": "cmdparse: git_bool skips whitespace before a false word",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "fullmatch(value.lower())",
+  "new": "fullmatch(value.lstrip().lower())"
+ },
+ {
+  "label": "cmdparse: git_bool skips no whitespace before a number",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "[ \\t\\n\\v\\f\\r]*[+-]?",
+  "new": "[+-]?"
  },
  {
   "label": "cmdparse: push_config reads lines, not NUL records",

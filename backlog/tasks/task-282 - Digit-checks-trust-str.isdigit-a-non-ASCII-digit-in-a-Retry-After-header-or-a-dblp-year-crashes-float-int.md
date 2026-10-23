@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-22 22:23'
-updated_date: '2026-10-23 05:15'
+updated_date: '2026-10-23 05:52'
 labels:
   - ingest
   - security
@@ -77,4 +77,8 @@ Round 4b validation: mutate.py --match git_bool --jobs 2: 12 of 12 killed; make 
 Review round 5 (2026-10-23): security and code review found push_config lower-cased the whole key, folding remote names that git keeps case-sensitive: remote.Origin.mirror=true then remote.origin.mirror=false left {'remote.origin.mirror': 'false'}, so git push Origin mirrored unreviewed through both hooks. Fix (security's): found[key] = value; git already prints the section and variable lower-case. Rows: Origin/origin mirror in both orders (require-review and enforce-pr-workflow), Origin/origin push. Mutant: key.lower() restored. Docs round 5: git_bool docstring's '' reason reworded for -z (push_config gives '' for both no-value and empty; reading both true only refuses); spec 08 and require-review.sh's header say -z. Code-review nit taken in 80aebcaf.
 
 Round 5 validation: mutate.py --match push_config: 3 of 3 killed; make tooling (gates 1693, enforce-pr-workflow 421), make lint, make test (backend 9377 passed, 3 skipped; frontend 4954 passed) green.
+
+Round 5 QA nit (2026-10-23): git_bool stripped whitespace before matching the false words, so ' false', a tab-no and the like read false though git refuses them (checked: ' false', tab-false, ' no' and 'false ' refused; ' 0' and tab-0x0 false). The leading whitespace strtoimax skips is now part of GIT_FALSE's number alternative only, and the value is matched unstripped. Rows: ' false', tab-no, 'off ' block. Mutants: the five git_bool mutants on the changed text updated, and two added (whitespace before a false word; no whitespace before a number): 14 in all.
+
+Round 5b validation: mutate.py --match git_bool --jobs 2: 14 of 14 killed; make tooling (gates 1696, enforce-pr-workflow 421), make lint, make test (backend 9377 passed, 3 skipped; frontend 4954 passed) green.
 <!-- SECTION:NOTES:END -->

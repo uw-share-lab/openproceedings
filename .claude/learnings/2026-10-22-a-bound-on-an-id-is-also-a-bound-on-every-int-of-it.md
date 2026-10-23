@@ -147,8 +147,8 @@ record past a bound refused, record schema 9 → 10.
   `git push origin` mirror every ref unreviewed (security review, round 3). `git_bool` now fails toward true: false
   only for git's false words and a zero in strtoimax's forms (sign, `0x`, octal zeros, a k/m/g unit); anything else,
   including what git refuses, is true. Python's own text methods are wider than git's: `strip()` dropped the trailing
-  space of a quoted `'0 '` and `lower()` turned a KELVIN SIGN into `k`, so it checks `isascii()` first and strips only
-  the leading whitespace strtoimax skips. Lesson: for a gate, ask which direction a misread fails, not only whether it
+  space of a quoted `'0 '` and `lower()` turned a KELVIN SIGN into `k`, so it checks `isascii()` first and skips only
+  the leading whitespace strtoimax skips, and only before a number (git refuses `' false'`). Lesson: for a gate, ask which direction a misread fails, not only whether it
   raises. The same review round found what feeds it had the same flaw: `push_config` split `--get-regexp` output on
   lines and the first space, so `remote.pushdefault` set to `x`, a newline and `remote.origin.mirror 0` made the gate
   read mirror as 0 while git mirrors, and a remote named `x y` hid its keys. It now reads `git config -z`. And it

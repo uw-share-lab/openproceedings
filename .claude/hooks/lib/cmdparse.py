@@ -2463,9 +2463,10 @@ def push_config(argv: list[str], directory: str) -> dict[str, str]:
     return found
 
 
-# git reads these as false (git 2.42): the words, and a zero in strtoimax's forms (a sign, 0x, octal zeros) with a
-# k/m/g unit. Every other value is true or one git refuses, so the gate reads it as true (TASK-282).
-GIT_FALSE = re.compile(r"false|no|off|[+-]?(?:0x0+|0+)[kmg]?")
+# git reads these as false (git 2.42): the words as written, and a zero in strtoimax's forms (the leading whitespace
+# it skips, a sign, 0x, octal zeros) with a k/m/g unit. Every other value is true or one git refuses (' false',
+# '0 '), so the gate reads it as true (TASK-282).
+GIT_FALSE = re.compile(r"false|no|off|[ \t\n\v\f\r]*[+-]?(?:0x0+|0+)[kmg]?")
 
 
 def git_bool(value: str) -> bool:
@@ -2473,12 +2474,11 @@ def git_bool(value: str) -> bool:
     `1k`, `0x1` and `+1` are true to git, so reading only digits as a number under-read them and let a
     `remote.<name>.mirror` or `push.followTags` push through unreviewed (TASK-282). '' is true: `push_config`
     gives '' for a key with no value (true to git) and for one set to '' (false to git), and reading both as true
-    only ever refuses. Only the leading whitespace
-    strtoimax skips is dropped, and a non-ASCII value is true: Python's `strip()` and `lower()` would turn '0 ' and
-    '0' + KELVIN SIGN, which git refuses, into a zero."""
+    only ever refuses. Nothing is stripped, and a non-ASCII value is true: Python's `strip()` and `lower()` would
+    turn ' false', '0 ' and '0' + KELVIN SIGN, which git refuses, into false."""
     if not value.isascii():
         return True
-    return not GIT_FALSE.fullmatch(value.lstrip(" \t\n\v\f\r").lower())
+    return not GIT_FALSE.fullmatch(value.lower())
 
 
 def push_config_risk(config: dict[str, str]) -> str | None:

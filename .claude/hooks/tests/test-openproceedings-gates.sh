@@ -1198,7 +1198,7 @@ for v in 0g 0M; do
   check $R allow "push.followTags=$v (git: false)"   "$(payload_bash 'git push origin')"
 done
 # '0' + KELVIN SIGN (U+212A, lower() makes it 'k'); \x1c is whitespace to Python, not to git
-for v in 0t 0kk +-0 '0 ' "$(printf '0\342\204\252')" $'\x1c'0; do
+for v in 0t 0kk +-0 '0 ' "$(printf '0\342\204\252')" $'\x1c'0 ' false' $'\tno' 'off '; do
   g config push.followTags "$v"
   check $R block "push.followTags=$v (git refuses it)" "$(payload_bash 'git push origin')"
 done
