@@ -79,11 +79,11 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   - the quoted value of a quoted key holding such a word, either quote (`{"access_token": "abc"}`, a dict's
     repr, `b'abc'`), also when an earlier value looks like a quoted key; a value that is not quoted, and JSON
     escaped inside a string, are left;
-  - the word after a whole-word `bearer` (or one right after a percent escape or a JSON `\n`, `\r`, `\t`: `%3A%20Bearer`, `\tBearer`; not after
-    other escapes such as `\f` or `\x0b`) and
-    whitespace, `%20`, `%09`, a JSON `\t` or `+` (`Bearer <token>`, an escape such as `\/` or `%2B` inside it
-    included, but ending before another `bearer` it runs into: `Bearer A\nBearer <token>`), never a second
-    `bearer` (`Bearer Bearer <token>`); prose `a bearer of` loses `of`.
+  - the word after a whole-word `bearer` (or one right after a percent escape or a JSON `\n`, `\r`, `\t`:
+    `%3A%20Bearer`, `\tBearer`; not after other escapes that end in a letter or digit, such as `\f` or `\x0b`)
+    and whitespace other than a line break, `%20`, `%09`, a JSON `\t` or `+` (`Bearer <token>`, an escape such as
+    `\/` or `%2B` inside it included, but ending before another `bearer` it runs into: `Bearer A\nBearer
+    <token>`), never a second `bearer` (`Bearer Bearer <token>`); prose `a bearer of` loses `of`.
 
   It also redacts secret-shaped keys (starting or ending with a secret word: `password…`, `…_token`, `auth_…`,
   `secret…`, `bearer…`, `…api_key`) case-insensitively at any depth, while ordinary fields like

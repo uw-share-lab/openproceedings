@@ -134,9 +134,9 @@ _SCRUBS = types.MappingProxyType(
             re.IGNORECASE,
         ),
         # `Authorization: Bearer …` quoted in exception text: the word after a whole-word `bearer` (or one right
-        # after a percent escape or a JSON `\n`/`\r`/`\t`: `%3A%20Bearer`, `\tBearer`) and a separator; never a second `bearer` (`Bearer
-        # Bearer x`, a client that stored the prefix with its token); an escape inside it (`\/`, JSON) is part of
-        # it, an escaped quote ends it
+        # after a percent escape or a JSON `\n`/`\r`/`\t`: `%3A%20Bearer`, `\tBearer`) and a separator; never a
+        # second `bearer` (`Bearer Bearer x`, a client that stored the prefix with its token); an escape inside it
+        # (`\/`, JSON) is part of it, an escaped quote ends it
         "bearer": re.compile(
             rf"(?:(?<!\w)|(?<=%[0-9a-f]{{2}})|(?<=\\[nrt]))bearer{_BEARER_SEP}(?!bearer{_BEARER_SEP})"
             rf"(?P<v>(?:(?!{_BEARER_NEXT}){_BEARER_TOKEN})++)",

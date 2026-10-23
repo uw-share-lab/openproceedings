@@ -549,12 +549,15 @@ def test_scrub_redacts_everything_it_did_before_on_every_short_join_of_pieces() 
         ("Bearer A%bearer SECRET", "Bearer [redacted]%bearer [redacted]"),  # one starts after a bare `%`
         ("Bearer%20%20%20SECRET", "Bearer%20%20%20[redacted]"),  # a separator of any length
         ("Bearer A/bearer bearerSECRET", "Bearer [redacted]/bearer [redacted]"),  # the stop's own refusal
+        ("Bearer A/bearer bearer+SECRET", "Bearer [redacted] bearer+[redacted]"),
+        ("Bearer %20", "Bearer %20"),  # a separator with no token after it
+        ("Bearer \\/bearer \\'", "Bearer [redacted] \\'"),  # an escaped quote ends a token
         ("Bearer -bearer+SECRET", "Bearer -bearer+[redacted]"),  # a token's own `-bearer+` ends it early
         ("Bearer a;b", "Bearer [redacted];b"),  # where a token ends
         ("{'h': 'Bearer ab'}", "{'h': 'Bearer [redacted]'}"),
-        ("Bearer SECRET", "Bearer SECRET"),  # a line break is no separator
+        ("Bearer\u2029SECRET", "Bearer\u2029SECRET"),  # a line break is no separator
         ("Bearer\\rSECRET", "Bearer\\rSECRET"),
-        ("\\xBearer SECRET", "\\xBearer SECRET"),  # only `\n`, `\r`, `\t` and `%XX` start one (documented)
+        ("\\xBearer SECRET", "\\xBearer SECRET"),  # no start after an escape ending in a letter (documented)
         ("Bearer A_bearer x", "Bearer [redacted] x"),  # `_` is a word character: one token
         ("Bearer A\\%0ABearer SECRET", "Bearer [redacted]\\%0ABearer [redacted]"),  # an escape after a `\\`
         (
@@ -822,8 +825,9 @@ def test_every_bearer_token_is_redacted_where_another_bearer_follows() -> None:
 
 
 def test_every_bearer_token_is_redacted_whatever_sits_between_two() -> None:
-    """`Bearer A<between>Bearer x` for every join of up to 3 pieces between (5,220): the shapes where a start hides
+    """`Bearer A<between>Bearer x` for every join of up to 3 pieces between and each kind of separator after (15,660): the shapes where a start hides
     inside a two-character token unit (`A\\%0ABearer`, round 8) are 8 pieces in all, past the joins above."""
     for n in range(4):
         for parts in product(_BEARER_PIECES, repeat=n):
-            _assert_every_bearer_token_redacted("Bearer A" + "".join(parts) + "Bearer x")
+            for sep in (" ", "+", "\\t"):  # each kind of separator after the second `bearer`
+                _assert_every_bearer_token_redacted("Bearer A" + "".join(parts) + "Bearer" + sep + "x")
