@@ -2470,8 +2470,12 @@ def git_bool(value: str) -> bool:
     """git's reading of a boolean config value, failing toward true: false only for what git reads as false.
     `1k`, `0x1` and `+1` are true to git, so reading only digits as a number under-read them and let a
     `remote.<name>.mirror` or `push.followTags` push through unreviewed (TASK-282). '' is true: `--get-regexp`
-    prints a key set with no value (true to git) and one set to '' (false) alike."""
-    return not GIT_FALSE.fullmatch(value.strip().lower())
+    prints a key set with no value (true to git) and one set to '' (false) alike. Only the leading whitespace
+    strtoimax skips is dropped, and a non-ASCII value is true: Python's `strip()` and `lower()` would turn '0 ' and
+    '0' + KELVIN SIGN, which git refuses, into a zero."""
+    if not value.isascii():
+        return True
+    return not GIT_FALSE.fullmatch(value.lstrip(" \t\n\v\f\r").lower())
 
 
 def push_config_risk(config: dict[str, str]) -> str | None:

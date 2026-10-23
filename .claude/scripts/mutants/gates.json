@@ -2202,14 +2202,38 @@
  {
   "label": "cmdparse: git_bool reads git's false words case-sensitively",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "fullmatch(value.strip().lower())",
-  "new": "fullmatch(value.strip())"
+  "old": "fullmatch(value.lstrip(\" \\t\\n\\v\\f\\r\").lower())",
+  "new": "fullmatch(value.lstrip(\" \\t\\n\\v\\f\\r\"))"
  },
  {
   "label": "cmdparse: git_bool reads a key with no value as false",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "(?:0x0+|0+)",
   "new": "(?:0x0+|0*)"
+ },
+ {
+  "label": "cmdparse: git_bool reads an empty value as false",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(?:0x0+|0+)[kmg]?\")",
+  "new": "(?:0x0+|0+)[kmg]?|\")"
+ },
+ {
+  "label": "cmdparse: git_bool reads a non-ASCII value through lower()",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if not value.isascii():\n        return True\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse: git_bool strips trailing whitespace git refuses",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "value.lstrip(\" \\t\\n\\v\\f\\r\")",
+  "new": "value.strip(\" \\t\\n\\v\\f\\r\")"
+ },
+ {
+  "label": "cmdparse: git_bool strips whitespace git doesn't skip",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "value.lstrip(\" \\t\\n\\v\\f\\r\")",
+  "new": "value.lstrip()"
  },
  {
   "label": "cmdparse: push_config reads lines, not NUL records",

@@ -1197,10 +1197,13 @@ for v in 0g 0M; do
   g config push.followTags "$v"
   check $R allow "push.followTags=$v (git: false)"   "$(payload_bash 'git push origin')"
 done
-for v in 0t 0kk +-0; do
+# '0' + KELVIN SIGN (U+212A, lower() makes it 'k'); \x1c is whitespace to Python, not to git
+for v in 0t 0kk +-0 '0 ' "$(printf '0\342\204\252')" $'\x1c'0; do
   g config push.followTags "$v"
   check $R block "push.followTags=$v (git refuses it)" "$(payload_bash 'git push origin')"
 done
+g config push.followTags "$(printf '\t0')"
+check $R allow "push.followTags=<tab>0 (git skips leading whitespace: false)" "$(payload_bash 'git push origin')"
 g config --unset push.followTags
 # a key with no value is true to git; --get-regexp prints it with value ''
 printf '[push]\n\tfollowTags\n' >> "$REPO/.git/config"

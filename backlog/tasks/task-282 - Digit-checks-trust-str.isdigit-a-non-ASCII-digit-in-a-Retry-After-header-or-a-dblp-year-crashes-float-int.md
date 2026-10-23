@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-22 22:23'
-updated_date: '2026-10-23 04:13'
+updated_date: '2026-10-23 04:53'
 labels:
   - ingest
   - security
@@ -68,4 +68,8 @@ Round 3 validation: mutate.py --match git_bool --jobs 2: 7 of 7 killed; make too
 Review round 4 (2026-10-22): QA found (1) no row for a key set with no value (git: true; --get-regexp prints value ''), so GIT_FALSE mutants making '' false survived: rows appended to .git/config ('[push] followTags', '[remote "origin"] mirror') block, mutant 'git_bool reads a key with no value as false' added; and (2) push_config parsed --get-regexp by lines and the first space: remote.pushdefault set to 'x<newline>remote.origin.mirror 0' made the gate read mirror=0 while git mirrors, and a remote named 'x y' hid its mirror/push key. push_config now reads -z (records end in NUL, the key ends at the first newline). Rows: forged mirror and forged followTags block, remote 'x y' mirror and push block. Mutants: -z dropped, partition on a space. Nit rows: followTags 0g/0M allow, 0t/0kk/+-0 block. test-openproceedings-gates.sh 1686 passed.
 
 Round 4 validation: mutate.py --match 'key with no value' and --match push_config: 3 of 3 killed; make tooling (gates 1686, enforce-pr-workflow 419 passed), make lint, make test (backend 9377 passed, 3 skipped; frontend 4954 passed) green.
+
+Round 4 code-review nit (2026-10-23): git_bool's value.strip().lower() turned '0 ' and '0'+KELVIN SIGN (both refused by git, checked) into a zero. Now a non-ASCII value is true and only strtoimax's leading whitespace (space, \t\n\v\f\r) is dropped. Rows: '0 ', '0'+U+212A, \x1c0 block; <tab>0 allow. Mutants: empty value read false (trailing '|'), non-ASCII through lower(), trailing strip, Python lstrip(); the case-sensitivity mutant updated to the new text.
+
+Round 4b validation: mutate.py --match git_bool --jobs 2: 12 of 12 killed; make tooling (gates 1690, enforce-pr-workflow 419), make lint, make test (backend 9377 passed, 3 skipped; frontend 4954 passed) green.
 <!-- SECTION:NOTES:END -->
