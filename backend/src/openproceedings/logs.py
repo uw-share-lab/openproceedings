@@ -74,11 +74,13 @@ REDACTED = "[redacted]"
 # word with a lookahead, so scrub is linear in its text (TASK-275): tried at every character of a long run, a
 # pattern read the rest of the run each time, and a lazy scan for the word re-read the rest of a name once per
 # place the word appears in it. Double encoding (`%253D`) is not decoded.
+# (`sig` covers `signature`; the longer word is listed for the reader)
 _WORDS = "token|key|secret|password|passwd|auth|sig|signature|cookie|credential|bearer"
 _NAME = r"[a-z0-9_.%-]"  # a parameter name's characters (`X-Amz-Signature`, `api%5Fkey`, `client.secret`)
 _ENC_NAME = r"(?:[a-z0-9_.-]|%5F|%2D|%2E)"  # the same, percent-encoded
-# where an encoded name starts: after a character that is no name character, or after an escape that is none
-_ENC_START = r"(?:(?<![a-z0-9_.%-])|(?<=%[0-9a-f]{2})(?<!%5F)(?<!%2D)(?<!%2E))"
+# where an encoded name starts: after a character that is no name character, after an escape that is none, or
+# after a `%` that starts no escape (`100%token%3D…`)
+_ENC_START = r"(?:(?<![a-z0-9_.%-])|(?<=%[0-9a-f]{2})(?<!%5F)(?<!%2D)(?<!%2E)|(?<=%)(?![0-9a-f]{2}))"
 _QUOTED = r"(?P<{q}>[\"'])(?:(?!(?P={q}))[^\\]|\\[\s\S])*+(?P={q})"  # a quoted string, escapes inside it
 _SCRUBS = types.MappingProxyType(
     {
@@ -95,10 +97,12 @@ _SCRUBS = types.MappingProxyType(
         ),
         # a parameter whose name holds a secret word, wherever its name starts (`?access_token=`,
         # `#access_token=`, `;token=`, a bare `token=`, TASK-283), its value a quoted string whole (`token='a b'`)
-        # and/or up to `&`, whitespace or `#`; prose such as `monkey=1`, and a traceback's `key=lambda`, lose
-        # their value too
+        # and/or up to `&`, whitespace or `#`, a URL's userinfo inside it whole (`token=a://x#y@z`: origin/dev's
+        # userinfo pass took the `#` out first, so its value ran on); prose such as `monkey=1`, and a traceback's
+        # `key=lambda`, lose their value too; a value quoted with JSON-escaped quotes (`\"a b\"`) ends at its
+        # first whitespace
         "parameter": re.compile(
-            rf"(?<!{_NAME})(?={_NAME}*(?:{_WORDS})){_NAME}*+=(?P<v>(?:{_QUOTED.format(q='pq')})?+[^&\s#]*)",
+            rf"(?<!{_NAME})(?={_NAME}*(?:{_WORDS})){_NAME}*+=(?P<v>(?:{_QUOTED.format(q='pq')})?+(?:(?<=://)[^/\s@]++@|[^&\s#])*+)",
             re.IGNORECASE,
         ),
         # the same, percent-encoded in a value (`?next=https%3A%2F%2Fh%2F%3Ftoken%3Dabc`, `?state=token%3Dabc`)
@@ -114,11 +118,11 @@ _SCRUBS = types.MappingProxyType(
             r"(?P<v>(?:(?!(?P=q2))[^\\]|\\[\s\S])*+)(?P=q2)",
             re.IGNORECASE,
         ),
-        # `Authorization: Bearer …` quoted in exception text: the word after a whole-word `bearer` and whitespace
-        # that is no line break, or `%20`/`+` (encoded); an escape inside it (`\/`, JSON) is part of it, an escaped
-        # quote ends it
+        # `Authorization: Bearer …` quoted in exception text: the word after a whole-word `bearer` (or one right
+        # after an escape, `%3A%20Bearer`) and whitespace that is no line break, or `%20`/`%09`/`+` (encoded); an
+        # escape inside it (`\/`, JSON) is part of it, an escaped quote ends it
         "bearer": re.compile(
-            r"\bbearer(?:[^\S\n\r\v\f\x1c-\x1e\x85\u2028\u2029]++|(?:%20|\+)++)"
+            r"(?:(?<!\w)|(?<=%[0-9a-f]{2}))bearer(?:[^\S\n\r\v\f\x1c-\x1e\x85\u2028\u2029]++|(?:%20|%09|\+)++)"
             r"(?P<v>(?:[^\s\"',;\\]|\\[^\s\"'\\])++)",
             re.IGNORECASE,
         ),

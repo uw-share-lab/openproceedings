@@ -69,14 +69,17 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   - the value of a parameter whose name (letters, digits, `_.%-`, starting after any other character) holds
     `token`, `key`, `secret`, `password`, `passwd`, `auth`, `sig`, `cookie`, `credential` or `bearer`:
     `?access_token=`, `?X-Amz-Signature=`, `#access_token=`, a bare `token=`; a quoted value whole
-    (`token='a b'`). Prose such as `monkey=1`, and a traceback's source line (`key=lambda r: …`), lose their value
-    too;
+    (`token='a b'`), and a URL's userinfo inside a value whole (`token=a://x#y@z`). Prose such as `monkey=1`, and a
+    traceback's source line (`key=lambda r: …`), lose their value too; a value quoted with JSON-escaped quotes
+    (`token=\"a b\"`) ends at its first whitespace;
   - both of those percent-encoded inside a value (`?next=https%3A%2F%2Fh%2F%3Ftoken%3Dabc`,
-    `?state=token%3Dabc`, `https%3A%2F%2Fu%3Ap%40h`); double encoding (`%253D`) is not decoded;
+    `?state=token%3Dabc`, `100%token%3Dabc`, `https%3A%2F%2Fu%3Ap%40h`); double encoding (`%253D`) is not
+    decoded;
   - the quoted value of a quoted key holding such a word, either quote (`{"access_token": "abc"}`, a dict's
     repr, `b'abc'`); a value that is not quoted, and JSON escaped inside a string, are left;
-  - the word after a whole-word `bearer` and whitespace, `%20` or `+` (`Bearer <token>`, an escape such as `\/`
-    inside it included; prose `a bearer of` loses `of`).
+  - the word after a whole-word `bearer` (or one right after an escape, `%3A%20Bearer`) and whitespace, `%20`,
+    `%09` or `+` (`Bearer <token>`, an escape such as `\/` or `%2B` inside it included; prose `a bearer of` loses
+    `of`).
 
   It also redacts secret-shaped keys (starting or ending with a secret word: `password…`, `…_token`, `auth_…`,
   `secret…`, `bearer…`, `…api_key`) case-insensitively at any depth, while ordinary fields like

@@ -328,8 +328,9 @@ def test_every_query_value_redacted_before_is_redacted_on_every_short_string() -
 
 def _pre275_secrets(text: str) -> tuple[set[int], set[int]]:
     """What origin/dev's scrub redacted in `text`, by position in `text`: its two passes in order, each secret
-    replaced by as many NULs (no pattern reads a NUL, as none read `[redacted]`), so positions survive; and the
-    points where it inserted REDACTED for an empty secret."""
+    replaced by as many NULs (like `[redacted]`, a NUL is no name character and no delimiter to either old
+    pattern, so the old matches are unchanged), so positions survive; and the points where it inserted REDACTED
+    for an empty secret."""
     out = _PRE275_USERINFO.sub(
         lambda m: m.group("scheme") + "\0" * (m.end() - m.end("scheme") - 1) + "@", text
     )
@@ -503,6 +504,27 @@ def test_scrub_redacts_everything_it_did_before_on_every_short_join_of_pieces() 
         ("?h=Bearer%20abc", "?h=Bearer%20[redacted]"),
         ("Bearer+abc", "Bearer+[redacted]"),
         ("token=%3Ftoken%3D", "token=[redacted]"),  # touching spans (an empty one at another's end) are one
+        # round 6
+        (
+            "?token=a://x#y@SECRET",
+            "?token=[redacted]",
+        ),  # a userinfo inside a value: origin/dev ran on past `@`
+        ("https://h/?token=x://y&z@SECRETTAIL", "https://h/?token=[redacted]"),
+        ("?token=abc://def#ghi@jkl&p=1", "?token=[redacted]&p=1"),
+        (
+            "?h=Authorization%3A%20Bearer%20abc",
+            "?h=Authorization%3A%20Bearer%20[redacted]",
+        ),  # after an escape
+        ("?h=%22Bearer%20abc", "?h=%22Bearer%20[redacted]"),
+        ("Bearer%09abc", "Bearer%09[redacted]"),
+        ("?h=Bearer%20abc%2Bdef%3D%3D", "?h=Bearer%20[redacted]"),  # escapes inside the token are the token
+        ("a ébearer x", "a ébearer x"),  # `bearer` only as a whole word, Unicode letters included
+        ("?n=%7Btoken%3Dabc", "?n=%7Btoken%3D[redacted]"),  # after any escape that is no name character
+        ("100%token%3Dabc", "100%token%3D[redacted]"),  # after a `%` that starts no escape
+        ("token='ab\"cd ef', x", "token=[redacted] x"),  # the other quote inside a quoted value
+        ("token='a\\' b', x", "token=[redacted] x"),  # an escaped quote inside it
+        ("token='a\\\nb c', x", "token=[redacted] x"),  # a backslash before a line break
+        ("{'token': 'ab\\\ncd'}", "{'token': '[redacted]'}"),
         (
             "https://h/x?designer=1",
             "https://h/x?designer=[redacted]",
@@ -545,6 +567,15 @@ def test_scrub_examples(value: str, expected: str) -> None:
         lambda n: "%3Ftoken%3D" + "!" * n,
         lambda n: "'token': b'" * (n // 11),
         lambda n: '"token": \'' + "a" * n,
+        lambda n: "%3F" + "%2D" * (n // 3),  # each encoded name character the encoded start must refuse
+        lambda n: "%3F" + "%2E" * (n // 3),
+        lambda n: "_" * n,
+        lambda n: "x://" * (n // 4),  # a userinfo tried after every `://` in a value
+        lambda n: "token=" + "a://" + "b" * n,
+        lambda n: 'token="' + "a" * n,  # a quoted value that never closes
+        lambda n: ("token=\"a token='a ") * (n // 18),
+        lambda n: "%" * n + "token%3D",
+        lambda n: "%41bearer%20" * (n // 12),
     ],
 )
 def test_scrub_is_linear_on_a_long_run(build: object) -> None:
@@ -642,3 +673,14 @@ def test_text_format_escapes_control_characters(ctl: str) -> None:
     logging.getLogger("openproceedings.x").info("e %s", f"m{ctl}", extra={"k": f"v{ctl}"})
     out = buf.getvalue().rstrip("\n")
     assert not any(ord(c) < 0x20 or 0x7F <= ord(c) < 0xA0 for c in out), repr(out)
+
+
+def test_scrub_redacts_everything_it_did_before_where_a_userinfo_sits_in_a_value() -> None:
+    """origin/dev's userinfo pass took a `#` or `&` out of a URL's userinfo before its query pass read the value,
+    so the value ran on past the `@` (`?token=a://x#y@SECRET`); the shortest such string is 7 pieces, past the
+    joins above. Every `?<word>=<s1>a://<s2><#|&><s3>@<s4>` over short parts (9,604)."""
+    parts = ["", "x", "#", "&", "@", "a://", " "]
+    for word in ("token", "sig"):
+        for sep in "#&":
+            for s1, s2, s3, s4 in product(parts, repeat=4):
+                _assert_superset(f"?{word}={s1}a://{s2}{sep}{s3}@{s4}")

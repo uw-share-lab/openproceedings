@@ -126,7 +126,13 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
   (`{"password": "hunter2 key=1"}` kept `hunter2`); it also ate `Bearer`, so `Authorization=Bearer SECRET` kept
   `SECRET`; the encoded-userinfo pass swallowed `&password=p` up to an encoded `@` and left the rest. Reordering
   fixes the cases found, not the family. `scrub` now runs every pattern on the text as given and redacts the
-  union of their `v` spans (`secret_spans`), so the order cannot matter.
+  union of their `v` spans (`secret_spans`), so the order cannot matter among the new patterns.
+- **But the old order was part of the old behaviour.** origin/dev's userinfo pass took a `#` or `&` out of a
+  URL's userinfo before its query pass read the value, so `?token=a://x#y@SECRET` lost everything after `=`; the
+  union cut the value at the `#` and logged `@SECRET` (qa-auditor, round 6). The parameter value now takes a
+  userinfo after `://` whole. The shortest such string is 7 pieces, past the exhaustive joins of 3, so a targeted
+  generator (`?<word>=<s1>a://<s2><#|&><s3>@<s4>`) covers it: when replacing sequential passes with a union, list
+  what each old pass changed that a later old pass then read.
 - **Test the whole function against the whole old one.** The superset test that checked one pattern alone, over
   an alphabet without the characters where the patterns differ, could not see any of this. The new test runs
   origin/dev's two passes with each secret replaced by as many NULs (so positions survive) and asserts every
