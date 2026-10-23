@@ -15,7 +15,8 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 - Every module: `log = logging.getLogger(__name__)`. No `print()` outside CLI user output, and CLI output
   that's meant for the user (results, tables) goes to stdout, not through logging.
 - Format: one JSON object per line (`ts`, `level`, `logger`, `event`, then fields). `op --log-format text`
-  renders the same fields as one readable line (values JSON-escaped) for local reading only; JSON is the
+  renders the same fields as one readable line (values, and any key that is not a plain name, JSON-escaped;
+  every line break left, in the message too, escaped) for local reading only; JSON is the
   default and the only format anything collects. A field named like a core key is emitted as
   `field_<key>`, so it can never overwrite the line's shape. `event` is a short
   **snake_case constant** (`crawl_page_fetched`, `index_built`), not a sentence, named `<noun>_<verb>`
@@ -59,9 +60,32 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 - Never log abstracts, author lists, OpenReview credentials, tokens, cookies, `.env` values, or request
   bodies. Never log `Diagnostic.message` or `OpenProceedingsError.message`: they quote user input. Log
   the `code` (a `UserInputError` at DEBUG, an `InternalError` at ERROR with the traceback). Never log IPs beyond what the rate limiter needs in memory.
-- Exceptions from HTTP clients can carry URLs with credentials or tokens. `logs.py` scrubs `user:pass@` and
-  secret-looking query parameters (`token`, `key`, `secret`, `password`, `auth`, `sig`) from every string
-  value and from exception and stack text, and redacts secret-shaped keys (starting or ending with a secret word: `password…`, `…_token`, `auth_…`,
+- Exceptions from HTTP clients can carry URLs with credentials or tokens. `logs.scrub` redacts, from every string
+  value, every key at any depth (two keys that scrub alike are both kept, the second as `key#2`), and exception
+  and stack text, in time linear in the text (TASK-275, TASK-283). Every pattern reads the text as given and the
+  union of the secrets they find is redacted at once (`logs.secret_spans`), so no pattern can hide a secret from
+  another; the union also replays the scrub of before TASK-275 (`_legacy_spans`), so nothing it redacted is ever
+  logged. It redacts:
+  - URL userinfo (`user:pass@`);
+  - the value of a parameter whose name (letters, digits, `_.%-`, starting after any other character) holds
+    `token`, `key`, `secret`, `password`, `passwd`, `auth`, `sig`, `cookie`, `credential` or `bearer`:
+    `?access_token=`, `?X-Amz-Signature=`, `#access_token=`, a bare `token=`; a quoted value whole
+    (`token='a b'`), and a URL's userinfo inside a value whole (`token=a://x#y@z`). Prose such as `monkey=1`, and a
+    traceback's source line (`key=lambda r: …`), lose their value too; a value quoted with JSON-escaped quotes
+    (`token=\"a b\"`) ends at its first whitespace;
+  - both of those percent-encoded inside a value (`?next=https%3A%2F%2Fh%2F%3Ftoken%3Dabc`,
+    `?state=token%3Dabc`, `100%token%3Dabc`, `https%3A%2F%2Fu%3Ap%40h`); double encoding (`%253D`) is not
+    decoded;
+  - the quoted value of a quoted key holding such a word, either quote (`{"access_token": "abc"}`, a dict's
+    repr, `b'abc'`), also when an earlier value looks like a quoted key; a value that is not quoted, and JSON
+    escaped inside a string, are left;
+  - the word after a whole-word `bearer` (or one right after a percent escape or a JSON `\n`, `\r`, `\t`:
+    `%3A%20Bearer`, `\tBearer`; not after other escapes that end in a letter or digit, such as `\f` or `\x0b`)
+    and whitespace other than a line break, `%20`, `%09`, a JSON `\t` or `+` (`Bearer <token>`, an escape such as
+    `\/` or `%2B` inside it included, but ending before another `bearer` it runs into: `Bearer A\nBearer
+    <token>`), never a second `bearer` (`Bearer Bearer <token>`); prose `a bearer of` loses `of`.
+
+  It also redacts secret-shaped keys (starting or ending with a secret word: `password…`, `…_token`, `auth_…`,
   `secret…`, `bearer…`, `…api_key`) case-insensitively at any depth, while ordinary fields like
   `tokenizer_version`, `token_count` and `author_count` stay visible.
   That is a backstop, not permission: still never pass credentials to a log call.

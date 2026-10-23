@@ -5,6 +5,8 @@ separators and an email string's count), plus Hypothesis properties of `split_au
 from __future__ import annotations
 
 import json
+import re
+from itertools import product
 from pathlib import Path
 
 import pytest
@@ -13,6 +15,7 @@ from hypothesis import strategies as st
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources import openreview_v1 as v1
 
+from tests.timing import assert_near_linear
 from tests.unit.ingest.openreview_fakes import FakeOpenReviewV1, v1_clone, v1_note, v1_notes
 from tests.unit.ingest.test_openreview_v1 import BLIND, claim, run
 
@@ -193,3 +196,49 @@ def test_the_output_taken_again_is_listed_unchanged(raw: object, count: int) -> 
 def test_a_correct_list_is_untouched_whatever_the_count(names: list[str]) -> None:
     for count in (None, 0, len(names), len(names) + 1):
         assert v1.split_authors(names, count) == (tuple(names), "listed")
+
+
+# --- linear time (TASK-276) -------------------------------------------------------------------------------------
+
+_PRE276 = {
+    "_TRAILING_AND": re.compile(r"\s+and$"),
+    "_AUTHOR_SEPARATOR": re.compile(r",\s*and\s+|,|\s+and\s+"),
+}
+
+
+def _split(entries: list[str], patterns: dict[str, re.Pattern[str]] | None = None) -> list[list[str]]:
+    """`_split_entry` of each entry, with `patterns` put on the module for the calls when given."""
+    saved = {name: getattr(v1, name) for name in patterns or {}}
+    try:
+        for name, pattern in (patterns or {}).items():
+            setattr(v1, name, pattern)
+        return [v1._split_entry(e) for e in entries]
+    finally:
+        for name, pattern in saved.items():
+            setattr(v1, name, pattern)
+
+
+def test_an_entry_splits_as_before_on_every_short_string() -> None:
+    """Every string up to 7 characters of `and`, a space, a newline (where `$` also matches), a comma and one
+    other letter (960,800): the same pieces. Once, not in CI: each pattern alone over every string up to 8
+    characters (`_TRAILING_AND` over `and \\nx`, 2.0M; `_AUTHOR_SEPARATOR` over `and ,\\nx`, 6.7M) showed no
+    difference."""
+    entries = ["".join(chars) for n in range(8) for chars in product("and \n,x", repeat=n)]
+    before = _split(entries, _PRE276)
+    for entry, now, then in zip(entries, _split(entries), before, strict=True):
+        assert now == then, entry
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda n: "a" + " " * n + "b",  # `\s+and` tried at every space
+        lambda n: "a" + " " * n + "andb",
+        lambda n: "a" + " \n" * (n // 2) + "b",
+        lambda n: "a" + " \t\n\r\f\v\u00a0\u2028" * (n // 8) + "b",  # each kind of whitespace `\s` reads
+    ],
+)
+def test_an_entry_with_a_long_run_of_spaces_splits_in_linear_time(build: object) -> None:
+    """20k spaces took 791 ms in `_split_entry` before TASK-276 (each of its two patterns about 400 ms), 16
+    times 5k's (crawl time only)."""
+    assert_near_linear(v1._split_entry, build, 5_000)  # type: ignore[arg-type]
