@@ -121,3 +121,21 @@ record past a bound refused, record schema 9 → 10.
   backlog-only PR after review. The closing docs review found the network-facing one; the addendum's first draft named
   only dblp. Lesson: once a primitive is found unsafe, run `grep -rn isdigit backend/src` and check every hit, not only
   the files the task touched.
+
+## Addendum — 2026-10-22 (TASK-282)
+- **The sweep found one more reader the closing addendum didn't name, and its verdict is "report", not "fix".**
+  `grep -rn isdigit backend/src` gives 17 hits. TASK-282 fixed the three that run `int()`/`float()` on outside text
+  (`http._seconds`, `dblp.check_extract`, `dblp_aaai._year_of`) with the repo's `isascii() and isdigit()` idiom; there
+  is no shared helper. Five already checked `isascii()`; four are predicates with no `int()` (`aaai_library`,
+  `openalex_audit`) or the tokenizer's math and currency rules (`lexer.digit` folds NFKC on purpose: token contract);
+  `eval/coverage_report.py:229` reads an operator's file and still trusts `isdigit()` (a '²' year raises a bare
+  `ValueError` without the file's message). Lesson: a sweep reports each hit with a verdict; the ones outside the
+  task's scope go to the lead, not into the diff.
+- **A test of "no hint" must tell no hint apart from a hint.** A '²' `Retry-After` on a 429 now waits the first
+  back-off step (5 s), and a '²' `ratelimit-reset` with `ratelimit-remaining: 0` waits the 60 s default; an
+  Arabic-Indic year inside the checked range (`١٩٩٠`) was read as 1990 before, so the test asserts the message's
+  "(no year)", not only the refusal. All 12 new cases failed on the old code. Evidence:
+  `test_fetch.py::test_a_non_ascii_retry_after_on_a_429_is_no_hint`,
+  `test_fetch.py::test_a_non_ascii_ratelimit_header_on_a_200_is_no_hint`,
+  `test_dblp.py::test_a_year_of_non_ascii_digits_is_no_year`, `test_dblp_aaai.py::test_a_year_of_non_ascii_digits_is_no_year`.
+- Propagated to `.claude/skills/python-standards/SKILL.md` §Errors (the digit-check rule).
