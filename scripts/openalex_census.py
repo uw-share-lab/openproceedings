@@ -73,7 +73,7 @@ class Budget:
         rate = {k: v for k, v in resp.headers.items() if k.startswith(RATE_HEADERS)}
         self.seen.append((request.url, resp.status, rate))
         left = rate.get("x-ratelimit-remaining")
-        if left is not None and left.isdigit() and int(left) < self.reserve:
+        if left is not None and left.isascii() and left.isdigit() and int(left) < self.reserve:
             raise SystemExit(
                 f"stopping: {left} OpenAlex credits left today, under the reserve of {self.reserve}"
             )

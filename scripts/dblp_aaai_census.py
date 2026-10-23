@@ -34,7 +34,7 @@ _HOMONYM = re.compile(r"\s[0-9]{4}\Z")
 
 def _year(e: DblpEntry) -> int | None:
     raw = e.fields.get("year", "")
-    return int(raw) if raw.isdigit() else None
+    return int(raw) if raw.isascii() and raw.isdigit() else None
 
 
 def _toml(s: str) -> str:

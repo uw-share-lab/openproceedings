@@ -80,6 +80,17 @@ def test_a_non_ascii_retry_after_on_a_429_is_no_hint(tmp_path: Path, value: str)
     assert clock.sleeps == [5.0]  # the first back-off step, as with no header
 
 
+@pytest.mark.parametrize(
+    "value", ["Wed, 21 Oct 99999999999 07:28:00 GMT", "Wed, 21 Oct 2026 07:28:00 +99999999999999999999"]
+)
+def test_a_retry_after_date_past_what_a_datetime_holds_is_no_hint(tmp_path: Path, value: str) -> None:
+    """`parsedate_to_datetime` raises OverflowError for these, not ValueError (TASK-282 review)."""
+    t = FakeTransport({URL: [response("", 429, {"retry-after": value}), response(PAGE)]})
+    f, clock = fetcher(tmp_path, t, HOSTS, min_interval=0)
+    assert f.get(URL).ok
+    assert clock.sleeps == [5.0]
+
+
 @pytest.mark.parametrize("header", ["ratelimit-remaining", "ratelimit-reset"])
 def test_a_non_ascii_ratelimit_header_on_a_200_is_no_hint(tmp_path: Path, header: str) -> None:
     """`_respect_budget` reads both on every 200, outside the transport's try: a '²' there is no hint too."""

@@ -226,7 +226,12 @@ def _has_control(text: str) -> bool:
 
 def _cell_key(path: Path, name: str) -> CellKey:
     parts = name.split()
-    if len(parts) != 3 or parts[0] not in VENUES.values() or not parts[1].isdigit() or parts[2] not in TRACKS:
+    if (
+        len(parts) != 3
+        or parts[0] not in VENUES.values()
+        or not (parts[1].isascii() and parts[1].isdigit())
+        or parts[2] not in TRACKS
+    ):
         raise ValueError(f'{path}: [{name}] is not "<Venue> <year> <track>" (e.g. "ICLR 2014 main")')
     return parts[0], int(parts[1]), parts[2]
 

@@ -2,7 +2,7 @@
 
 **Key lesson:** When an id form gets a length bound, find every place that reads those characters before the model sees them (URL parsers, a crawler's `int()`, an importer's volume) and bound each one the same way, before `int()`: the model's regex refuses the record, but a parser that ran first can still crash on Python's 4,300-digit limit or a non-ASCII digit.
 
-- **Date:** 2026-10-22 · **Task:** task-280, task-281 · **Area:** ingest
+- **Date:** 2026-10-22 · **Task:** task-280, task-281, task-282 · **Area:** ingest
 - **Artifacts:** `backend/src/openproceedings/ingest/record.py` (`MAX_NATIVE_KEY`, `MAX_NATIVE_DIGITS`), `backend/src/openproceedings/ingest/urls.py` (`_NUMBER`), `backend/src/openproceedings/ingest/ris.py` (`_int`), `backend/src/openproceedings/ingest/sources/ojs.py` (`_number`), `backend/src/openproceedings/ingest/acm_table.py` (`DOI_DIGITS`), `backend/src/openproceedings/ingest/caps.py` (`LIST_CAPS`, `listed_total`), `backend/src/openproceedings/export.py`, `docs/results/2026-10-22-list-counts-and-native-ids.md`, decision-054, decision-055
 
 ## What we set out to do
@@ -123,19 +123,28 @@ record past a bound refused, record schema 9 → 10.
   the files the task touched.
 
 ## Addendum — 2026-10-22 (TASK-282)
-- **The sweep found one more reader the closing addendum didn't name, and its verdict is "report", not "fix".**
-  `grep -rn isdigit backend/src` gives 17 hits. TASK-282 fixed the three that run `int()`/`float()` on outside text
-  (`http._seconds`, `dblp.check_extract`, `dblp_aaai._year_of`) with the repo's `isascii() and isdigit()` idiom; there
-  is no shared helper. Five already checked `isascii()`; four are predicates with no `int()` (`aaai_library`,
-  `openalex_audit`) or the tokenizer's math and currency rules (`lexer.digit` folds NFKC on purpose: token contract);
-  `eval/coverage_report.py:229` reads an operator's file and still trusts `isdigit()` (a '²' year raises a bare
-  `ValueError` without the file's message). Lesson: a sweep reports each hit with a verdict; the ones outside the
-  task's scope go to the lead, not into the diff.
+- **Sweep every reader of the primitive, in every tree, and give each hit a verdict.** `grep -rn isdigit backend/src`
+  gave 16 hits on `dev`. Three ran `int()`/`float()` on outside text and were the task (`http._seconds`,
+  `dblp.check_extract`, `dblp_aaai._year_of`); five already checked `isascii()`; seven need no change (two predicates
+  with no `int()`, `aaai_library` and `openalex_audit`; five are the tokenizer's math and currency rules in
+  `lexer.py` and `normalize.py`, where `lexer.digit` folds NFKC on purpose: token contract); one,
+  `eval/coverage_report.py:229`, read an operator's file and raised a bare `ValueError` on '²' and read '٢٠١٤' as
+  2014. All four readers now use the repo's `isascii() and isdigit()` idiom (there is no shared helper). The security
+  review then found three more outside `backend/src`, in `scripts/openalex_census.py`, `scripts/dblp_aaai_census.py`
+  and `scripts/aaai_library_census.py`, fixed the same way. The `.claude/scripts` hits read curl's `%{http_code}` and
+  git's numstat, which are ASCII by construction.
+- **"Never an exception" covers every parser on the path, not only the one in the bug report.** With `_seconds`
+  fixed, a hostile `Retry-After` still crashed the crawl through the HTTP-date branch: `parsedate_to_datetime` raises
+  `OverflowError` (not `ValueError`) for a year like 99999999999 or a huge offset. `retry_after` now catches it. And
+  `takedown_check.retry_after` checked ASCII digits but called `int()` on any length, so 5,000 digits passed Python's
+  4,300-digit limit; it now converts at most two digits after leading zeros (more is the 60 s cap).
 - **A test of "no hint" must tell no hint apart from a hint.** A '²' `Retry-After` on a 429 now waits the first
   back-off step (5 s), and a '²' `ratelimit-reset` with `ratelimit-remaining: 0` waits the 60 s default; an
   Arabic-Indic year inside the checked range (`١٩٩٠`) was read as 1990 before, so the test asserts the message's
-  "(no year)", not only the refusal. All 12 new cases failed on the old code. Evidence:
+  "(no year)", not only the refusal. All 12 first-round cases failed on the old code. Evidence:
   `test_fetch.py::test_a_non_ascii_retry_after_on_a_429_is_no_hint`,
+  `test_fetch.py::test_a_retry_after_date_past_what_a_datetime_holds_is_no_hint`,
   `test_fetch.py::test_a_non_ascii_ratelimit_header_on_a_200_is_no_hint`,
-  `test_dblp.py::test_a_year_of_non_ascii_digits_is_no_year`, `test_dblp_aaai.py::test_a_year_of_non_ascii_digits_is_no_year`.
+  `test_dblp.py::test_a_year_of_non_ascii_digits_is_no_year`, `test_dblp_aaai.py::test_a_year_of_non_ascii_digits_is_no_year`,
+  `test_takedowns.py::test_retry_after_reads_whole_seconds_only`, `test_coverage_report.py::test_causes_load_from_toml_and_an_empty_cause_is_refused`.
 - Propagated to `.claude/skills/python-standards/SKILL.md` §Errors (the digit-check rule).

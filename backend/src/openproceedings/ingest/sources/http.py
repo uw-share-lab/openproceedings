@@ -245,7 +245,7 @@ def retry_after(headers: Mapping[str, str], now: datetime) -> float | None:
     if raw:
         try:
             when = email.utils.parsedate_to_datetime(raw)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):  # a year or offset past what C can hold: OverflowError
             when = None
         if when is not None:
             return max(0.0, (when if when.tzinfo else when.replace(tzinfo=UTC)).timestamp() - now.timestamp())

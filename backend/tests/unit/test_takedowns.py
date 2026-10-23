@@ -159,6 +159,9 @@ def test_the_cell_query_names_the_ids_venue_and_year_and_every_track_and_status(
         ("-1", 1.0),
         ("٣", 1.0),
         ("²", 1.0),
+        ("0" * 5000 + "7", 7.0),  # TASK-282: past int()'s 4,300-digit limit; the digits after the zeros count
+        ("9" * 5000, 60.0),
+        ("0" * 5000, 0.0),
     ],
 )
 def test_retry_after_reads_whole_seconds_only(header: str | None, seconds: float) -> None:
