@@ -290,11 +290,12 @@ def test_a_table_year_the_release_dates_otherwise_or_a_later_icml_key_are_judged
     assert e.value.reason == "table_mismatch"
 
 
-# superscript two; Arabic-Indic 1990 and 2025; past int()'s 4,300-digit limit
-@pytest.mark.parametrize("raw", ["²", "١٩٩٠", "٢٠٢٥", "9" * 5000])
-def test_a_year_of_non_ascii_digits_is_no_year(tmp_path: Path, raw: str) -> None:
-    """TASK-282: `isdigit()` is true for each, but `int('²')` raises and `int('٢٠٢٥')` reads 2025 (out of range:
-    ignored). Only ASCII digits are a year, so an unlisted record dated so is refused as having no year."""
+# superscript two; Arabic-Indic 1990 and 2025; five digits; past int()'s 4,300-digit limit
+@pytest.mark.parametrize("raw", ["²", "١٩٩٠", "٢٠٢٥", "10000", "9" * 5000])
+def test_a_year_not_of_at_most_four_ascii_digits_is_no_year(tmp_path: Path, raw: str) -> None:
+    """TASK-282: `isdigit()` is true for each, but `int('²')` raises, `int('٢٠٢٥')` reads 2025 (out of range:
+    ignored), `int('10000')` would be ignored too and 5,000 digits raise. A year is at most four ASCII digits, so
+    an unlisted record dated otherwise is refused as having no year."""
     extract = prepared(tmp_path)
     odd = dblp_xml.DblpEntry("proceedings", "conf/icml/odd", "2025-07-01", None, {"year": raw}, {})
     with pytest.raises(CrawlError, match=r"conf/icml/odd \(no year\)") as e:

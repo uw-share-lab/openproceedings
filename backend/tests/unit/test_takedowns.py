@@ -155,6 +155,8 @@ def test_the_cell_query_names_the_ids_venue_and_year_and_every_track_and_status(
         (None, 1.0),
         ("3", 3.0),
         ("600", 60.0),
+        ("45", 45.0),  # two significant digits are read, not capped
+        ("045", 45.0),
         ("Wed, 21 Oct 2026 07:28:00 GMT", 1.0),
         ("-1", 1.0),
         ("٣", 1.0),

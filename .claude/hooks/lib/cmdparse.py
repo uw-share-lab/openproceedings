@@ -2458,15 +2458,17 @@ def push_config(argv: list[str], directory: str) -> dict[str, str]:
     return found
 
 
+# git reads these as false (git 2.42): the words, and a zero in strtoimax's forms (a sign, 0x, octal zeros) with a
+# k/m/g unit. Every other value is true or one git refuses, so the gate reads it as true (TASK-282).
+GIT_FALSE = re.compile(r"false|no|off|[+-]?(?:0x0+|0+)[kmg]?")
+
+
 def git_bool(value: str) -> bool:
-    """git's reading of a boolean config value ('' is a key set with no value: true; a number is true when not
-    zero). Only ASCII digits are a number, and they are never passed to int(): '²' made it raise, and so would
-    5,000 digits (TASK-282)."""
-    v = value.strip().lower()
-    digits = v.removeprefix("-")
-    return v in ("", "true", "yes", "on") or (
-        digits.isascii() and digits.isdigit() and digits.strip("0") != ""
-    )
+    """git's reading of a boolean config value, failing toward true: false only for what git reads as false.
+    `1k`, `0x1` and `+1` are true to git, so reading only digits as a number under-read them and let a
+    `remote.<name>.mirror` or `push.followTags` push through unreviewed (TASK-282). '' is true: `--get-regexp`
+    prints a key set with no value (true to git) and one set to '' (false) alike."""
+    return not GIT_FALSE.fullmatch(value.strip().lower())
 
 
 def push_config_risk(config: dict[str, str]) -> str | None:

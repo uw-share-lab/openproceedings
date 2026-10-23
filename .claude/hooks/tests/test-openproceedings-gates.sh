@@ -1173,22 +1173,26 @@ check $R block "push.default=matching in the repo"    "$(payload_bash 'git push 
 g config --unset push.default
 g config push.followTags true
 check $R block "push.followTags in the repo"          "$(payload_bash 'git push origin')"
-# git_bool reads a number as git does, nonzero is true, and only ASCII digits are one (TASK-282)
-g config push.followTags 1
-check $R block "push.followTags=1 in the repo"        "$(payload_bash 'git push origin')"
-g config push.followTags -0010
-check $R block "push.followTags=-0010 in the repo"    "$(payload_bash 'git push origin')"
+# git_bool fails toward true: false only for what git 2.42 reads as false (TASK-282). git reads 1k, 0x1 and +1
+# as true, so a gate that read only digits as a number let these push every tag, or mirror every ref, unreviewed.
+for v in 1 1k 1K 1m 1g 0x1 0X1 +1 -1 010 ² --1 0x 1t; do
+  g config push.followTags "$v"
+  check $R block "push.followTags=$v (git: true, or a value git refuses)" "$(payload_bash 'git push origin')"
+done
 g config push.followTags "$(printf '9%.0s' $(seq 5000))"
 check $R block "push.followTags of 5,000 nines"       "$(payload_bash 'git push origin')"
-g config push.followTags 000
-check $R allow "push.followTags=000 in the repo"      "$(payload_bash 'git push origin')"
-g config push.followTags -0
-check $R allow "push.followTags=-0 in the repo"       "$(payload_bash 'git push origin')"
-g config push.followTags ²
-check $R allow "push.followTags=² (not a number; git refuses it)" "$(payload_bash 'git push origin')"
-g config push.followTags --1
-check $R allow "push.followTags=--1 (not a number)"   "$(payload_bash 'git push origin')"
+for v in 0 00 0k 0K -0 +0 -0k 0x0 0X0 -0x0 false No OFF; do
+  g config push.followTags "$v"
+  check $R allow "push.followTags=$v (git: false)"   "$(payload_bash 'git push origin')"
+done
 g config --unset push.followTags
+for v in 1k 0x1 +1; do
+  g config remote.origin.mirror "$v"
+  check $R block "remote.origin.mirror=$v (git: a mirror)" "$(payload_bash 'git push origin')"
+done
+g config remote.origin.mirror 0x0
+check $R allow "remote.origin.mirror=0x0 (git: not a mirror)" "$(payload_bash 'git push origin')"
+g config --unset remote.origin.mirror
 # the matching refspec ':' pushes every branch that exists on both sides
 check $R block "git push origin : (matching)"          "$(payload_bash 'git push origin :')"
 check $R block "git push origin +: (forced matching)"  "$(payload_bash 'git push origin +:')"

@@ -2164,28 +2164,46 @@
   "new": "        if False:"
  },
  {
-  "label": "cmdparse: git_bool takes any Unicode digit as a number",
-  "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        digits.isascii() and digits.isdigit() and digits.strip(\"0\") != \"\"",
-  "new": "        digits.isdigit() and digits.strip(\"0\") != \"\""
- },
- {
-  "label": "cmdparse: git_bool reads zero as true",
-  "file": ".claude/hooks/lib/cmdparse.py",
-  "old": " and digits.strip(\"0\") != \"\"\n",
-  "new": "\n"
- },
- {
-  "label": "cmdparse: git_bool reads a negative number as no number",
-  "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    digits = v.removeprefix(\"-\")\n",
-  "new": "    digits = v\n"
- },
- {
   "label": "cmdparse: git_bool reads false as true",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    return v in (\"\", \"true\", \"yes\", \"on\") or (",
-  "new": "    return True or ("
+  "old": "    return not GIT_FALSE.fullmatch(",
+  "new": "    return True or not GIT_FALSE.fullmatch("
+ },
+ {
+  "label": "cmdparse: git_bool reads a number but zero as false (1k, 0x1, +1 under-read)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "GIT_FALSE = re.compile(r\"false|no|off|[+-]?(?:0x0+|0+)[kmg]?\")",
+  "new": "GIT_FALSE = re.compile(r\"false|no|off|[+-]?(?:0x[0-9a-f]+|[0-9]+)[kmg]?|.*[^0-9]\")"
+ },
+ {
+  "label": "cmdparse: git_bool reads a zero with a unit as true",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(?:0x0+|0+)[kmg]?\")",
+  "new": "(?:0x0+|0+)\")"
+ },
+ {
+  "label": "cmdparse: git_bool reads a hex zero as true",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(?:0x0+|0+)[kmg]?\")",
+  "new": "(?:0+)[kmg]?\")"
+ },
+ {
+  "label": "cmdparse: git_bool reads a signed zero as true",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "|[+-]?(?:0x0+|0+)",
+  "new": "|(?:0x0+|0+)"
+ },
+ {
+  "label": "cmdparse: git_bool reads a false word as true",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "r\"false|no|off|",
+  "new": "r\"false|off|"
+ },
+ {
+  "label": "cmdparse: git_bool reads git's false words case-sensitively",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "fullmatch(value.strip().lower())",
+  "new": "fullmatch(value.strip())"
  },
  {
   "label": "enforce: repo push config not read",

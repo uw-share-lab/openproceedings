@@ -134,15 +134,21 @@ record past a bound refused, record schema 9 → 10.
   and `scripts/aaai_library_census.py`, fixed the same way, with a length bound before `int()` (the scripts have no
   test harness). The `.claude/scripts` hits read curl's `%{http_code}` and git's numstat, ASCII by construction. Of
   the 9 `.claude/hooks` hits, most are fd-redirect checks with no `int()`; `require-review.sh:366` reads git numstat;
-  `cmdparse.git_bool` ran `int()` on a git config value, so `push.followTags=²` (or `--1`, or 5,000 digits) raised in
-  the push hook. `require-review.sh` turns that into exit 2, so it failed closed, but a refused push for a config
-  value git reads as no number is still wrong: `git_bool` now reads ASCII digits without `int()` (nonzero after
-  stripping zeros), with case-table rows and three mutants. The dblp years are bounded to four digits.
+  `cmdparse.git_bool` ran `int()` on a git config value (the third lesson below). The dblp years are bounded to four digits.
 - **"Never an exception" covers every parser on the path, not only the one in the bug report.** With `_seconds`
   fixed, a hostile `Retry-After` still crashed the crawl through the HTTP-date branch: `parsedate_to_datetime` raises
   `OverflowError` (not `ValueError`) for a year like 99999999999 or a huge offset. `retry_after` now catches it. And
   `takedown_check.retry_after` checked ASCII digits but called `int()` on any length, so 5,000 digits passed Python's
   4,300-digit limit; it now converts at most two digits after leading zeros (more is the 60 s cap).
+- **Failing closed on an exception doesn't help when the parse succeeds with the wrong answer.** `cmdparse.git_bool`
+  read a number only from digits, via `int()`. Round 2 left it alone because `push.followTags=²` raised and
+  `require-review.sh` turns an exception into exit 2. But git (2.42, checked) reads `1k`, `1K`, `1m`, `0x1`, `0X1` and
+  `+1` as true, and `git_bool` read them as false without raising, so `remote.origin.mirror=1k` let a bare
+  `git push origin` mirror every ref unreviewed (security review, round 3). `git_bool` now fails toward true: false
+  only for git's false words and a zero in strtoimax's forms (sign, `0x`, octal zeros, a k/m/g unit); anything else,
+  including what git refuses, is true. Lesson: for a gate, ask which direction a misread fails, not only whether it
+  raises. Evidence: the `push.followTags` and `remote.origin.mirror` rows in `test-openproceedings-gates.sh`, and the
+  seven `git_bool` mutants in `.claude/scripts/mutants/gates.json`.
 - **A test of "no hint" must tell no hint apart from a hint.** A '²' `Retry-After` on a 429 now waits the first
   back-off step (5 s), and a '²' `ratelimit-reset` with `ratelimit-remaining: 0` waits the 60 s default; an
   Arabic-Indic year inside the checked range (`١٩٩٠`) was read as 1990 before, so the test asserts the message's
@@ -150,6 +156,8 @@ record past a bound refused, record schema 9 → 10.
   `test_fetch.py::test_a_non_ascii_retry_after_on_a_429_is_no_hint`,
   `test_fetch.py::test_a_retry_after_date_past_what_a_datetime_holds_is_no_hint`,
   `test_fetch.py::test_a_non_ascii_ratelimit_header_on_a_200_is_no_hint`,
-  `test_dblp.py::test_a_year_of_non_ascii_digits_is_no_year`, `test_dblp_aaai.py::test_a_year_of_non_ascii_digits_is_no_year`,
+  `test_dblp.py::test_a_year_not_of_at_most_four_ascii_digits_is_no_year`,
+  `test_dblp_aaai.py::test_a_year_not_of_at_most_four_ascii_digits_is_no_year`,
   `test_takedowns.py::test_retry_after_reads_whole_seconds_only`, `test_coverage_report.py::test_causes_load_from_toml_and_an_empty_cause_is_refused`.
-- Propagated to `.claude/skills/python-standards/SKILL.md` §Errors (the digit-check rule).
+- Propagated to `.claude/skills/python-standards/SKILL.md` §Errors (the digit-check rule) and `CLAUDE.md` §Enforced
+  gates (a gate misreads only toward refusal).

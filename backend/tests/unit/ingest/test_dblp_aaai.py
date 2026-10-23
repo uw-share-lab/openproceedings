@@ -145,11 +145,12 @@ def test_2010_on_is_never_read(tmp_path: Path) -> None:
         dblp_aaai.mine_year(2024, extract, table=aaai)
 
 
-# superscript two; Arabic-Indic 1986 and 2024; past int()'s 4,300-digit limit
-@pytest.mark.parametrize("raw", ["²", "١٩٨٦", "٢٠٢٤", "9" * 5000])
-def test_a_year_of_non_ascii_digits_is_no_year(tmp_path: Path, raw: str) -> None:
-    """TASK-282: `isdigit()` is true for each, but `int('²')` raises and `int('٢٠٢٤')` reads 2024 (past 2009:
-    ignored). Only ASCII digits are a year, so the unlisted conf/aaai/2024 dated so is refused as having none."""
+# superscript two; Arabic-Indic 1986 and 2024; five digits; past int()'s 4,300-digit limit
+@pytest.mark.parametrize("raw", ["²", "١٩٨٦", "٢٠٢٤", "10000", "9" * 5000])
+def test_a_year_not_of_at_most_four_ascii_digits_is_no_year(tmp_path: Path, raw: str) -> None:
+    """TASK-282: `isdigit()` is true for each, but `int('²')` raises, `int('٢٠٢٤')` reads 2024 (past 2009:
+    ignored), `int('10000')` would be ignored too and 5,000 digits raise. A year is at most four ASCII digits, so
+    the unlisted conf/aaai/2024 dated otherwise is refused as having none."""
     _t, aaai, extract = setup(tmp_path)
     entries = tuple(replace(e, fields=e.fields | {"year": raw}) if e.key == "conf/aaai/2024" else e
                     for e in extract.entries)  # fmt: skip

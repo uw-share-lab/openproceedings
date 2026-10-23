@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-22 22:23'
-updated_date: '2026-10-23 03:08'
+updated_date: '2026-10-23 03:36'
 labels:
   - ingest
   - security
@@ -28,7 +28,7 @@ Found by the TASK-281 review and the closing reviews (2026-10-22). str.isdigit()
 - [x] #2 http._seconds reads only ASCII digits (one optional '.'); a non-ASCII value is no hint, never an exception, with tests for a latin-1 '²' in Retry-After on a 429 and in ratelimit-remaining on a 200 (_respect_budget, called outside the fetch try)
 - [x] #3 http.retry_after treats a Retry-After HTTP-date parsedate_to_datetime refuses with OverflowError as no hint, and takedown_check.retry_after converts at most two digits after leading zeros (longer is the 60s cap), with tests
 - [x] #4 eval/coverage_report._cell_key and scripts/{openalex,dblp_aaai,aaai_library}_census.py check isascii() and bound the digits before int(); the coverage_report heading test covers '²', an Arabic-Indic year and 5,000 digits (the scripts have no test harness)
-- [x] #5 .claude/hooks/lib/cmdparse.py git_bool reads only ASCII digits as a number and never calls int() (push.followTags=² or 5,000 digits no longer raise in require-review.sh), with case-table rows in test-openproceedings-gates.sh and mutants in gates.json
+- [x] #5 cmdparse.git_bool fails toward true: false only for what git reads as false (false/no/off, and a zero with optional sign, 0x prefix and k/m/g unit); 1k, 1K, 1m, 0x1, 0X1, +1, '²' and 5,000 digits read as true, never raising; case-table rows in test-openproceedings-gates.sh (push.followTags and remote.origin.mirror) and mutants in gates.json, each killed
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -59,4 +59,8 @@ Review round 2 (2026-10-22): the dblp year readers (and scripts/dblp_aaai_census
 Round 2 validation: make test (backend 9373 passed, 3 skipped; frontend 4954 passed), make lint, make tooling green.
 
 Round 3 (lead's direction, 2026-10-22): cmdparse.git_bool fixed after all (supersedes the round-2 note leaving it to the lead): digits = v.removeprefix('-'); a number is ASCII digits that are not all zeros, no int(). Old code raised on '²', '--1' and 5,000 digits (require-review.sh turned it into exit 2, fail closed). Rows: push.followTags 1, -0010, 5,000 nines (block); 000, -0, ², --1 (allow). Three mutants added to gates.json (Unicode digit, zero, negative); mutate.py --match git_bool --jobs 2: 4 of 4 killed. mutate.py --changed --check: 276 mutants, 0 unrunnable; the full --changed run (276 cmdparse mutants, ~2 min each here) was not run locally: nightly runs every mutant. make tooling (test-openproceedings-gates.sh 1650 passed) and make lint green.
+
+Round 3 review (2026-10-22): security found git_bool fails open: git 2.42 (checked in a scratch repo, config only) reads 1k, 1K, 1m, 1g, 0x1, 0X1, +1, -1 and 010 as true, and 0, 00, 0k, -0, +0, -0k, 0x0, -0x0 as false, and refuses ², --1, 0x, 1t, 08 and 22-digit values; the round-3 git_bool read 1k/0x1/+1 as false, so remote.origin.mirror=1k let a bare git push origin mirror every ref unreviewed. Lead's decision: fix here. git_bool is now 'not GIT_FALSE.fullmatch(...)' with GIT_FALSE = false|no|off|[+-]?(?:0x0+|0+)[kmg]? (lowercased): everything else, including what git refuses, is true. The previous round-3 note's git_bool description is superseded. Case rows: push.followTags 1 1k 1K 1m 1g 0x1 0X1 +1 -1 010 ² --1 0x 1t and 5,000 nines block; 0 00 0k 0K -0 +0 -0k 0x0 0X0 -0x0 false No OFF allow; remote.origin.mirror 1k 0x1 +1 block, 0x0 allow. Mutants: the old 3 replaced by 7 (false-as-true updated; number-under-read, unit, hex, sign, false word, case). QA round 3: rows added for a five-digit year (dblp, dblp_aaai: '10000'; coverage_report: 'ICLR 20140 main') and two-digit takedown Retry-After ('45', '045'); the dblp tests renamed test_a_year_not_of_at_most_four_ascii_digits_is_no_year. openalex_census strips leading zeros before its 18-digit bound (code-review nit). CLAUDE.md §Enforced gates: a gate misreads only toward refusal.
+
+Round 3 validation: mutate.py --match git_bool --jobs 2: 7 of 7 killed; make tooling (test-openproceedings-gates.sh 1675 passed), make lint, make test (backend 9377 passed, 3 skipped; frontend 4954 passed) green.
 <!-- SECTION:NOTES:END -->
