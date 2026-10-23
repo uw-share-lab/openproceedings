@@ -520,6 +520,14 @@ def test_scrub_redacts_everything_it_did_before_on_every_short_join_of_pieces() 
         ("x%3ABearer Bearer SECRET", "x%3ABearer Bearer [redacted]"),
         ("\\tBearer\\tSECRET", "\\tBearer\\t[redacted]"),  # JSON escapes around it
         ("\\nBearer SECRET", "\\nBearer [redacted]"),
+        # a token ends before another `bearer` match would start (matches don't overlap)
+        ("Bearer A\\nBearer SECRET", "Bearer [redacted]\\nBearer [redacted]"),
+        ("Bearer A\\/Bearer SECRET", "Bearer [redacted]\\/Bearer [redacted]"),
+        ("Bearer A\\Bearer SECRET", "Bearer [redacted]\\Bearer [redacted]"),
+        ("Bearer A%0ABearer SECRET", "Bearer [redacted]%0ABearer [redacted]"),
+        ("Bearer A/Bearer SECRET", "Bearer [redacted]/Bearer [redacted]"),
+        ("Authorization: Bearer \\tBearer SECRET", "Authorization: Bearer \\tBearer [redacted]"),  # mixed
+        ("Bearer \\tSECRET", "Bearer \\t[redacted]"),  # a space and a JSON tab are one separator
         (  # a value that looks like a quoted key must not hide the real one after it
             """{'note': "'token': '", 'password': 'SECRETX'}""",
             """{'note': "'token': '[redacted]'password': '[redacted]'}""",
@@ -594,6 +602,8 @@ def test_scrub_examples(value: str, expected: str) -> None:
         lambda n: "%" * n + "token%3D",
         lambda n: "%41bearer%20" * (n // 12),
         lambda n: "bearer " * (n // 7) + "x",  # each `bearer` refused as the token by the next
+        lambda n: "bearer a" + "/bearer " * (n // 8),  # a token ended early before every next `bearer`
+        lambda n: "bearer " + "a\\nbearer " * (n // 10),
         lambda n: "\\tbearer\\t" * (n // 10),
         lambda n: "'token': '" + "'token': " * (n // 10),  # a quoted key tried inside every value
     ],

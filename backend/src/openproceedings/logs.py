@@ -82,7 +82,11 @@ _ENC_NAME = r"(?:[a-z0-9_.-]|%5F|%2D|%2E)"  # the same, percent-encoded
 # after a `%` that starts no escape (`100%token%3D…`)
 _ENC_START = r"(?:(?<![a-z0-9_.%-])|(?<=%[0-9a-f]{2})(?<!%5F)(?<!%2D)(?<!%2E)|(?<=%)(?![0-9a-f]{2}))"
 # what separates `bearer` from its token: whitespace that is no line break, or `%20`, `%09`, a JSON `\t`, `+`
-_BEARER_SEP = r"(?:[^\S\n\r\v\f\x1c-\x1e\x85\u2028\u2029]++|(?:%20|%09|\\t|\+)++)"
+_BEARER_ONE = r"(?:[^\S\n\r\v\f\x1c-\x1e\x85\u2028\u2029]|%20|%09|\\t|\+)"
+_BEARER_SEP = rf"{_BEARER_ONE}++"  # mixed too (` \tBearer`)
+# where a token ends early: right before an escape or punctuation that another `bearer` match would start after
+# (`Bearer A\nBearer SECRET`: matches don't overlap, so the second would never be tried)
+_BEARER_NEXT = rf"(?:\\[^\s\"'\\]|\\|%[0-9a-f]{{2}}|[^\w\s\"',;\\%])bearer{_BEARER_ONE}"
 _QUOTED = r"(?P<{q}>[\"'])(?:(?!(?P={q}))[^\\]|\\[\s\S])*+(?P={q})"  # a quoted string, escapes inside it
 _SCRUBS = types.MappingProxyType(
     {
@@ -128,7 +132,7 @@ _SCRUBS = types.MappingProxyType(
         # it, an escaped quote ends it
         "bearer": re.compile(
             rf"(?:(?<!\w)|(?<=%[0-9a-f]{{2}})|(?<=\\[nrt]))bearer{_BEARER_SEP}(?!bearer{_BEARER_SEP})"
-            r"(?P<v>(?:[^\s\"',;\\]|\\[^\s\"'\\])++)",
+            rf"(?P<v>(?:(?!{_BEARER_NEXT})(?:[^\s\"',;\\]|\\[^\s\"'\\]))++)",
             re.IGNORECASE,
         ),
     }

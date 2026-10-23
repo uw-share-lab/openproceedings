@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-23 15:06'
-updated_date: '2026-10-23 19:59'
+updated_date: '2026-10-23 20:04'
 labels:
   - logging
   - security
@@ -54,4 +54,6 @@ At the owner's request (2026-10-23), in TASK-275's branch: a parameter name star
 2026-10-23 review round 7 (security-reviewer): a doubled Bearer (Bearer Bearer SECRET, a client storing the prefix with its token) took the second Bearer as the token: a bearer followed by a separator is never the token now; a value that looked like a quoted key in a dict's repr hid the real key after it: the quoted pattern is wrapped in a lookahead so a match can start inside an earlier one's value; JSON \t/\n/\r before Bearer, and \t as a separator, are read too.
 
 2026-10-23 review round 8 (docs-reviewer, code-reviewer): _LEGACY_QUERY now uses origin/dev's own word list, so 'the same matches' is literally true; a test compares it with the original quadratic pattern over every short string.
+
+2026-10-23 review round 8 (security-reviewer): a token ran through an escape or punctuation into a following Bearer, which (matches don't overlap) was never tried: Bearer A\nBearer SECRET kept SECRET (404 of 100k JSON header values). The token now ends right before anything another bearer match would start after (_BEARER_NEXT), and the separator is one or more of any separator unit, mixed (Bearer \tBearer). Linear: each lookahead is bounded.
 <!-- SECTION:NOTES:END -->
