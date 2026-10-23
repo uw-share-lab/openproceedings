@@ -1230,6 +1230,22 @@ g config --unset "remote.x y.mirror"
 g config "remote.x y.push" refs/heads/other2:refs/heads/other2
 check $R block "remote.<x y>.push (a space in the remote name)" "$(payload_bash 'git push origin')"
 g config --unset "remote.x y.push"
+# remote names are case-sensitive to git: remote.Origin and remote.origin are two keys, in either file order
+g config remote.Origin.mirror true
+g config remote.origin.mirror false
+check $R block "remote.Origin.mirror=true before remote.origin.mirror=false" "$(payload_bash 'git push origin')"
+g config --unset remote.Origin.mirror
+g config --unset remote.origin.mirror
+g config remote.origin.mirror false
+g config remote.Origin.mirror true
+check $R block "remote.origin.mirror=false before remote.Origin.mirror=true" "$(payload_bash 'git push origin')"
+g config --unset remote.origin.mirror
+g config --unset remote.Origin.mirror
+g config remote.Origin.push refs/heads/other2:refs/heads/other2
+g config remote.origin.push refs/heads/mut:refs/heads/mut
+check $R block "remote.Origin.push and remote.origin.push" "$(payload_bash 'git push origin')"
+g config --unset remote.Origin.push
+g config --unset remote.origin.push
 # the matching refspec ':' pushes every branch that exists on both sides
 check $R block "git push origin : (matching)"          "$(payload_bash 'git push origin :')"
 check $R block "git push origin +: (forced matching)"  "$(payload_bash 'git push origin +:')"

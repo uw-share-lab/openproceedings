@@ -539,6 +539,17 @@ check feature/x block 'git push origin'
 git -C "$REPO" config remote.origin.mirror false
 check feature/x allow 'git push origin'                              # mirror=false: not a mirror
 git -C "$REPO" config --unset remote.origin.mirror
+# remote names are case-sensitive to git: a later remote.origin can't hide remote.Origin's mirror (TASK-282)
+git -C "$REPO" config remote.Origin.mirror true
+git -C "$REPO" config remote.origin.mirror false
+check feature/x block 'git push origin'                              # Origin mirrors, then origin=false
+git -C "$REPO" config --unset remote.Origin.mirror
+git -C "$REPO" config --unset remote.origin.mirror
+git -C "$REPO" config remote.origin.mirror false
+git -C "$REPO" config remote.Origin.mirror true
+check feature/x block 'git push origin'                              # origin=false, then Origin mirrors
+git -C "$REPO" config --unset remote.origin.mirror
+git -C "$REPO" config --unset remote.Origin.mirror
 git -C "$REPO" config push.default matching
 check feature/x block 'git push origin'                              # every branch with a same-named remote one
 git -C "$REPO" config push.default upstream

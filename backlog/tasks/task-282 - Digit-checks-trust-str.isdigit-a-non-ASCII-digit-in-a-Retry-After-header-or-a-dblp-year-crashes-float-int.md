@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-22 22:23'
-updated_date: '2026-10-23 04:53'
+updated_date: '2026-10-23 05:15'
 labels:
   - ingest
   - security
@@ -30,6 +30,7 @@ Found by the TASK-281 review and the closing reviews (2026-10-22). str.isdigit()
 - [x] #4 eval/coverage_report._cell_key and scripts/{openalex,dblp_aaai,aaai_library}_census.py check isascii() and bound the digits before int(); the coverage_report heading test covers '²', an Arabic-Indic year and 5,000 digits (the scripts have no test harness)
 - [x] #5 cmdparse.git_bool fails toward true: false only for what git reads as false (false/no/off, and a zero with optional sign, 0x prefix and k/m/g unit); 1k, 1K, 1m, 0x1, 0X1, +1, '²' and 5,000 digits read as true, never raising; case-table rows in test-openproceedings-gates.sh (push.followTags and remote.origin.mirror) and mutants in gates.json, each killed
 - [x] #6 cmdparse.push_config reads git config -z (NUL records, key to the first newline), so a value with a newline can't forge a push key and a remote name with a space can't hide one; case-table rows for a forged remote.pushdefault, 'remote.x y.mirror'/.push and no-value followTags/mirror keys, and mutants, each killed
+- [x] #7 cmdparse.push_config keeps git's key form (no .lower(): the remote name keeps its case), so remote.Origin's mirror or push can't hide behind a later remote.origin, in either file order; rows in test-openproceedings-gates.sh and test-enforce-pr-workflow.sh and a mutant, killed
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -72,4 +73,8 @@ Round 4 validation: mutate.py --match 'key with no value' and --match push_confi
 Round 4 code-review nit (2026-10-23): git_bool's value.strip().lower() turned '0 ' and '0'+KELVIN SIGN (both refused by git, checked) into a zero. Now a non-ASCII value is true and only strtoimax's leading whitespace (space, \t\n\v\f\r) is dropped. Rows: '0 ', '0'+U+212A, \x1c0 block; <tab>0 allow. Mutants: empty value read false (trailing '|'), non-ASCII through lower(), trailing strip, Python lstrip(); the case-sensitivity mutant updated to the new text.
 
 Round 4b validation: mutate.py --match git_bool --jobs 2: 12 of 12 killed; make tooling (gates 1690, enforce-pr-workflow 419), make lint, make test (backend 9377 passed, 3 skipped; frontend 4954 passed) green.
+
+Review round 5 (2026-10-23): security and code review found push_config lower-cased the whole key, folding remote names that git keeps case-sensitive: remote.Origin.mirror=true then remote.origin.mirror=false left {'remote.origin.mirror': 'false'}, so git push Origin mirrored unreviewed through both hooks. Fix (security's): found[key] = value; git already prints the section and variable lower-case. Rows: Origin/origin mirror in both orders (require-review and enforce-pr-workflow), Origin/origin push. Mutant: key.lower() restored. Docs round 5: git_bool docstring's '' reason reworded for -z (push_config gives '' for both no-value and empty; reading both true only refuses); spec 08 and require-review.sh's header say -z. Code-review nit taken in 80aebcaf.
+
+Round 5 validation: mutate.py --match push_config: 3 of 3 killed; make tooling (gates 1693, enforce-pr-workflow 421), make lint, make test (backend 9377 passed, 3 skipped; frontend 4954 passed) green.
 <!-- SECTION:NOTES:END -->

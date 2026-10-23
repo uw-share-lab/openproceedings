@@ -13,7 +13,7 @@
 #    `set -a` one too) when one is named. A refspec-less push whose `git -c` settings choose what is pushed
 #    (remote.<name>.push or .mirror, push.default, remote.pushDefault, push.followTags), whose repo config
 #    does (any remote.<name>.push, a true remote.<name>.mirror or push.followTags, push.default=matching:
-#    read with `git config --get-regexp`), or under config this gate can't read (--config-env, -c
+#    read with `git config -z --get-regexp`), or under config this gate can't read (--config-env, -c
 #    include.path, GIT_CONFIG_*, GIT_COMMON_DIR, HOME), is blocked. Aliases are expanded, braces and `$'…'`
 #    decoded, and abbreviated options written out first (cmdparse); an alias under unreadable config, a git
 #    command after a `git config` (or a write into a git config file) that sets an alias/include/push key or an

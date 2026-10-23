@@ -2248,6 +2248,12 @@
   "new": "            key, _, value = record.partition(\" \")"
  },
  {
+  "label": "cmdparse: push_config folds the remote name's case",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            found[key] = value\n",
+  "new": "            found[key.lower()] = value\n"
+ },
+ {
   "label": "enforce: repo push config not read",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
   "old": "    if not refspecs and repo_config is not None:",

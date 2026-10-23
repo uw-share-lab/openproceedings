@@ -151,7 +151,10 @@ record past a bound refused, record schema 9 → 10.
   the leading whitespace strtoimax skips. Lesson: for a gate, ask which direction a misread fails, not only whether it
   raises. The same review round found what feeds it had the same flaw: `push_config` split `--get-regexp` output on
   lines and the first space, so `remote.pushdefault` set to `x`, a newline and `remote.origin.mirror 0` made the gate
-  read mirror as 0 while git mirrors, and a remote named `x y` hid its keys. It now reads `git config -z`. Evidence:
+  read mirror as 0 while git mirrors, and a remote named `x y` hid its keys. It now reads `git config -z`. And it
+  lower-cased the whole key, though git keeps a remote name's case, so `remote.Origin.mirror=true` followed by
+  `remote.origin.mirror=false` read as one false key; it keeps git's form now. Lesson: a parser that mirrors a tool's
+  reading must also mirror its key identity, not only its values. Evidence:
   the `push.followTags`, `remote.origin.mirror`, no-value key, forged-line and `remote.<x y>` rows in
   `test-openproceedings-gates.sh`, and the `git_bool` and `push_config` mutants in `.claude/scripts/mutants/gates.json`.
 - **A test of "no hint" must tell no hint apart from a hint.** A '²' `Retry-After` on a 429 now waits the first
