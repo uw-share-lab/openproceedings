@@ -145,7 +145,8 @@ def test_2010_on_is_never_read(tmp_path: Path) -> None:
         dblp_aaai.mine_year(2024, extract, table=aaai)
 
 
-@pytest.mark.parametrize("raw", ["²", "١٩٨٦", "٢٠٢٤"])  # superscript two; Arabic-Indic 1986 and 2024
+# superscript two; Arabic-Indic 1986 and 2024; past int()'s 4,300-digit limit
+@pytest.mark.parametrize("raw", ["²", "١٩٨٦", "٢٠٢٤", "9" * 5000])
 def test_a_year_of_non_ascii_digits_is_no_year(tmp_path: Path, raw: str) -> None:
     """TASK-282: `isdigit()` is true for each, but `int('²')` raises and `int('٢٠٢٤')` reads 2024 (past 2009:
     ignored). Only ASCII digits are a year, so the unlisted conf/aaai/2024 dated so is refused as having none."""

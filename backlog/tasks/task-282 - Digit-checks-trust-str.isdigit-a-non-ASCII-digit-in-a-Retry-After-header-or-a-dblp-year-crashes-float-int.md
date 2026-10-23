@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-10-22 22:23'
-updated_date: '2026-10-23 02:41'
+updated_date: '2026-10-23 02:53'
 labels:
   - ingest
   - security
@@ -19,13 +19,15 @@ ordinal: 185000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Found by the TASK-281 review and the closing reviews (2026-10-22). str.isdigit() is true for any Unicode digit, but int()/float() don't accept them all. (1) sources/http.py _seconds (float(text) if text.replace('.', '', 1).isdigit()) reads the Retry-After header of any 429 or 5xx (retry_after, lines 456 and 904) and ratelimit-remaining/ratelimit-reset on every 200 (_respect_budget, lines 538-543, called at 462); urllib decodes headers as latin-1, so a byte 0xB2 arrives as '²' and float('²') raises a ValueError no fetch loop catches: any crawled host can abort a run with one header. (2) sources/dblp.py:256 and sources/dblp_aaai.py:64 read a year with raw.isdigit(): int('²') raises and int('١٩٨٠') silently reads 1980 (input is the pinned, digest-checked dblp release, so lower risk). coverage.py, cli.py, ris.py, query/canonical.py and query/parser.py already check isascii(); eval/coverage_report.py:229 reads an operator file and raises by design.
+Found by the TASK-281 review and the closing reviews (2026-10-22). str.isdigit() is true for any Unicode digit, but int()/float() don't accept them all. (1) sources/http.py _seconds (float(text) if text.replace('.', '', 1).isdigit()) reads the Retry-After header of any 429 or 5xx (retry_after, lines 456 and 904 on origin/dev) and ratelimit-remaining/ratelimit-reset on every 200 (_respect_budget, lines 538-543, called at 462); urllib decodes headers as latin-1, so a byte 0xB2 arrives as '²' and float('²') raises a ValueError no fetch loop catches: any crawled host can abort a run with one header. (2) sources/dblp.py:256 and sources/dblp_aaai.py:64 read a year with raw.isdigit(): int('²') raises and int('١٩٨٠') silently reads 1980 (input is the pinned, digest-checked dblp release, so lower risk). coverage.py, cli.py, ris.py, query/canonical.py and query/parser.py already check isascii(). The first filing called eval/coverage_report.py:229 (an operator file) raising by design; the review found it raised a bare ValueError on '²' and read '٢٠١٤' as 2014, so this task fixed it too, along with the readers the review found next to these (see ACs #3 and #4).
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 Both dblp year readers take a year only from ASCII digits, anything else is no year, with tests for a superscript and an Arabic-Indic year
 - [x] #2 http._seconds reads only ASCII digits (one optional '.'); a non-ASCII value is no hint, never an exception, with tests for a latin-1 '²' in Retry-After on a 429 and in ratelimit-remaining on a 200 (_respect_budget, called outside the fetch try)
+- [x] #3 http.retry_after treats a Retry-After HTTP-date parsedate_to_datetime refuses with OverflowError as no hint, and takedown_check.retry_after converts at most two digits after leading zeros (longer is the 60s cap), with tests
+- [x] #4 eval/coverage_report._cell_key and scripts/{openalex,dblp_aaai,aaai_library}_census.py check isascii() and bound the digits before int(); the coverage_report heading test covers '²', an Arabic-Indic year and 5,000 digits (the scripts have no test harness)
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -50,4 +52,8 @@ Validation: make test (backend 9366 passed, 3 skipped; frontend 4954 passed), ma
 Review round 1 (2026-10-22): security found that a Retry-After HTTP-date past what a datetime holds (year 99999999999, or a huge offset) made parsedate_to_datetime raise OverflowError, uncaught: http.retry_after now catches it (test_a_retry_after_date_past_what_a_datetime_holds_is_no_hint). takedown_check.retry_after converted any length of ASCII digits (5,000 raise past int()'s 4,300-digit limit): it now converts at most two digits after leading zeros, longer is the 60s cap. scripts/openalex_census.py, scripts/dblp_aaai_census.py and scripts/aaai_library_census.py trusted bare isdigit() too and now check isascii(). eval/coverage_report.py:229 fixed the same way (a '²' or Arabic-Indic year heading is refused with the file's message). Sweep count corrected: 16 isdigit hits in backend/src on origin/dev (17 on this branch: the _seconds docstring names isdigit()). The .claude/scripts hits read curl's %{http_code} and git numstat: ASCII by construction, unchanged. The line numbers in the description are origin/dev's (the fix shifted http.py by 3).
 
 Round 1 validation: make test (backend 9371 passed, 3 skipped; frontend 4954 passed), make lint, make tooling green.
+
+Review round 2 (2026-10-22): the dblp year readers (and scripts/dblp_aaai_census.py) also bound the year to four digits (int() raises past 4,300; rows of 5,000 nines added); coverage_report's year heading likewise (<= 4); openalex_census and aaai_library_census bound their header and CDX length to 18 digits. The round-1 note's 'reported to the lead, not changed here' for coverage_report.py is superseded: fixed in round 1. .claude/hooks sweep: 9 hits, mostly fd-redirect checks with no int(); require-review.sh:366 reads git numstat; cmdparse.git_bool runs int() on a git config value, so '²' raises, but the hooks turn an exception into exit 2 (fail closed), so it is left to the lead (not changed: a hooks change routes to security and qa with mutants).
+
+Round 2 validation: make test (backend 9373 passed, 3 skipped; frontend 4954 passed), make lint, make tooling green.
 <!-- SECTION:NOTES:END -->

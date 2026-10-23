@@ -123,7 +123,7 @@ record past a bound refused, record schema 9 → 10.
   the files the task touched.
 
 ## Addendum — 2026-10-22 (TASK-282)
-- **Sweep every reader of the primitive, in every tree, and give each hit a verdict.** `grep -rn isdigit backend/src`
+- **Sweep every reader of the primitive, in every tree that reads outside text, and give each hit a verdict.** `grep -rn isdigit backend/src`
   gave 16 hits on `dev`. Three ran `int()`/`float()` on outside text and were the task (`http._seconds`,
   `dblp.check_extract`, `dblp_aaai._year_of`); five already checked `isascii()`; seven need no change (two predicates
   with no `int()`, `aaai_library` and `openalex_audit`; five are the tokenizer's math and currency rules in
@@ -131,8 +131,11 @@ record past a bound refused, record schema 9 → 10.
   `eval/coverage_report.py:229`, read an operator's file and raised a bare `ValueError` on '²' and read '٢٠١٤' as
   2014. All four readers now use the repo's `isascii() and isdigit()` idiom (there is no shared helper). The security
   review then found three more outside `backend/src`, in `scripts/openalex_census.py`, `scripts/dblp_aaai_census.py`
-  and `scripts/aaai_library_census.py`, fixed the same way. The `.claude/scripts` hits read curl's `%{http_code}` and
-  git's numstat, which are ASCII by construction.
+  and `scripts/aaai_library_census.py`, fixed the same way, with a length bound before `int()` (the scripts have no
+  test harness). The `.claude/scripts` hits read curl's `%{http_code}` and git's numstat, ASCII by construction. Of
+  the 9 `.claude/hooks` hits, most are fd-redirect checks with no `int()`; `require-review.sh:366` reads git numstat;
+  `cmdparse.git_bool` runs `int()` on a git config value, so a '²' there raises, but every hook turns an exception into
+  exit 2 (the push is refused, fail closed), so it was left to the lead. The dblp years are bounded to four digits.
 - **"Never an exception" covers every parser on the path, not only the one in the bug report.** With `_seconds`
   fixed, a hostile `Retry-After` still crashed the crawl through the HTTP-date branch: `parsedate_to_datetime` raises
   `OverflowError` (not `ValueError`) for a year like 99999999999 or a huge offset. `retry_after` now catches it. And

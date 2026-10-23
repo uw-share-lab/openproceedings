@@ -229,7 +229,7 @@ def _cell_key(path: Path, name: str) -> CellKey:
     if (
         len(parts) != 3
         or parts[0] not in VENUES.values()
-        or not (parts[1].isascii() and parts[1].isdigit())
+        or not (parts[1].isascii() and parts[1].isdigit() and len(parts[1]) <= 4)
         or parts[2] not in TRACKS
     ):
         raise ValueError(f'{path}: [{name}] is not "<Venue> <year> <track>" (e.g. "ICLR 2014 main")')

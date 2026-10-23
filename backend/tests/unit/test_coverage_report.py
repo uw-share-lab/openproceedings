@@ -374,7 +374,7 @@ def test_causes_load_from_toml_and_an_empty_cause_is_refused(tmp_path: Path) -> 
         load_cause_file(path)
     # TASK-282: '²' and Arabic-Indic digits are digits to isdigit(), not a year
     for heading in ("ICLR 2014", "ICLR twenty main", "Iclr 2014 main", "ICLR 2014 mainn", "ICLR ² main",
-                    "ICLR ٢٠١٤ main"):  # fmt: skip
+                    "ICLR ٢٠١٤ main", "ICLR " + "9" * 5000 + " main"):  # fmt: skip
         path.write_text(f'["{heading}"]\ncause = "x"\n')
         with pytest.raises(ValueError, match="is not"):
             load_cause_file(path)
