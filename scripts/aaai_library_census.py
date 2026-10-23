@@ -153,7 +153,9 @@ def main() -> None:
                 skipped["query_or_port"] += 1
             elif not mime.startswith("text/html"):
                 skipped["not_html"] += 1
-            elif not length.isdigit() or not aaai_library_table.DIGEST.fullmatch(digest):
+            elif not (
+                length.isascii() and length.isdigit() and len(length) <= 18
+            ) or not aaai_library_table.DIGEST.fullmatch(digest):
                 skipped["no_length_or_digest"] += 1
             else:
                 captures.setdefault(key, []).append((ts, original, digest, int(length)))

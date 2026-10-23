@@ -312,9 +312,14 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def retry_after(value: str | None) -> float:
-    """A 429's `Retry-After` as seconds to wait: its whole seconds, capped at 60; 1 when absent or not seconds."""
+    """A 429's `Retry-After` as seconds to wait: its whole seconds, capped at 60; 1 when absent or not seconds.
+    Only the digits after leading zeros reach `int()`, at most two of them: past Python's 4,300-digit limit it
+    raises (TASK-282)."""
     text = (value or "").strip()
-    return float(min(int(text), 60)) if text.isascii() and text.isdecimal() else 1.0
+    if not (text.isascii() and text.isdecimal()):
+        return 1.0
+    digits = text.lstrip("0") or "0"
+    return float(min(int(digits), 60)) if len(digits) <= 2 else 60.0
 
 
 def http(base: str, *, retries: int = 5, timeout: float = 300.0) -> Fetch:

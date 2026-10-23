@@ -2166,8 +2166,104 @@
  {
   "label": "cmdparse: git_bool reads false as true",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    return v in (\"\", \"true\", \"yes\", \"on\") or (",
-  "new": "    return True or ("
+  "old": "    return not GIT_FALSE.fullmatch(",
+  "new": "    return True or not GIT_FALSE.fullmatch("
+ },
+ {
+  "label": "cmdparse: git_bool reads a number but zero as false (1k, 0x1, +1 under-read)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "GIT_FALSE = re.compile(r\"false|no|off|[ \\t\\n\\v\\f\\r]*[+-]?(?:0x0+|0+)[kmg]?\")",
+  "new": "GIT_FALSE = re.compile(r\"false|no|off|[+-]?(?:0x[0-9a-f]+|[0-9]+)[kmg]?|.*[^0-9]\")"
+ },
+ {
+  "label": "cmdparse: git_bool reads a zero with a unit as true",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(?:0x0+|0+)[kmg]?\")",
+  "new": "(?:0x0+|0+)\")"
+ },
+ {
+  "label": "cmdparse: git_bool reads a hex zero as true",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(?:0x0+|0+)[kmg]?\")",
+  "new": "(?:0+)[kmg]?\")"
+ },
+ {
+  "label": "cmdparse: git_bool reads a signed zero as true",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "[+-]?(?:0x0+|0+)",
+  "new": "(?:0x0+|0+)"
+ },
+ {
+  "label": "cmdparse: git_bool reads a false word as true",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "r\"false|no|off|",
+  "new": "r\"false|off|"
+ },
+ {
+  "label": "cmdparse: git_bool reads git's false words case-sensitively",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "fullmatch(value.lower())",
+  "new": "fullmatch(value)"
+ },
+ {
+  "label": "cmdparse: git_bool reads a key with no value as false",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(?:0x0+|0+)",
+  "new": "(?:0x0+|0*)"
+ },
+ {
+  "label": "cmdparse: git_bool reads an empty value as false",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(?:0x0+|0+)[kmg]?\")",
+  "new": "(?:0x0+|0+)[kmg]?|\")"
+ },
+ {
+  "label": "cmdparse: git_bool reads a non-ASCII value through lower()",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if not value.isascii():\n        return True\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse: git_bool strips trailing whitespace git refuses",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "fullmatch(value.lower())",
+  "new": "fullmatch(value.strip().lower())"
+ },
+ {
+  "label": "cmdparse: git_bool skips whitespace git doesn't",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "[ \\t\\n\\v\\f\\r]*[+-]?",
+  "new": "\\s*[+-]?"
+ },
+ {
+  "label": "cmdparse: git_bool skips whitespace before a false word",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "fullmatch(value.lower())",
+  "new": "fullmatch(value.lstrip().lower())"
+ },
+ {
+  "label": "cmdparse: git_bool skips no whitespace before a number",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "[ \\t\\n\\v\\f\\r]*[+-]?",
+  "new": "[+-]?"
+ },
+ {
+  "label": "cmdparse: push_config reads lines, not NUL records",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "\"config\", \"-z\", \"--get-regexp\", PUSH_CONFIG",
+  "new": "\"config\", \"--get-regexp\", PUSH_CONFIG"
+ },
+ {
+  "label": "cmdparse: push_config splits a record at its first space",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            key, _, value = record.partition(\"\\n\")",
+  "new": "            key, _, value = record.partition(\" \")"
+ },
+ {
+  "label": "cmdparse: push_config folds the remote name's case",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            found[key] = value\n",
+  "new": "            found[key.lower()] = value\n"
  },
  {
   "label": "enforce: repo push config not read",

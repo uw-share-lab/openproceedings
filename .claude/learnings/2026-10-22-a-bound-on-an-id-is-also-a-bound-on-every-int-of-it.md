@@ -2,7 +2,7 @@
 
 **Key lesson:** When an id form gets a length bound, find every place that reads those characters before the model sees them (URL parsers, a crawler's `int()`, an importer's volume) and bound each one the same way, before `int()`: the model's regex refuses the record, but a parser that ran first can still crash on Python's 4,300-digit limit or a non-ASCII digit.
 
-- **Date:** 2026-10-22 · **Task:** task-280, task-281 · **Area:** ingest
+- **Date:** 2026-10-22 · **Task:** task-280, task-281, task-282 · **Area:** ingest
 - **Artifacts:** `backend/src/openproceedings/ingest/record.py` (`MAX_NATIVE_KEY`, `MAX_NATIVE_DIGITS`), `backend/src/openproceedings/ingest/urls.py` (`_NUMBER`), `backend/src/openproceedings/ingest/ris.py` (`_int`), `backend/src/openproceedings/ingest/sources/ojs.py` (`_number`), `backend/src/openproceedings/ingest/acm_table.py` (`DOI_DIGITS`), `backend/src/openproceedings/ingest/caps.py` (`LIST_CAPS`, `listed_total`), `backend/src/openproceedings/export.py`, `docs/results/2026-10-22-list-counts-and-native-ids.md`, decision-054, decision-055
 
 ## What we set out to do
@@ -121,3 +121,51 @@ record past a bound refused, record schema 9 → 10.
   backlog-only PR after review. The closing docs review found the network-facing one; the addendum's first draft named
   only dblp. Lesson: once a primitive is found unsafe, run `grep -rn isdigit backend/src` and check every hit, not only
   the files the task touched.
+
+## Addendum — 2026-10-22 (TASK-282)
+- **Sweep every reader of the primitive, in every tree that reads outside text, and give each hit a verdict.** `grep -rn isdigit backend/src`
+  gave 16 hits on `dev`. Three ran `int()`/`float()` on outside text and were the task (`http._seconds`,
+  `dblp.check_extract`, `dblp_aaai._year_of`); five already checked `isascii()`; seven need no change (two predicates
+  with no `int()`, `aaai_library` and `openalex_audit`; five are the tokenizer's math and currency rules in
+  `lexer.py` and `normalize.py`, where `lexer.digit` folds NFKC on purpose: token contract); one,
+  `eval/coverage_report.py:229`, read an operator's file and raised a bare `ValueError` on '²' and read '٢٠١٤' as
+  2014. All four readers now use the repo's `isascii() and isdigit()` idiom (there is no shared helper). The security
+  review then found three more outside `backend/src`, in `scripts/openalex_census.py`, `scripts/dblp_aaai_census.py`
+  and `scripts/aaai_library_census.py`, fixed the same way, with a length bound before `int()` (the scripts have no
+  test harness). The `.claude/scripts` hits read curl's `%{http_code}` and git's numstat, ASCII by construction. Of
+  the 9 `.claude/hooks` hits, most are fd-redirect checks with no `int()`; `require-review.sh:366` reads git numstat;
+  `cmdparse.git_bool` ran `int()` on a git config value (the third lesson below). The dblp years are bounded to four digits.
+- **"Never an exception" covers every parser on the path, not only the one in the bug report.** With `_seconds`
+  fixed, a hostile `Retry-After` still crashed the crawl through the HTTP-date branch: `parsedate_to_datetime` raises
+  `OverflowError` (not `ValueError`) for a year like 99999999999 or a huge offset. `retry_after` now catches it. And
+  `takedown_check.retry_after` checked ASCII digits but called `int()` on any length, so 5,000 digits passed Python's
+  4,300-digit limit; it now converts at most two digits after leading zeros (more is the 60 s cap).
+- **Failing closed on an exception doesn't help when the parse succeeds with the wrong answer.** `cmdparse.git_bool`
+  read a number only from digits, via `int()`. Round 2 left it alone because `push.followTags=²` raised and
+  `require-review.sh` turns an exception into exit 2. But git (2.42, checked) reads `1k`, `1K`, `1m`, `0x1`, `0X1` and
+  `+1` as true, and `git_bool` read them as false without raising, so `remote.origin.mirror=1k` let a bare
+  `git push origin` mirror every ref unreviewed (security review, round 3). `git_bool` now fails toward true: false
+  only for git's false words and a zero in strtoimax's forms (sign, `0x`, octal zeros, a k/m/g unit); anything else,
+  including what git refuses, is true. Python's own text methods are wider than git's: `strip()` dropped the trailing
+  space of a quoted `'0 '` and `lower()` turned a KELVIN SIGN into `k`, so it checks `isascii()` first and skips only
+  the leading whitespace strtoimax skips, and only before a number (git refuses `' false'`). Lesson: for a gate, ask which direction a misread fails, not only whether it
+  raises. The same review round found what feeds it had the same flaw: `push_config` split `--get-regexp` output on
+  lines and the first space, so `remote.pushdefault` set to `x`, a newline and `remote.origin.mirror 0` made the gate
+  read mirror as 0 while git mirrors, and a remote named `x y` hid its keys. It now reads `git config -z`. And it
+  lower-cased the whole key, though git keeps a remote name's case, so `remote.Origin.mirror=true` followed by
+  `remote.origin.mirror=false` read as one false key; it keeps git's form now. Lesson: a parser that mirrors a tool's
+  reading must also mirror its key identity, not only its values. Evidence:
+  the `push.followTags`, `remote.origin.mirror`, no-value key, forged-line and `remote.<x y>` rows in
+  `test-openproceedings-gates.sh`, and the `git_bool` and `push_config` mutants in `.claude/scripts/mutants/gates.json`.
+- **A test of "no hint" must tell no hint apart from a hint.** A '²' `Retry-After` on a 429 now waits the first
+  back-off step (5 s), and a '²' `ratelimit-reset` with `ratelimit-remaining: 0` waits the 60 s default; an
+  Arabic-Indic year inside the checked range (`١٩٩٠`) was read as 1990 before, so the test asserts the message's
+  "(no year)", not only the refusal. All 12 first-round cases failed on the old code. Evidence:
+  `test_fetch.py::test_a_non_ascii_retry_after_on_a_429_is_no_hint`,
+  `test_fetch.py::test_a_retry_after_date_past_what_a_datetime_holds_is_no_hint`,
+  `test_fetch.py::test_a_non_ascii_ratelimit_header_on_a_200_is_no_hint`,
+  `test_dblp.py::test_a_year_not_of_at_most_four_ascii_digits_is_no_year`,
+  `test_dblp_aaai.py::test_a_year_not_of_at_most_four_ascii_digits_is_no_year`,
+  `test_takedowns.py::test_retry_after_reads_whole_seconds_only`, `test_coverage_report.py::test_causes_load_from_toml_and_an_empty_cause_is_refused`.
+- Propagated to `.claude/skills/python-standards/SKILL.md` §Errors (the digit-check rule) and `CLAUDE.md` §Enforced
+  gates (a gate misreads only toward refusal).

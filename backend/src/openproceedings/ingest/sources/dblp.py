@@ -253,7 +253,9 @@ def check_extract(extract: Extract, table: Table = TABLE) -> None:
     the table names is in the release with the table's year: otherwise the table is stale (`CrawlError`)."""
     proceedings = {e.key: e for e in extract.entries if e.type == "proceedings"}
     for key, e in sorted(proceedings.items()):
-        year = int(e.fields["year"]) if e.fields.get("year", "").isdigit() else None
+        raw = e.fields.get("year", "")
+        # ASCII digits, at most four: '²', '١٩٨٠' or 5,000 digits is no year (TASK-282)
+        year = int(raw) if raw.isascii() and raw.isdigit() and len(raw) <= 4 else None
         in_range = year is None or FIRST_YEAR <= year <= LAST_YEAR  # no readable year: it may be in range
         if in_range and table.main_key(key) is None and key not in table.excluded:
             raise CrawlError(f"dblp proceedings {key} ({year or 'no year'}) is neither a main conference nor "

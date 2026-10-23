@@ -2446,22 +2446,39 @@ PUSH_CONFIG = r"^(remote\..*\.(push|mirror)|push\.(default|followtags)|remote\.p
 
 def push_config(argv: list[str], directory: str) -> dict[str, str]:
     """The repo's effective push config for a `git ...` argv (local, global and system files, of its -C /
-    --git-dir / GIT_DIR repo), keys lower-cased; a key set without a value is ''. A refspec-less push reads it
+    --git-dir / GIT_DIR repo), keys as git prints them (section and variable lower-case, the remote name as
+    written: `remote.Origin` and `remote.origin` are two remotes, so folding them let one hide the other's mirror,
+    TASK-282); a key set without a value is ''. A refspec-less push reads it
     (TASK-067 review gate: `git config remote.origin.push x:refs/heads/dev`, then `git push origin`). Config
-    this can't read (GIT_COMMON_DIR, GIT_CONFIG_*, …) is `git_config_opaque`, which the gates refuse first."""
+    this can't read (GIT_COMMON_DIR, GIT_CONFIG_*, …) is `git_config_opaque`, which the gates refuse first.
+    Read with `-z` (records end in NUL, the key ends at the first newline): a value may hold a newline and a remote
+    name a space, so splitting lines on the first space let a value forge a key, or hid a remote's key (TASK-282)."""
     _, eff, _, gitdir, _ = _git_options(argv, directory)
-    out = git(eff, *(["--git-dir", gitdir] if gitdir else []), "config", "--get-regexp", PUSH_CONFIG)
+    out = git(eff, *(["--git-dir", gitdir] if gitdir else []), "config", "-z", "--get-regexp", PUSH_CONFIG)
     found = {}
-    for line in out.splitlines():
-        key, _, value = line.partition(" ")
-        found[key.lower()] = value
+    for record in out.split("\0"):
+        if record:
+            key, _, value = record.partition("\n")
+            found[key] = value
     return found
 
 
+# git reads these as false (git 2.42): the words as written, and a zero in strtoimax's forms (the leading whitespace
+# it skips, a sign, 0x, octal zeros) with a k/m/g unit. Every other value is true or one git refuses (' false',
+# '0 '), so the gate reads it as true (TASK-282).
+GIT_FALSE = re.compile(r"false|no|off|[ \t\n\v\f\r]*[+-]?(?:0x0+|0+)[kmg]?")
+
+
 def git_bool(value: str) -> bool:
-    """git's reading of a boolean config value ('' is a key set with no value: true)."""
-    v = value.strip().lower()
-    return v in ("", "true", "yes", "on") or (v.lstrip("-").isdigit() and int(v) != 0)
+    """git's reading of a boolean config value, failing toward true: false only for what git reads as false.
+    `1k`, `0x1` and `+1` are true to git, so reading only digits as a number under-read them and let a
+    `remote.<name>.mirror` or `push.followTags` push through unreviewed (TASK-282). '' is true: `push_config`
+    gives '' for a key with no value (true to git) and for one set to '' (false to git), and reading both as true
+    only ever refuses. Nothing is stripped, and a non-ASCII value is true: Python's `strip()` and `lower()` would
+    turn ' false', '0 ' and '0' + KELVIN SIGN, which git refuses, into false."""
+    if not value.isascii():
+        return True
+    return not GIT_FALSE.fullmatch(value.lower())
 
 
 def push_config_risk(config: dict[str, str]) -> str | None:

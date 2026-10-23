@@ -119,7 +119,9 @@ fixtures under `backend/tests/fixtures/`; recording them is a separate, manual `
 | `autofix.sh` | After every edit: formats and fixes the file, then reports what it couldn't fix. Never blocks. |
 
 Every gate fails closed: a command it can't parse is refused where it matters, and an internal error exits 2
-(a crash would exit 1, which Claude Code lets through). block-ai-attribution, require-review and protect-data-dir
+(a crash would exit 1, which Claude Code lets through). A value a gate reads the way git does (a config boolean) is
+misread only toward refusal: exit 2 on an exception doesn't cover a parse that succeeds with the wrong answer
+(`cmdparse.git_bool` read git's true `1k`/`0x1`/`+1` as false, TASK-282). block-ai-attribution, require-review and protect-data-dir
 also exit 2 when Python can't run (no python3), and read the payload on stdin, so a command past ARG_MAX is still
 read; so does enforce-pr-workflow (TASK-172), which falls back to its text check when Python can't run (a git write word is refused). Every raw-text scan joins line continuations with cmdparse's one `join_continuations` (TASK-164). A command inside a `"$(…)"`,
 backquotes or an unquoted heredoc body is checked like any other, and one with `~` or `$` is read again with

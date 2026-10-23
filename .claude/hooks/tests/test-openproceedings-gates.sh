@@ -1173,7 +1173,79 @@ check $R block "push.default=matching in the repo"    "$(payload_bash 'git push 
 g config --unset push.default
 g config push.followTags true
 check $R block "push.followTags in the repo"          "$(payload_bash 'git push origin')"
+# git_bool fails toward true: false only for what git 2.42 reads as false (TASK-282). git reads 1k, 0x1 and +1
+# as true, so a gate that read only digits as a number let these push every tag, or mirror every ref, unreviewed.
+for v in 1 1k 1K 1m 1g 0x1 0X1 +1 -1 010 ² --1 0x 1t; do
+  g config push.followTags "$v"
+  check $R block "push.followTags=$v (git: true, or a value git refuses)" "$(payload_bash 'git push origin')"
+done
+g config push.followTags "$(printf '9%.0s' $(seq 5000))"
+check $R block "push.followTags of 5,000 nines"       "$(payload_bash 'git push origin')"
+for v in 0 00 0k 0K -0 +0 -0k 0x0 0X0 -0x0 false No OFF; do
+  g config push.followTags "$v"
+  check $R allow "push.followTags=$v (git: false)"   "$(payload_bash 'git push origin')"
+done
 g config --unset push.followTags
+for v in 1k 0x1 +1; do
+  g config remote.origin.mirror "$v"
+  check $R block "remote.origin.mirror=$v (git: a mirror)" "$(payload_bash 'git push origin')"
+done
+g config remote.origin.mirror 0x0
+check $R allow "remote.origin.mirror=0x0 (git: not a mirror)" "$(payload_bash 'git push origin')"
+g config --unset remote.origin.mirror
+for v in 0g 0M; do
+  g config push.followTags "$v"
+  check $R allow "push.followTags=$v (git: false)"   "$(payload_bash 'git push origin')"
+done
+# '0' + KELVIN SIGN (U+212A, lower() makes it 'k'); \x1c is whitespace to Python, not to git
+for v in 0t 0kk +-0 '0 ' "$(printf '0\342\204\252')" $'\x1c'0 ' false' $'\tno' 'off '; do
+  g config push.followTags "$v"
+  check $R block "push.followTags=$v (git refuses it)" "$(payload_bash 'git push origin')"
+done
+g config push.followTags "$(printf '\t0')"
+check $R allow "push.followTags=<tab>0 (git skips leading whitespace: false)" "$(payload_bash 'git push origin')"
+g config --unset push.followTags
+# a key with no value is true to git; --get-regexp prints it with value ''
+printf '[push]\n\tfollowTags\n' >> "$REPO/.git/config"
+check $R block "push.followTags with no value (git: true)" "$(payload_bash 'git push origin')"
+g config --unset push.followTags
+printf '[remote "origin"]\n\tmirror\n' >> "$REPO/.git/config"
+check $R block "remote.origin.mirror with no value (git: a mirror)" "$(payload_bash 'git push origin')"
+g config --unset remote.origin.mirror
+# push config is read NUL-separated (-z): a value with a newline can't forge a key, a remote name with a space
+# can't hide one (TASK-282 review)
+g config remote.origin.mirror true
+g config remote.pushdefault "$(printf 'x\nremote.origin.mirror 0')"
+check $R block "a mirror a forged remote.pushdefault line can't undo" "$(payload_bash 'git push origin')"
+g config --unset remote.pushdefault
+g config --unset remote.origin.mirror
+g config push.followTags true
+g config remote.pushdefault "$(printf 'x\npush.followtags 0')"
+check $R block "push.followTags a forged line can't undo" "$(payload_bash 'git push origin')"
+g config --unset remote.pushdefault
+g config --unset push.followTags
+g config "remote.x y.mirror" true
+check $R block "remote.<x y>.mirror (a space in the remote name)" "$(payload_bash 'git push origin')"
+g config --unset "remote.x y.mirror"
+g config "remote.x y.push" refs/heads/other2:refs/heads/other2
+check $R block "remote.<x y>.push (a space in the remote name)" "$(payload_bash 'git push origin')"
+g config --unset "remote.x y.push"
+# remote names are case-sensitive to git: remote.Origin and remote.origin are two keys, in either file order
+g config remote.Origin.mirror true
+g config remote.origin.mirror false
+check $R block "remote.Origin.mirror=true before remote.origin.mirror=false" "$(payload_bash 'git push origin')"
+g config --unset remote.Origin.mirror
+g config --unset remote.origin.mirror
+g config remote.origin.mirror false
+g config remote.Origin.mirror true
+check $R block "remote.origin.mirror=false before remote.Origin.mirror=true" "$(payload_bash 'git push origin')"
+g config --unset remote.origin.mirror
+g config --unset remote.Origin.mirror
+g config remote.Origin.push refs/heads/other2:refs/heads/other2
+g config remote.origin.push refs/heads/mut:refs/heads/mut
+check $R block "remote.Origin.push and remote.origin.push (regression: both refspecs refused)" "$(payload_bash 'git push origin')"
+g config --unset remote.Origin.push
+g config --unset remote.origin.push
 # the matching refspec ':' pushes every branch that exists on both sides
 check $R block "git push origin : (matching)"          "$(payload_bash 'git push origin :')"
 check $R block "git push origin +: (forced matching)"  "$(payload_bash 'git push origin +:')"
