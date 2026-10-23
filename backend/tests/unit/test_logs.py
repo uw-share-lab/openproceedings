@@ -4,9 +4,13 @@ redaction of query text and secrets, bound request context."""
 import io
 import json
 import logging
+import re
+from itertools import product
 
 import pytest
 from openproceedings import logs
+
+from tests.timing import assert_near_linear
 
 
 @pytest.fixture
@@ -277,3 +281,71 @@ def test_prefix_rule_still_spares_ordinary_fields(stream: io.StringIO, field: st
     logging.getLogger("openproceedings.x").info("e", extra={field: "v"})
     (rec,) = lines(stream)
     assert rec[field] == "v"
+
+
+# --- scrub in linear time (TASK-275) ---------------------------------------------------------------------------
+
+# the patterns as they were before TASK-275; the userinfo one with an empty `pre` group, which matches nothing, so
+# today's `scrub` (whose replacement names `pre`) runs on them unchanged
+_PRE275 = {
+    "_URL_USERINFO": re.compile(r"(?P<pre>)(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s@]+@"),
+    "_SECRET_QUERY": re.compile(
+        r"(?P<k>[?&](?:[a-z0-9_]*?(?:token|key|secret|password|passwd|auth|sig|signature)[a-z0-9_]*))=[^&\s#]*",
+        re.IGNORECASE,
+    ),
+}
+
+
+def _scrubbed(texts: list[str], patterns: dict[str, re.Pattern[str]] | None = None) -> list[str]:
+    """`logs.scrub` of each text, with `patterns` put on `logs` for the calls when given."""
+    saved = {name: getattr(logs, name) for name in patterns or {}}
+    try:
+        for name, pattern in (patterns or {}).items():
+            setattr(logs, name, pattern)
+        return [logs.scrub(t) for t in texts]
+    finally:
+        for name, pattern in saved.items():
+            setattr(logs, name, pattern)
+
+
+# every character each pattern reads: a letter, a digit, `.` for the other scheme punctuation, `:/@`, a space,
+# and one character neither reads; `?&=` and `sig` (a secret word whose letters are also name characters)
+@pytest.mark.parametrize("alphabet", ["a1.:/@ #", "?&=sig #"])
+def test_scrub_gives_what_it_gave_before_on_every_short_string(alphabet: str) -> None:
+    """Every string up to 6 characters (299,593 per alphabet): the same text out, so a log line reads as
+    before; 16.5M strings up to 7 and 8 characters showed no difference either when the patterns changed."""
+    texts = ["".join(chars) for n in range(7) for chars in product(alphabet, repeat=n)]
+    before = _scrubbed(texts, _PRE275)
+    for text, now, then in zip(texts, _scrubbed(texts), before, strict=True):
+        assert now == then, text
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("1a://u:p@h", "1a://[redacted]@h"),  # a scheme after digits still loses its userinfo
+        ("x+1a://u@h", "x+1a://[redacted]@h"),
+        ("see https://u@h and ftp://v@g", "see https://[redacted]@h and ftp://[redacted]@g"),
+        ("https://h/x?an_Auth_code=1&sig=2", "https://h/x?an_Auth_code=[redacted]&sig=[redacted]"),
+        (
+            "https://h/x?designer=1",
+            "https://h/x?designer=[redacted]",
+        ),  # `sig` anywhere in the name, as before
+    ],
+)
+def test_scrub_examples(value: str, expected: str) -> None:
+    assert logs.scrub(value) == expected
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda n: "a" * n,  # a scheme tried at every letter
+        lambda n: "x a://" + "b" * n,
+        lambda n: "?" + "token" * (n // 5),  # a secret word found again at every repeat
+        lambda n: "a1." * (n // 3),  # a scheme tried at every third character
+    ],
+)
+def test_scrub_is_linear_on_a_long_run(build: object) -> None:
+    """20k characters took 289-453 ms before TASK-275, 16 times 5k's: crawled text reaching a log line."""
+    assert_near_linear(logs.scrub, build, 5_000)  # type: ignore[arg-type]

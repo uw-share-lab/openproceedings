@@ -66,9 +66,16 @@ SECRET_PREFIXES = ("password", "passwd", "secret", "auth_", "bearer", "credentia
 NOT_SECRET = frozenset({"token_count", "tokens", "token_total"})
 REDACTED = "[redacted]"
 
-_URL_USERINFO = re.compile(r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s@]+@")
+# Both are tried at a run's start only, so each run of name characters is read once and scrub is linear in
+# its text (TASK-275): a match tried at every character of a long run read the rest of the run each time.
+# A scheme starts at a run's first letter: `pre` is the run's digits and `+.-` before it, put back as they
+# were, so `1a://user@` still loses its userinfo (a lookbehind alone would leave it).
+_URL_USERINFO = re.compile(
+    r"(?<![a-zA-Z0-9+.-])(?P<pre>[0-9+.-]*+)(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*+://)[^/\s@]+@"
+)
+# A parameter's whole name, read once, when it has a secret word anywhere in it (`?access_token=`).
 _SECRET_QUERY = re.compile(
-    r"(?P<k>[?&](?:[a-z0-9_]*?(?:token|key|secret|password|passwd|auth|sig|signature)[a-z0-9_]*))=[^&\s#]*",
+    r"(?P<k>[?&](?=[a-z0-9_]*(?:token|key|secret|password|passwd|auth|sig|signature))[a-z0-9_]*+)=[^&\s#]*",
     re.IGNORECASE,
 )
 
@@ -114,7 +121,7 @@ def bind(**fields: object) -> Iterator[None]:
 
 def scrub(text: str) -> str:
     """Remove credentials from any URLs in `text`: userinfo (`user:pass@`) and secret-looking query params."""
-    text = _URL_USERINFO.sub(r"\g<scheme>" + REDACTED + "@", text)
+    text = _URL_USERINFO.sub(r"\g<pre>\g<scheme>" + REDACTED + "@", text)
     return _SECRET_QUERY.sub(r"\g<k>=" + REDACTED, text)
 
 

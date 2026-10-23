@@ -50,3 +50,28 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
   growth tests).
 - Test: `backend/tests/unit/test_export_braced.py`; TASK-275 (`logs.scrub`) and TASK-276 (openreview_v1
   `_TRAILING_AND`) are quadratic patterns over a run found by the same sweep, for the same check.
+
+## Addendum 2026-10-23 (TASK-275, TASK-276)
+- **Each task named one pattern; its function had a second.** Timing every pattern in `logs.scrub` and
+  `openreview_v1._split_entry` on the same hostile shapes found `_SECRET_QUERY` (452 ms on `?` + `token` x 4,000,
+  16x for 4x the text) beside `_URL_USERINFO`, and `_AUTHOR_SEPARATOR`'s `\s+and\s+` (344 ms on 20k spaces) beside
+  `_TRAILING_AND`. Fixing only the named pattern would have left both functions quadratic. When one pattern is
+  found quadratic, time every pattern the same text reaches.
+- **A second shape: a run that must hold a word.** `[?&][a-z0-9_]*?(?:token|…)[a-z0-9_]*=` has one start (the `?`),
+  but the lazy scan stops at each place the word appears and the greedy rest reads to the run's end, then fails at
+  the missing `=`: once per occurrence. A lookahead checks the word and a possessive run takes the name once:
+  `[?&](?=[a-z0-9_]*(?:token|…))[a-z0-9_]*+=`. Exact for the same reason as the anchor: `=` is not a name
+  character, so any match's name is the whole run.
+- **A start that is not the run's first character.** A scheme starts at a letter, but its run can open with digits
+  (`1a://user@` redacts from `a`). `(?<![a-zA-Z0-9+.-])(?P<pre>[0-9+.-]*+)` starts at the run and puts the digits
+  back through `\g<pre>`; a lookbehind alone would leave `1a://user@` unredacted. The exhaustive length (6) is too
+  short to show that (the shortest such string has 7 characters), so a named example covers it.
+- **Swapping the old patterns back needs the new group.** `scrub`'s replacement now names `pre`, so the old
+  userinfo pattern goes back on `logs` with an empty `(?P<pre>)` in front, which matches nothing; the comparison
+  then runs today's `scrub` itself, as the swap rule above asks.
+- **Evidence.** 16.5M short strings (lengths 7-8 over each pattern's characters) showed no difference; the tests
+  keep 6 (scrub) and 7 (`_split_entry`). On the old patterns all seven growth cases failed; seven wrong patterns
+  (the digit-less lookbehind, `(?<! )` for `(?<!\s)`, `_` dropped from the name class, …) were each killed.
+- Propagated to: `.claude/skills/testing-standards/SKILL.md` §7 (the word-in-a-run shape, and timing the
+  neighbouring patterns); tests in `backend/tests/unit/test_logs.py` and
+  `backend/tests/unit/ingest/test_openreview_v1_authors.py`.
