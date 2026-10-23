@@ -15,7 +15,8 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 - Every module: `log = logging.getLogger(__name__)`. No `print()` outside CLI user output, and CLI output
   that's meant for the user (results, tables) goes to stdout, not through logging.
 - Format: one JSON object per line (`ts`, `level`, `logger`, `event`, then fields). `op --log-format text`
-  renders the same fields as one readable line (values JSON-escaped) for local reading only; JSON is the
+  renders the same fields as one readable line (values, and any key that is not a plain name, JSON-escaped;
+  every line break left, in the message too, escaped) for local reading only; JSON is the
   default and the only format anything collects. A field named like a core key is emitted as
   `field_<key>`, so it can never overwrite the line's shape. `event` is a short
   **snake_case constant** (`crawl_page_fetched`, `index_built`), not a sentence, named `<noun>_<verb>`
@@ -62,7 +63,8 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 - Exceptions from HTTP clients can carry URLs with credentials or tokens. `logs.py` scrubs `user:pass@` and
   secret-looking query parameters (after `?&#;`, a name of letters, digits and `_.%-` holding `token`, `key`,
   `secret`, `password`, `auth` or `sig`: `?access_token=`, `?X-Amz-Signature=`, `?api%5Fkey=`,
-  `#access_token=`) and `Bearer <token>` from every string value, every key at any depth (two keys that scrub
+  `#access_token=`) and the word after a whole-word `bearer` (`Bearer <token>`; prose `a bearer of` loses `of`)
+  from every string value, every key at any depth (two keys that scrub
   alike are both kept, the second as `key#2`), and exception and stack text, in time linear in the text
   (TASK-275); a percent-encoded URL inside a value is not decoded (TASK-283). It also redacts secret-shaped keys (starting or ending with a secret word: `password…`, `…_token`, `auth_…`,
   `secret…`, `bearer…`, `…api_key`) case-insensitively at any depth, while ordinary fields like

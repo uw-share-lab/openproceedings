@@ -82,7 +82,7 @@ _SECRET_QUERY = re.compile(
     re.IGNORECASE,
 )
 # An `Authorization: Bearer …` header quoted in exception text; one try per `bearer`, so linear.
-_BEARER = re.compile(r"(?P<b>\bbearer[ \t]+)[^\s\"',;]+", re.IGNORECASE)
+_BEARER = re.compile(r"(?P<b>\bbearer[^\S\r\n]+)[^\s\"',;\\]+", re.IGNORECASE)
 
 # Attributes every LogRecord has; anything else on a record came from `extra=` or `bind()`.
 _STANDARD = frozenset(vars(logging.LogRecord("", 0, "", 0, "", None, None))) | {"message", "asctime"}
@@ -140,24 +140,24 @@ def _sensitive(key: str, log_query_text: bool) -> bool:
     return k in QUERY_FIELDS and not log_query_text
 
 
-def _put(out: dict[str, object], name: str, value: object) -> None:
-    """`out[name] = value`, or under `name#2`, `name#3`, … when two keys scrub to the same name, so neither is lost."""
-    key, n = name, 1
+def _put(out: dict[str, object], last: dict[str, int], name: str, value: object) -> None:
+    """`out[name] = value`, or under `name#2`, `name#3`, … when two keys scrub to the same name, so neither is lost;
+    `last` holds each name's last suffix, so many keys that collide cost linear time, not a walk from `#2` each."""
+    key, n = name, last.get(name, 1)
     while key in out:
         n += 1
         key = f"{name}#{n}"
+    last[name] = n
     out[key] = value
 
 
 def _clean(value: object, log_query_text: bool) -> object:
     if isinstance(value, Mapping):
         out: dict[str, object] = {}
+        last: dict[str, int] = {}
         for k, v in value.items():  # `_sensitive` reads the key as given, before its scrub
-            _put(
-                out,
-                scrub(str(k)),
-                REDACTED if _sensitive(str(k), log_query_text) else _clean(v, log_query_text),
-            )
+            cleaned = REDACTED if _sensitive(str(k), log_query_text) else _clean(v, log_query_text)
+            _put(out, last, scrub(str(k)), cleaned)
         return out
     if isinstance(value, list | tuple | set | frozenset):
         return [_clean(v, log_query_text) for v in value]
@@ -172,10 +172,11 @@ def _fields(record: logging.LogRecord, log_query_text: bool) -> dict[str, object
     raw: dict[str, object] = dict(_context.get())
     raw.update({k: v for k, v in vars(record).items() if k not in _STANDARD})
     out: dict[str, object] = {}
+    last: dict[str, int] = {}
     for key, value in raw.items():
         # a field can never overwrite the line's shape, and a key that is a URL loses its credentials
         name = f"field_{key}" if key in CORE_KEYS else scrub(key)
-        _put(out, name, REDACTED if _sensitive(key, log_query_text) else _clean(value, log_query_text))
+        _put(out, last, name, REDACTED if _sensitive(key, log_query_text) else _clean(value, log_query_text))
     return out
 
 
@@ -208,18 +209,23 @@ class _JsonFormatter(_Formatter):
         return json.dumps(line, default=str, ensure_ascii=False)
 
 
+# Every character `str.splitlines` breaks a line at, escaped, so no text can start a forged log line: JSON leaves
+# U+0085, U+2028 and U+2029 as they are, and the message is not JSON-encoded.
+_LINE_BREAKS = str.maketrans({c: f"\\u{ord(c):04x}" for c in "\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029"})
+
+
 class _TextFormatter(_Formatter):
     def format(self, record: logging.LogRecord) -> str:
-        # Values are JSON-encoded, and so is a key that is not a plain name, so a newline inside either can never
-        # start a forged log line.
+        # Values are JSON-encoded, and so is a key that is not a plain name; then every line break left is escaped.
         parts = [
             f"{k if k.isascii() and k.isidentifier() else json.dumps(k, ensure_ascii=False)}="
             f"{json.dumps(v, default=str, ensure_ascii=False)}"
             for k, v in self._extras(record).items()
         ]
-        return f"{record.levelname:<7} {record.name}: {scrub(record.getMessage())}" + (
+        line = f"{record.levelname:<7} {record.name}: {scrub(record.getMessage())}" + (
             "  " + " ".join(parts) if parts else ""
         )
+        return line.translate(_LINE_BREAKS)
 
 
 # The server's loggers (task-034). `uvicorn` (and `uvicorn.error` under it) goes through our handler, so its

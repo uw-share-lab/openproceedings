@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-20 15:18'
-updated_date: '2026-10-23 15:06'
+updated_date: '2026-10-23 15:18'
 labels:
   - logging
   - security
@@ -24,6 +24,7 @@ Found by TASK-272's security sweep (2026-10-20), pre-existing: logs.py _URL_USER
 - [x] #1 scrub's userinfo redaction is linear with identical output (exhaustive short-string comparison), with a CPU-growth test
 - [x] #2 _SECRET_QUERY (the second quadratic pattern in scrub) is linear with identical output on names of [a-z0-9_] (same comparison), with a CPU-growth test on ? + token x n
 - [x] #3 Review follow-ups fixed at the owner's request: a query name may hold - . % (X-Amz-Signature, api-key, api%5Fkey are redacted), and every log key, top-level and nested, is scrubbed
+- [x] #4 Review rounds 2-3 (owner asked to fix the gaps found): # and ; start a secret parameter, the word after a whole-word bearer is redacted, two keys that scrub alike are both kept (key#2, in linear time), and the text format escapes every line break in keys, values and the message
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -42,4 +43,6 @@ TASK-281 review (2026-10-22): a NeurIPS listing warning also logs its see-also l
 2026-10-23 review round 1: qa-auditor's Must (no test caught (?P<pre>[0-9]*+), which leaks .a://u@h: 7 characters, past the exhaustive length) fixed with named examples; growth cases now run a+ and a- and a query name of -%. too. At the owner's request two gaps the review found were fixed in this task: _SECRET_QUERY's name class is now [a-z0-9_.%-] (security-reviewer), and _clean/_fields scrub every key (observability-reviewer). Both only widen redaction; the old-pattern comparison's alphabet leaves out -.% and examples cover them.
 
 2026-10-23 review round 2: code-reviewer's Should (two keys scrubbing alike kept only the last value) fixed with _put (name#2, #3, …) at both sites; qa-auditor's Must (dropping . from the lookahead class alone leaked ?client.secret=) fixed with that example; growth cases now repeat the word after each added name character. Round-2 nits fixed: # and ; start a parameter (fragments' #access_token=), Bearer <token> is redacted (_BEARER), the text formatter JSON-encodes a key that is not a plain name. Deferred as TASK-283: percent-encoded URLs inside a value, and a bare token= with no ?&#; before it.
+
+2026-10-23 review round 3: correction to the round-1 note: the shortest string that shows the missing +.- in pre is .a://b@ (7 characters); .a://u@h, the example, has 8. Round-3 nits fixed: _put remembers each name's last suffix (n colliding keys were n²/2 steps); the text format escapes every character str.splitlines breaks at (U+0085, U+2028, U+2029 passed json.dumps; the message was never encoded); _BEARER takes any non-line-break whitespace after bearer and stops at a backslash; an example of # ending a value.
 <!-- SECTION:NOTES:END -->

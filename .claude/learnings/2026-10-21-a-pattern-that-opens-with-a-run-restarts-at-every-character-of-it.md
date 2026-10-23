@@ -93,6 +93,11 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
   is slow only when the word repeats (`?-token-token…`).
 - Round 3 also made `#` and `;` start a parameter (`#access_token=` fragments) and redacts `Bearer <token>`;
   percent-encoded URLs inside a value and a bare `token=` with nothing before it are TASK-283.
+- **A fix for a collision can be the next quadratic.** `_put`'s first form walked `#2, #3, …` from the start for
+  every colliding key: 4,000 keys took 1.1 s (observability-reviewer, round 3). It now remembers each name's last
+  suffix. And "JSON-encoded so a newline can't forge a line" was true of `\n` only: `json.dumps(…,
+  ensure_ascii=False)` leaves U+0085, U+2028 and U+2029 raw, which `str.splitlines` breaks at, so the text
+  format now escapes every such character in the whole line.
 - Propagated to: `.claude/skills/testing-standards/SKILL.md` §7 (the word-in-a-run shape, timing the
   neighbouring patterns, a growth case per character a lookbehind refuses); `.claude/skills/logging-standards/SKILL.md`
   (what scrub redacts, keys included); tests in `backend/tests/unit/test_logs.py` and

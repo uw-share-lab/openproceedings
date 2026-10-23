@@ -10,7 +10,7 @@ from itertools import product
 import pytest
 from openproceedings import logs
 
-from tests.timing import assert_near_linear
+from tests.timing import assert_near_linear, growth
 
 
 @pytest.fixture
@@ -310,7 +310,7 @@ def _scrubbed(texts: list[str], patterns: dict[str, re.Pattern[str]] | None = No
 
 # every character each pattern reads: a letter, a digit, `.` for the other scheme punctuation, `:/@`, a space,
 # and `#`, which ends a query value; `?&=` and `sig` (a secret word whose letters are also name characters), a
-# space and `,`, which neither pattern reads. Since TASK-275 `-.%` are name characters and `#;` start a name too,
+# space and `,`, which no pattern reads here (`bearer` can't form without a `b`). Since TASK-275 `-.%` are name characters and `#;` start a name too,
 # so they are left out of the query alphabet: what they add is only more redaction (examples below).
 @pytest.mark.parametrize("alphabet", ["a1.:/@ #", "?&=sig ,"])
 def test_scrub_gives_what_it_gave_before_on_every_short_string(alphabet: str) -> None:
@@ -344,12 +344,16 @@ def test_scrub_gives_what_it_gave_before_on_every_short_string(alphabet: str) ->
         ("https://h/x?api%5Fkey=ab", "https://h/x?api%5Fkey=[redacted]"),
         ("https://h/x?auth.v2=ab", "https://h/x?auth.v2=[redacted]"),
         ("https://h/x?client.secret=ab", "https://h/x?client.secret=[redacted]"),  # the word after a `.`
+        ("https://h/x?sig=a#b", "https://h/x?sig=[redacted]#b"),  # `#` ends a value
         ("https://h/cb#access_token=ab&x=1", "https://h/cb#access_token=[redacted]&x=1"),  # a fragment
         ("https://h/x?a=1;token=2", "https://h/x?a=1;token=[redacted]"),
         ("Authorization: Bearer ab.c-d", "Authorization: Bearer [redacted]"),
         ('{"authorization": "bearer ab"}', '{"authorization": "bearer [redacted]"}'),
         ("a bearer of news", "a bearer [redacted] news"),  # a backstop: an ordinary `bearer` loses a word
         ("a forbearer of x", "a forbearer of x"),  # `bearer` only as a whole word
+        ('\\"Bearer ab\\"', '\\"Bearer [redacted]\\"'),  # JSON-escaped: the escape stays
+        ("Bearer\u00a0ab", "Bearer\u00a0[redacted]"),  # any whitespace but a line break
+        ("Bearer\nab", "Bearer\nab"),
         (
             "https://h/x?designer=1",
             "https://h/x?designer=[redacted]",
@@ -423,3 +427,26 @@ def test_text_format_escapes_a_key_so_a_newline_cannot_fake_a_line() -> None:
     out = buf.getvalue().strip()
     assert len(out.splitlines()) == 1
     assert '"x\\nINFO forged"=1' in out and " plain_name=2" in out
+
+
+@pytest.mark.parametrize("brk", ["\n", "\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029"])
+def test_text_format_escapes_every_line_break_in_keys_values_and_the_message(brk: str) -> None:
+    """Every character `str.splitlines` breaks at, in a key, a value or a %-formatted message (banned, but a
+    backstop), stays on one line."""
+    buf = io.StringIO()
+    logs.configure_logging("INFO", "text", stream=buf)
+    logging.getLogger("openproceedings.x").info("e %s", f"m{brk}INFO forged", extra={f"k{brk}x": f"v{brk}y"})
+    assert len(buf.getvalue().splitlines()) == 1
+
+
+def test_many_keys_that_scrub_alike_are_all_kept_in_linear_time() -> None:
+    """Each name's last suffix is remembered, so n colliding keys cost n steps, not n²/2."""
+
+    def build(n: int) -> dict[str, int]:
+        return {f"https://u{i}@h": i for i in range(n)}
+
+    out = logs._clean(build(1000), log_query_text=False)
+    assert isinstance(out, dict) and len(out) == 1000 and out["https://[redacted]@h#1000"] == 999
+    small, large = build(2_000), build(8_000)
+    ratio, pairs = growth(lambda: logs._clean(small, False), lambda: logs._clean(large, False))
+    assert ratio < 8, (ratio, pairs)
