@@ -4,6 +4,7 @@ redaction of query text and secrets, bound request context."""
 import io
 import json
 import logging
+import random
 import re
 from itertools import product
 
@@ -291,7 +292,7 @@ _PRE275_QUERY = re.compile(
     r"(?P<k>[?&](?:[a-z0-9_]*?(?:token|key|secret|password|passwd|auth|sig|signature)[a-z0-9_]*))=[^&\s#]*",
     re.IGNORECASE,
 )
-_USERINFO, _QUERY = logs._SCRUBS[0], logs._SCRUBS[2]
+_QUERY = logs._SCRUBS["parameter"]
 
 
 def _strings(alphabet: str, longest: int) -> list[str]:
@@ -323,6 +324,68 @@ def test_every_query_value_redacted_before_is_redacted_on_every_short_string() -
         new = [m.span("v") for m in _QUERY.finditer(text)]
         assert _redacted(old) <= _redacted(new), text
         assert {b for a, b in old if a == b} <= {b for a, b in new}, text
+
+
+def _pre275_secrets(text: str) -> tuple[set[int], set[int]]:
+    """What origin/dev's scrub redacted in `text`, by position in `text`: its two passes in order, each secret
+    replaced by as many NULs (no pattern reads a NUL, as none read `[redacted]`), so positions survive; and the
+    points where it inserted REDACTED for an empty secret."""
+    out = _PRE275_USERINFO.sub(
+        lambda m: m.group("scheme") + "\0" * (m.end() - m.end("scheme") - 1) + "@", text
+    )
+    empty = {m.end() for m in _PRE275_QUERY.finditer(out) if m.end("k") + 1 == m.end()}
+    out = _PRE275_QUERY.sub(lambda m: m.group("k") + "=" + "\0" * (m.end() - m.end("k") - 1), out)
+    return {i for i, c in enumerate(out) if c == "\0"}, empty
+
+
+# the pieces where the patterns differ: schemes plain and encoded, `@` and `%40`, the separators, quotes, `%`, `;`,
+# name characters, secret words
+_PIECES = [
+    "a://",
+    "%3A%2F%2F",
+    "x",
+    "%40",
+    "@",
+    ":",
+    "/",
+    '"',
+    "'",
+    "%",
+    ";",
+    "_",
+    "token",
+    "sig",
+    "?",
+    "&",
+    "=",
+    "#",
+    " ",
+    "%3F",
+    "%3D",
+    "%26",
+    "1",
+    "-",
+    "bearer ",
+]
+
+
+def _assert_superset(text: str) -> None:
+    old, empty = _pre275_secrets(text)
+    spans = logs.secret_spans(text)
+    assert old <= _redacted(spans), text
+    assert all(any(a <= e <= b for a, b in spans) for e in empty), text
+
+
+def test_scrub_redacts_everything_it_did_before_on_every_short_join_of_pieces() -> None:
+    """The whole scrub against origin/dev's: every join of up to 3 pieces (16,276), then 30,000 seeded random joins
+    of 4 to 12. Each character the old scrub redacted, after both of its passes, is inside a span the new one
+    redacts (reviewers found a pass order that broke this: one pattern rewriting text another needed)."""
+    for n in range(4):
+        for parts in product(_PIECES, repeat=n):
+            _assert_superset("".join(parts))
+    rng = random.Random(275)
+    for _ in range(30_000):
+        _assert_superset("".join(rng.choice(_PIECES) for _ in range(rng.randint(4, 12))))
 
 
 @pytest.mark.parametrize(
@@ -398,6 +461,46 @@ def test_every_query_value_redacted_before_is_redacted_on_every_short_string() -
         ('{"token": \'ab"c\'}', "{\"token\": '[redacted]'}"),  # the value's own quote
         ("{'token': b'ab'}", "{'token': b'[redacted]'}"),  # a bytes value
         ('{"tokens": 3, "page": "2"}', '{"tokens": 3, "page": "2"}'),  # a value that is not quoted is left
+        # round 5: one pattern must not rewrite text another needs (scrub redacts the union of their spans)
+        ('{"password": "hunter2 key=1"}', '{"password": "[redacted]'),  # spans merge: the quote goes too
+        ('{"client_secret": "abc;sig=x"}', '{"client_secret": "[redacted]'),
+        ("Authorization=Bearer SECRET", "Authorization=[redacted] [redacted]"),
+        ("token=Bearer SECRET", "token=[redacted] [redacted]"),
+        (
+            "{'token_url': 'https://h/t?x=1&key=abc', 'password': 'SECRET2'}",
+            "{'token_url': '[redacted] 'password': '[redacted]'}",  # `token` in the key: its value too
+        ),
+        (
+            "https://h/login?next=https%3A%2F%2Fh2&password=p%40ssw0rd",
+            "https://h/login?next=https%3A%2F%2Fh2&password=[redacted]",
+        ),
+        ('{"n":"https%3A%2F%2Fh","password":"p%40ss"}', '{"n":"https%3A%2F%2Fh","password":"[redacted]"}'),
+        (
+            '{"u":"a://x","password":"p@ss"}',
+            '{"u":"a://[redacted]"}',
+        ),  # a URL's userinfo may hold `"`: all of it
+        # round 5: every secret word and name character, plain and encoded
+        ("?password=a&passwd=b", "?password=[redacted]&passwd=[redacted]"),
+        ("?n=%3Fpassword%3Da%26passwd%3Db", "?n=%3Fpassword%3D[redacted]%26passwd%3D[redacted]"),
+        ("{'cookie': 'sid=abc; x=1'}", "{'cookie': '[redacted]'}"),
+        ('{"credentials": "u:p"}', '{"credentials": "[redacted]"}'),
+        ("?bearer=x", "?bearer=[redacted]"),
+        ("?token%5Fid=x&token-id=y", "?token%5Fid=[redacted]&token-id=[redacted]"),
+        ("?n=%3Ftoken%2Did%3Dx%26a%2Etoken%3Dy", "?n=%3Ftoken%2Did%3D[redacted]%26a%2Etoken%3D[redacted]"),
+        (
+            "?state=token%3DSECRET",
+            "?state=token%3D[redacted]",
+        ),  # an encoded name starts where a plain one would
+        ("?next=%2Ftoken%3DSECRET", "?next=%2Ftoken%3D[redacted]"),
+        ("token%3dSECRET", "token%3d[redacted]"),
+        ("?n=%3Chttps%3A%2F%2Fu%3Ap%40h%3E", "?n=%3Chttps%3A%2F%2F[redacted]%40h%3E"),
+        ("?n=%3Ftoken%3Dab%25cd", "?n=%3Ftoken%3D[redacted]"),  # `%25` is part of the value
+        ("{'u': '%3Ftoken%3Dab', 'x': 1}", "{'u': '%3Ftoken%3D[redacted]', 'x': 1}"),  # `'` ends it
+        ("token='abc def', x=1", "token=[redacted] x=1"),  # a quoted value whole
+        ("Bearer\rab", "Bearer\rab"),
+        ("?h=Bearer%20abc", "?h=Bearer%20[redacted]"),
+        ("Bearer+abc", "Bearer+[redacted]"),
+        ("token=%3Ftoken%3D", "token=[redacted]"),  # touching spans (an empty one at another's end) are one
         (
             "https://h/x?designer=1",
             "https://h/x?designer=[redacted]",
@@ -445,7 +548,7 @@ def test_scrub_examples(value: str, expected: str) -> None:
 def test_scrub_is_linear_on_a_long_run(build: object) -> None:
     """About 20k characters took 97-760 ms before TASK-275 by shape (292 ms on a run of letters, 758 ms on
     `?` + `token` x 4,000), 16 times 5k's: crawled text reaching a log line. The `-.%`, `#` and `bearer` shapes
-    guard what TASK-275 added (the old patterns didn't read them), the rest what TASK-283 added."""
+    guard what TASK-275 added (the old patterns didn't read them), the shapes after `bearer` what TASK-283 added."""
     assert_near_linear(logs.scrub, build, 5_000)  # type: ignore[arg-type]
 
 

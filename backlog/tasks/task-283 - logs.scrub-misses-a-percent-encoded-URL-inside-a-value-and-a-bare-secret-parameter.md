@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-23 15:06'
-updated_date: '2026-10-23 16:41'
+updated_date: '2026-10-23 18:25'
 labels:
   - logging
   - security
@@ -42,4 +42,6 @@ At the owner's request (2026-10-23), in TASK-275's branch: a parameter name star
 2026-10-23: done in TASK-275's branch at the owner's request. logs._SCRUBS: userinfo, encoded userinfo (%3A%2F%2F…%40), parameters starting after any non-name character (a bare token=; prose monkey=1 loses its value, documented), encoded parameters (%3F|%26|%23|%3B name %3D value, value stopping at %26/%23), quoted key + quoted value (JSON and a dict's repr; unquoted values and JSON escaped inside a string are left), bearer. The old equality test became a superset test: every character the pre-TASK-275 query pattern redacted falls in a v span of the new one, over every string up to 6 characters of '?&=sig #'. Growth: 13 new shapes, linear at 20k vs 80k on an idle machine.
 
 2026-10-23: the automated commit review's three gaps fixed: a quoted value takes its own quote and an optional b prefix ({"token": 'abc'}, {'token': b'abc'}); an encoded scheme may start right after another escape (%22https%3A…); an encoded value runs to %26, %23, a raw &, #, whitespace or a quote (ab!c*d(e)/f:g was cut at !). All linear at 20k vs 80k.
+
+2026-10-23 review round 5: three reviewers found passes hiding secrets from later ones (a parameter value eating a quoted value's closing quote, or Bearer; encoded userinfo swallowing &password=…%40). scrub now redacts the union of every pattern's v spans over the text as given (logs.secret_spans), and a whole-scrub superset test against origin/dev's two sequential passes replaces the one-pattern one. Also: an encoded parameter starts wherever a plain one would (after a non-name character or a non-name escape: ?state=token%3Dx); a quoted parameter value is taken whole (token='a b'); _WORDS gains cookie, credential, bearer; bearer may be followed by %20 or + (Bearer%20abc, named in the description, was still in clear); encoded userinfo excludes raw &#?;="'. Double encoding (%253D) is documented as not decoded.
 <!-- SECTION:NOTES:END -->

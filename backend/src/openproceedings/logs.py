@@ -10,8 +10,9 @@ Privacy (Must, logging-standards §Privacy):
 - abstracts, author lists, request bodies/headers/cookies and anything secret-shaped (a key STARTING or ENDING with
   `password`, `token`, `secret`, `api_key`/`apikey`, `auth`, `cookie`, `credential`) are always redacted;
 - key matching is case-insensitive and reaches into nested dicts and lists;
-- credentials are scrubbed from URLs and from exception text (`user:pass@`, `?token=…`), so an HTTP-client
-  error can never carry an OpenReview password into a log.
+- credentials are scrubbed from every string value, key, and exception and stack text (`scrub`: URL userinfo,
+  secret parameters and quoted keys, bearer tokens, as written or percent-encoded), so an HTTP-client error can
+  never carry an OpenReview password into a log.
 
 Request-scoped fields are added with `bind(...)` (contextvars): they follow asyncio tasks and anyio
 `to_thread` workers, but NOT raw `threading.Thread` / `ThreadPoolExecutor` workers — bind inside those.
@@ -66,46 +67,61 @@ SECRET_PREFIXES = ("password", "passwd", "secret", "auth_", "bearer", "credentia
 NOT_SECRET = frozenset({"token_count", "tokens", "token_total"})
 REDACTED = "[redacted]"
 
-# What scrub redacts: in each pattern the `v` group is the secret, replaced by REDACTED, the rest kept as written.
-# Every pattern is tried once per run it starts (a lookbehind, or a literal start), takes its runs possessively
-# and checks a secret word with a lookahead, so scrub is linear in its text (TASK-275): tried at every character
-# of a long run, a pattern read the rest of the run each time, and a lazy scan for the word re-read the rest of a
-# name once per place the word appears in it.
-_WORDS = "token|key|secret|password|passwd|auth|sig|signature"
+# What scrub redacts: in each pattern the `v` group is a secret. Every pattern reads the text as given, and the
+# union of their `v` spans is redacted at once, so no pattern can rewrite text another needs (a parameter's value
+# swallowing a quoted key's closing quote; an encoded URL swallowing the `&password=` after it). Every pattern is
+# tried once per run it starts (a lookbehind, or a literal start), takes its runs possessively and checks a secret
+# word with a lookahead, so scrub is linear in its text (TASK-275): tried at every character of a long run, a
+# pattern read the rest of the run each time, and a lazy scan for the word re-read the rest of a name once per
+# place the word appears in it. Double encoding (`%253D`) is not decoded.
+_WORDS = "token|key|secret|password|passwd|auth|sig|signature|cookie|credential|bearer"
 _NAME = r"[a-z0-9_.%-]"  # a parameter name's characters (`X-Amz-Signature`, `api%5Fkey`, `client.secret`)
 _ENC_NAME = r"(?:[a-z0-9_.-]|%5F|%2D|%2E)"  # the same, percent-encoded
-_SCRUBS = (
-    # userinfo (`user:pass@`). A scheme starts at its run's first letter, after the run's digits and `+.-`, so
-    # `1a://user@` and `.a://user@` lose their userinfo (a lookbehind alone would leave them).
-    re.compile(r"(?<![a-zA-Z0-9+.-])[0-9+.-]*+[a-zA-Z][a-zA-Z0-9+.-]*+://(?P<v>[^/\s@]+)@"),
-    # the same, percent-encoded in a value (`?next=https%3A%2F%2Fu%3Ap%40h`, TASK-283), also right after
-    # another escape (`%22https%3A…`)
-    re.compile(
-        r"(?:(?<![a-z0-9+.%-])|(?<=%[0-9a-f]{2}))[0-9+.-]*+[a-z][a-z0-9+.-]*+%3A%2F%2F(?P<v>(?:[^%/\s@]|%(?!2F|40)[0-9a-f]{2})++)%40",
-        re.IGNORECASE,
-    ),
-    # a parameter whose name holds a secret word, wherever its name starts (`?access_token=`, `#access_token=`,
-    # `;token=`, a bare `token=`, TASK-283); prose such as `monkey=1` loses its value too
-    re.compile(rf"(?<!{_NAME})(?={_NAME}*(?:{_WORDS})){_NAME}*+=(?P<v>[^&\s#]*)", re.IGNORECASE),
-    # the same, percent-encoded in a value (`?next=https%3A%2F%2Fh%2F%3Ftoken%3Dabc`, TASK-283)
-    re.compile(
-        rf"(?:%3F|%26|%23|%3B)(?={_ENC_NAME}*(?:{_WORDS})){_ENC_NAME}*+%3D"
-        r"(?P<v>(?:[^%&\s#\"']|%(?!26|23)[0-9a-f]{2})*+)",
-        re.IGNORECASE,
-    ),
-    # a quoted key holding a secret word and its quoted value, either quote (`{"access_token": "abc"}`, a dict's
-    # repr, a bytes value `b'abc'`, TASK-283)
-    re.compile(
-        rf"(?P<q>[\"'])(?={_NAME}*(?:{_WORDS})){_NAME}*+(?P=q)\s*+:\s*+b?(?P<q2>[\"\'])"
-        r"(?P<v>(?:(?!(?P=q2))[^\\]|\\[\s\S])*+)(?P=q2)",
-        re.IGNORECASE,
-    ),
-    # `Authorization: Bearer …` quoted in exception text: the word after a whole-word `bearer` and whitespace that
-    # is no line break; an escape inside it (`\/`, JSON) is part of it, an escaped quote ends it
-    re.compile(
-        r"\bbearer[^\S\n\r\v\f\x1c-\x1e\x85\u2028\u2029]++(?P<v>(?:[^\s\"',;\\]|\\[^\s\"'\\])++)",
-        re.IGNORECASE,
-    ),
+# where an encoded name starts: after a character that is no name character, or after an escape that is none
+_ENC_START = r"(?:(?<![a-z0-9_.%-])|(?<=%[0-9a-f]{2})(?<!%5F)(?<!%2D)(?<!%2E))"
+_QUOTED = r"(?P<{q}>[\"'])(?:(?!(?P={q}))[^\\]|\\[\s\S])*+(?P={q})"  # a quoted string, escapes inside it
+_SCRUBS = types.MappingProxyType(
+    {
+        # userinfo (`user:pass@`). A scheme starts at its run's first letter, after the run's digits and `+.-`, so
+        # `1a://user@` and `.a://user@` lose their userinfo (a lookbehind alone would leave them).
+        "userinfo": re.compile(r"(?<![a-zA-Z0-9+.-])[0-9+.-]*+[a-zA-Z][a-zA-Z0-9+.-]*+://(?P<v>[^/\s@]+)@"),
+        # the same, percent-encoded in a value (`?next=https%3A%2F%2Fu%3Ap%40h`, TASK-283), also right after
+        # another escape (`%22https%3A…`); an encoded authority holds no raw `&#?;="'`
+        "encoded_userinfo": re.compile(
+            r"(?:(?<![a-z0-9+.%-])|(?<=%[0-9a-f]{2}))[0-9+.-]*+[a-z][a-z0-9+.-]*+%3A%2F%2F"
+            r"(?P<v>(?:[^%/\s@&#?;=\"']|%(?!2F|40)[0-9a-f]{2})++)%40",
+            re.IGNORECASE,
+        ),
+        # a parameter whose name holds a secret word, wherever its name starts (`?access_token=`,
+        # `#access_token=`, `;token=`, a bare `token=`, TASK-283), its value a quoted string whole (`token='a b'`)
+        # and/or up to `&`, whitespace or `#`; prose such as `monkey=1`, and a traceback's `key=lambda`, lose
+        # their value too
+        "parameter": re.compile(
+            rf"(?<!{_NAME})(?={_NAME}*(?:{_WORDS})){_NAME}*+=(?P<v>(?:{_QUOTED.format(q='pq')})?+[^&\s#]*)",
+            re.IGNORECASE,
+        ),
+        # the same, percent-encoded in a value (`?next=https%3A%2F%2Fh%2F%3Ftoken%3Dabc`, `?state=token%3Dabc`)
+        "encoded_parameter": re.compile(
+            rf"{_ENC_START}(?={_ENC_NAME}*(?:{_WORDS})){_ENC_NAME}*+%3D"
+            r"(?P<v>(?:[^%&\s#\"']|%(?!26|23)[0-9a-f]{2})*+)",
+            re.IGNORECASE,
+        ),
+        # a quoted key holding a secret word and its quoted value, either quote (`{"access_token": "abc"}`, a
+        # dict's repr, a bytes value `b'abc'`, TASK-283)
+        "quoted": re.compile(
+            rf"(?P<q>[\"'])(?={_NAME}*(?:{_WORDS})){_NAME}*+(?P=q)\s*+:\s*+b?(?P<q2>[\"'])"
+            r"(?P<v>(?:(?!(?P=q2))[^\\]|\\[\s\S])*+)(?P=q2)",
+            re.IGNORECASE,
+        ),
+        # `Authorization: Bearer …` quoted in exception text: the word after a whole-word `bearer` and whitespace
+        # that is no line break, or `%20`/`+` (encoded); an escape inside it (`\/`, JSON) is part of it, an escaped
+        # quote ends it
+        "bearer": re.compile(
+            r"\bbearer(?:[^\S\n\r\v\f\x1c-\x1e\x85\u2028\u2029]++|(?:%20|\+)++)"
+            r"(?P<v>(?:[^\s\"',;\\]|\\[^\s\"'\\])++)",
+            re.IGNORECASE,
+        ),
+    }
 )
 
 
@@ -149,18 +165,26 @@ def bind(**fields: object) -> Iterator[None]:
         _context.reset(token)
 
 
-def _redact(m: re.Match[str]) -> str:
-    whole, start = m.group(0), m.start()
-    a, b = m.span("v")
-    return whole[: a - start] + REDACTED + whole[b - start :]
+def secret_spans(text: str) -> list[tuple[int, int]]:
+    """The spans of `text` scrub redacts: every `_SCRUBS` pattern's `v` spans over `text` as given, sorted, and
+    merged where they overlap or touch. An empty span is an empty secret (`?token=`), redacted as an insertion."""
+    merged: list[tuple[int, int]] = []
+    for a, b in sorted(m.span("v") for pattern in _SCRUBS.values() for m in pattern.finditer(text)):
+        if merged and a <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+        else:
+            merged.append((a, b))
+    return merged
 
 
 def scrub(text: str) -> str:
     """Remove credentials from `text`: URL userinfo (`user:pass@`), secret-looking parameters and quoted keys, bearer
-    tokens, as written or percent-encoded in a value (`_SCRUBS`)."""
-    for pattern in _SCRUBS:
-        text = pattern.sub(_redact, text)
-    return text
+    tokens, as written or percent-encoded in a value (`_SCRUBS`), each secret replaced by REDACTED."""
+    out, at = [], 0
+    for a, b in secret_spans(text):
+        out += [text[at:a], REDACTED]
+        at = b
+    return "".join([*out, text[at:]])
 
 
 def _sensitive(key: str, log_query_text: bool) -> bool:

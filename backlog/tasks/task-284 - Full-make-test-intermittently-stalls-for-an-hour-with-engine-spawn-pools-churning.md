@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-23 17:57'
+updated_date: '2026-10-23 18:25'
 labels:
   - test
   - engine
@@ -17,7 +18,7 @@ ordinal: 186000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Seen twice on 2026-10-23 in TASK-275's branch (4f47fe8f, 92295b74), both times passing on a plain rerun (5-8 min): pytest stuck at 93-98% for 35-66 min, 4 xdist workers at ~85% CPU, one worker starting a fresh 4-process spawn ProcessPoolExecutor about every second (engine/index.py normalized(): a pool once a corpus reaches PARALLEL_FROM = 2,000 records), load average 110 on 8 cores. A native sample of the busy worker showed _sre fullmatch/match and tantivy rayon frames, not scrub's sub. The slowest tests in passing runs are the Hypothesis properties in tests/unit/test_group_counts.py (117-148 s) and tests/differential. Not caused by the branch (it changes only logs.py and a comment in openreview_v1.py); suspect a generated corpus over PARALLEL_FROM, or pools left running by a normalized() generator that is never exhausted or closed (its finally only runs at collection).
+Seen twice on 2026-10-23 in TASK-275's branch (4f47fe8f, 92295b74), both times passing on a plain rerun (5-8 min): pytest stuck at 93-98% for 35-66 min, 4 xdist workers at ~85% CPU, one worker starting a fresh 4-process spawn ProcessPoolExecutor about every second (engine/index.py normalized(): a pool once a corpus reaches PARALLEL_FROM = 2,000 records), load average 110 on 8 cores. A native sample of the busy worker showed _sre fullmatch/match and tantivy rayon frames, not scrub's sub. The slowest tests in passing runs are the Hypothesis properties in tests/unit/test_group_counts.py (117-148 s) and tests/differential. Not caused by the branch (it changes logs.py and two author-splitting regexes in ingest/sources/openreview_v1.py, TASK-276; neither is on the engine/index path); suspect a generated corpus over PARALLEL_FROM, or pools left running by a normalized() generator that is never exhausted or closed (its finally only runs at collection).
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

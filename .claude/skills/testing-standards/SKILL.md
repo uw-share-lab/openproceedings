@@ -96,6 +96,11 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
    character a lookbehind must refuse (each of `+.-`, each kind of whitespace `\s` reads), or a narrower
    lookbehind (`(?<![ \n])`) passes it and is quadratic on a tab run. A difference only a string past the
    exhaustive length shows (`.a://b@`, 7 characters) gets a named example.
+   Several substitutions applied in turn can hide input from each other (one pass's value eating the quote the
+   next one needs): run every pattern on the text as given and replace the union of their spans, and compare the
+   whole function with the whole old one, over joins of the multi-character pieces where they differ (TASK-283).
+   A mutation loop runs with `PYTHONDONTWRITEBYTECODE=1`: two same-size mutants written in one second share an
+   mtime, and Python reuses the first one's `.pyc`.
 8. **A failure that appears in one checkout only is a stored example.** The `.hypothesis` database holds an input
    no `@example` covers. Extract the falsifying input and pin it as an `@example` before bisecting or calling it
    pre-existing (a database copied between checkouts stores choice sequences, so the bisect proves nothing; the

@@ -111,8 +111,27 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
   become one loop over `_SCRUBS` with one replacement function.
 - **Percent-encoding hides a whole URL inside one name run.** `%` is a name character, so
   `https%3A%2F%2Fh%2F%3Ftoken%3Dabc` is one run with no `=`. The encoded forms get their own patterns, whose name
-  class spells `_` `-` `.` encoded (`%5F`, `%2D`, `%2E`) and whose value stops at `%26`/`%23`.
+  class spells `_` `-` `.` encoded (`%5F`, `%2D`, `%2E`) and whose value runs to `%26`, `%23`, a raw `&` or `#`,
+  whitespace or a quote. A value class that listed the allowed characters (`[a-z0-9_.~+-]`) cut `ab!c*d(e)` at
+  the `!` (the automated commit review): end a secret at what ends it, never at the first character you didn't
+  think of.
 - **A quoted key's pattern catches more than the bearer one.** `{"authorization": "bearer ab"}` now loses the
   whole value (`auth` is in the key), not just the word after `bearer`.
 - **Measure growth on an idle machine.** Prototype ratios of 18-30x for 4x the input were load from a parallel
   `make test` and review agents' probes; best-of-3 thread time at 20k against 80k showed every shape linear.
+
+## Addendum 2026-10-23 (review round 5: passes that rewrite each other's text)
+- **Sequential substitutions can hide a secret from a later pattern.** Three reviewers found the same family: the
+  bare-parameter pass ate a quoted value's closing quote, so the quoted-key pass found no value
+  (`{"password": "hunter2 key=1"}` kept `hunter2`); it also ate `Bearer`, so `Authorization=Bearer SECRET` kept
+  `SECRET`; the encoded-userinfo pass swallowed `&password=p` up to an encoded `@` and left the rest. Reordering
+  fixes the cases found, not the family. `scrub` now runs every pattern on the text as given and redacts the
+  union of their `v` spans (`secret_spans`), so the order cannot matter.
+- **Test the whole function against the whole old one.** The superset test that checked one pattern alone, over
+  an alphabet without the characters where the patterns differ, could not see any of this. The new test runs
+  origin/dev's two passes with each secret replaced by as many NULs (so positions survive) and asserts every
+  character it redacted is in a new span, over joins of multi-character pieces (`%3A%2F%2F`, `%40`, quotes, `;`,
+  secret words), exhaustive to 3 and 30,000 seeded joins of 4 to 12.
+- **A mutation run must not reuse bytecode.** Two mutants of the same length written within one second left
+  `logs.py`'s mtime and size unchanged, so Python ran the cached `.pyc` of the previous mutant and the second
+  "result" was the first's. Run mutants with `PYTHONDONTWRITEBYTECODE=1` (or wait a second between writes).

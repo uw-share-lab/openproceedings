@@ -62,16 +62,21 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   the `code` (a `UserInputError` at DEBUG, an `InternalError` at ERROR with the traceback). Never log IPs beyond what the rate limiter needs in memory.
 - Exceptions from HTTP clients can carry URLs with credentials or tokens. `logs.scrub` redacts, from every string
   value, every key at any depth (two keys that scrub alike are both kept, the second as `key#2`), and exception
-  and stack text, in time linear in the text (TASK-275, TASK-283):
+  and stack text, in time linear in the text (TASK-275, TASK-283). Every pattern reads the text as given and the
+  union of the secrets they find is redacted at once (`logs.secret_spans`), so no pattern can hide a secret from
+  another. It redacts:
   - URL userinfo (`user:pass@`);
   - the value of a parameter whose name (letters, digits, `_.%-`, starting after any other character) holds
-    `token`, `key`, `secret`, `password`, `auth` or `sig`: `?access_token=`, `?X-Amz-Signature=`,
-    `#access_token=`, a bare `token=` (prose such as `monkey=1` loses its value too);
-  - both of those percent-encoded inside a value (`?next=https%3A%2F%2Fh%2F%3Ftoken%3Dabc`, `%3A%2F%2Fu%3Ap%40`);
-  - the quoted value of a quoted key holding such a word (`{"access_token": "abc"}`, a dict's repr; a value
-    that is not quoted, and JSON escaped inside a string, are left);
-  - the word after a whole-word `bearer` (`Bearer <token>`, an escape such as `\/` inside it included; prose
-    `a bearer of` loses `of`).
+    `token`, `key`, `secret`, `password`, `passwd`, `auth`, `sig`, `cookie`, `credential` or `bearer`:
+    `?access_token=`, `?X-Amz-Signature=`, `#access_token=`, a bare `token=`; a quoted value whole
+    (`token='a b'`). Prose such as `monkey=1`, and a traceback's source line (`key=lambda r: …`), lose their value
+    too;
+  - both of those percent-encoded inside a value (`?next=https%3A%2F%2Fh%2F%3Ftoken%3Dabc`,
+    `?state=token%3Dabc`, `https%3A%2F%2Fu%3Ap%40h`); double encoding (`%253D`) is not decoded;
+  - the quoted value of a quoted key holding such a word, either quote (`{"access_token": "abc"}`, a dict's
+    repr, `b'abc'`); a value that is not quoted, and JSON escaped inside a string, are left;
+  - the word after a whole-word `bearer` and whitespace, `%20` or `+` (`Bearer <token>`, an escape such as `\/`
+    inside it included; prose `a bearer of` loses `of`).
 
   It also redacts secret-shaped keys (starting or ending with a secret word: `password…`, `…_token`, `auth_…`,
   `secret…`, `bearer…`, `…api_key`) case-insensitively at any depth, while ordinary fields like

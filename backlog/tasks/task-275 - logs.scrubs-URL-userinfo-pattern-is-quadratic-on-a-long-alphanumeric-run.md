@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-20 15:18'
-updated_date: '2026-10-23 16:18'
+updated_date: '2026-10-23 18:25'
 labels:
   - logging
   - security
@@ -47,4 +47,6 @@ TASK-281 review (2026-10-22): a NeurIPS listing warning also logs its see-also l
 2026-10-23 review round 3: correction to the round-1 note: the shortest string that shows the missing +.- in pre is .a://b@ (7 characters); .a://u@h, the example, has 8. Round-3 nits fixed: _put remembers each name's last suffix (n colliding keys were n²/2 steps); the text format escapes every character str.splitlines breaks at (U+0085, U+2028, U+2029 passed json.dumps; the message was never encoded); _BEARER takes any non-line-break whitespace after bearer and stops at a backslash; an example of # ending a value.
 
 2026-10-23 review round 4: correction to the round-3 note: [^\S\r\n] excluded only \r and \n; the bearer whitespace class now excludes every character str.splitlines breaks at. _BEARER keeps an escape inside the token (\/, \u002F: security-reviewer and the automated review) and stops at an escaped quote; JSON lines escape U+0085/2028/2029 (lossless); the text format escapes every C0/C1 control. scrub is now one loop over logs._SCRUBS, each pattern naming its secret as group v (TASK-283).
+
+2026-10-23 review round 5: scrub's structure changed under TASK-283 (union of spans, logs.secret_spans); see TASK-283's notes.
 <!-- SECTION:NOTES:END -->
