@@ -472,9 +472,9 @@ def test_scrub_redacts_everything_it_did_before_on_every_short_join_of_pieces() 
         ),
         (
             "https://h/login?next=https%3A%2F%2Fh2&password=p%40ssw0rd",
-            "https://h/login?next=https%3A%2F%2Fh2&password=[redacted]",
+            "https://h/login?next=https%3A%2F%2F[redacted]",
         ),
-        ('{"n":"https%3A%2F%2Fh","password":"p%40ss"}', '{"n":"https%3A%2F%2Fh","password":"[redacted]"}'),
+        ('{"n":"https%3A%2F%2Fh","password":"p%40ss"}', '{"n":"https%3A%2F%2F[redacted]"}'),
         (
             '{"u":"a://x","password":"p@ss"}',
             '{"u":"a://[redacted]"}',
@@ -494,6 +494,8 @@ def test_scrub_redacts_everything_it_did_before_on_every_short_join_of_pieces() 
         ("?next=%2Ftoken%3DSECRET", "?next=%2Ftoken%3D[redacted]"),
         ("token%3dSECRET", "token%3d[redacted]"),
         ("?n=%3Chttps%3A%2F%2Fu%3Ap%40h%3E", "?n=%3Chttps%3A%2F%2F[redacted]%40h%3E"),
+        ("?n=https%3A%2F%2Fu%3Ap'q%40h", "?n=https%3A%2F%2F[redacted]%40h"),  # raw sub-delims in a password
+        ("?n=https%3A%2F%2Fu%3Aa=b;c&d%40h", "?n=https%3A%2F%2F[redacted]%40h"),
         ("?n=%3Ftoken%3Dab%25cd", "?n=%3Ftoken%3D[redacted]"),  # `%25` is part of the value
         ("{'u': '%3Ftoken%3Dab', 'x': 1}", "{'u': '%3Ftoken%3D[redacted]', 'x': 1}"),  # `'` ends it
         ("token='abc def', x=1", "token=[redacted] x=1"),  # a quoted value whole

@@ -86,10 +86,11 @@ _SCRUBS = types.MappingProxyType(
         # `1a://user@` and `.a://user@` lose their userinfo (a lookbehind alone would leave them).
         "userinfo": re.compile(r"(?<![a-zA-Z0-9+.-])[0-9+.-]*+[a-zA-Z][a-zA-Z0-9+.-]*+://(?P<v>[^/\s@]+)@"),
         # the same, percent-encoded in a value (`?next=https%3A%2F%2Fu%3Ap%40h`, TASK-283), also right after
-        # another escape (`%22https%3A…`); an encoded authority holds no raw `&#?;="'`
+        # another escape (`%22https%3A…`); a password may hold raw `'` (encodeURIComponent leaves it), and a
+        # `&password=` the span runs into is a secret of its own, so the union loses nothing
         "encoded_userinfo": re.compile(
             r"(?:(?<![a-z0-9+.%-])|(?<=%[0-9a-f]{2}))[0-9+.-]*+[a-z][a-z0-9+.-]*+%3A%2F%2F"
-            r"(?P<v>(?:[^%/\s@&#?;=\"']|%(?!2F|40)[0-9a-f]{2})++)%40",
+            r"(?P<v>(?:[^%/\s@]|%(?!2F|40)[0-9a-f]{2})++)%40",
             re.IGNORECASE,
         ),
         # a parameter whose name holds a secret word, wherever its name starts (`?access_token=`,
