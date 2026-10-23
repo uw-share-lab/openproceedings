@@ -130,7 +130,7 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
 - **But the old order was part of the old behaviour.** origin/dev's userinfo pass took a `#` or `&` out of a
   URL's userinfo before its query pass read the value, so `?token=a://x#y@SECRET` lost everything after `=`; the
   union cut the value at the `#` and logged `@SECRET` (qa-auditor, round 6). The parameter value now takes a
-  userinfo after `://` whole. The shortest such string is 7 pieces, past the exhaustive joins of 3, so a targeted
+  userinfo after `://` whole. The shortest such string is 6 pieces (7 to leak a character after the `@`), past the exhaustive joins of 3, so a targeted
   generator (`?<word>=<s1>a://<s2><#|&><s3>@<s4>`) covers it: when replacing sequential passes with a union, list
   what each old pass changed that a later old pass then read.
 - **Test the whole function against the whole old one.** The superset test that checked one pattern alone, over

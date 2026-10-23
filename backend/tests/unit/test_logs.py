@@ -514,6 +514,17 @@ def test_scrub_redacts_everything_it_did_before_on_every_short_join_of_pieces() 
         ("?token='a://b'#y@SECRET", "?token=[redacted]"),  # quoted: origin/dev's two passes, replayed
         ('?token="https://u:p"&x@SECRET', "?token=[redacted]"),
         (
+            "Authorization: Bearer Bearer SECRET",
+            "Authorization: Bearer Bearer [redacted]",
+        ),  # never `bearer` itself
+        ("x%3ABearer Bearer SECRET", "x%3ABearer Bearer [redacted]"),
+        ("\\tBearer\\tSECRET", "\\tBearer\\t[redacted]"),  # JSON escapes around it
+        ("\\nBearer SECRET", "\\nBearer [redacted]"),
+        (  # a value that looks like a quoted key must not hide the real one after it
+            """{'note': "'token': '", 'password': 'SECRETX'}""",
+            """{'note': "'token': '[redacted]'password': '[redacted]'}""",
+        ),
+        (
             "?h=Authorization%3A%20Bearer%20abc",
             "?h=Authorization%3A%20Bearer%20[redacted]",
         ),  # after an escape
@@ -578,6 +589,9 @@ def test_scrub_examples(value: str, expected: str) -> None:
         lambda n: ("token=\"a token='a ") * (n // 18),
         lambda n: "%" * n + "token%3D",
         lambda n: "%41bearer%20" * (n // 12),
+        lambda n: "bearer " * (n // 7) + "x",  # each `bearer` refused as the token by the next
+        lambda n: "\\tbearer\\t" * (n // 10),
+        lambda n: "'token': '" + "'token': " * (n // 10),  # a quoted key tried inside every value
     ],
 )
 def test_scrub_is_linear_on_a_long_run(build: object) -> None:
@@ -679,7 +693,7 @@ def test_text_format_escapes_control_characters(ctl: str) -> None:
 
 def test_scrub_redacts_everything_it_did_before_where_a_userinfo_sits_in_a_value() -> None:
     """origin/dev's userinfo pass took a `#` or `&` out of a URL's userinfo before its query pass read the value,
-    so the value ran on past the `@` (`?token=a://x#y@SECRET`); the shortest such string is 7 pieces, past the
+    so the value ran on past the `@` (`?token=a://x#y@SECRET`); the shortest such string is 6 pieces (7 to leak a character after the `@`), past the
     joins above. Every `?<word>=<s1>a://<s2><#|&><s3>@<s4>` over short parts, quotes included (26,244)."""
     parts = ["", "x", "#", "&", "@", "a://", " ", "'", '"']
     for word in ("token", "sig"):

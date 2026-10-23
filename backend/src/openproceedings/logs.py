@@ -81,6 +81,8 @@ _ENC_NAME = r"(?:[a-z0-9_.-]|%5F|%2D|%2E)"  # the same, percent-encoded
 # where an encoded name starts: after a character that is no name character, after an escape that is none, or
 # after a `%` that starts no escape (`100%token%3D…`)
 _ENC_START = r"(?:(?<![a-z0-9_.%-])|(?<=%[0-9a-f]{2})(?<!%5F)(?<!%2D)(?<!%2E)|(?<=%)(?![0-9a-f]{2}))"
+# what separates `bearer` from its token: whitespace that is no line break, or `%20`, `%09`, a JSON `\t`, `+`
+_BEARER_SEP = r"(?:[^\S\n\r\v\f\x1c-\x1e\x85\u2028\u2029]++|(?:%20|%09|\\t|\+)++)"
 _QUOTED = r"(?P<{q}>[\"'])(?:(?!(?P={q}))[^\\]|\\[\s\S])*+(?P={q})"  # a quoted string, escapes inside it
 _SCRUBS = types.MappingProxyType(
     {
@@ -113,16 +115,19 @@ _SCRUBS = types.MappingProxyType(
         ),
         # a quoted key holding a secret word and its quoted value, either quote (`{"access_token": "abc"}`, a
         # dict's repr, a bytes value `b'abc'`, TASK-283)
+        # (all in a lookahead, so a match may start inside an earlier one's value: `{'note': "'token': '",
+        # 'password': 'x'}` would otherwise hide the real key behind the false one)
         "quoted": re.compile(
-            rf"(?P<q>[\"'])(?={_NAME}*(?:{_WORDS})){_NAME}*+(?P=q)\s*+:\s*+b?(?P<q2>[\"'])"
-            r"(?P<v>(?:(?!(?P=q2))[^\\]|\\[\s\S])*+)(?P=q2)",
+            rf"(?=(?P<q>[\"'])(?={_NAME}*(?:{_WORDS})){_NAME}*+(?P=q)\s*+:\s*+b?(?P<q2>[\"'])"
+            r"(?P<v>(?:(?!(?P=q2))[^\\]|\\[\s\S])*+)(?P=q2))",
             re.IGNORECASE,
         ),
         # `Authorization: Bearer …` quoted in exception text: the word after a whole-word `bearer` (or one right
-        # after an escape, `%3A%20Bearer`) and whitespace that is no line break, or `%20`/`%09`/`+` (encoded); an
-        # escape inside it (`\/`, JSON) is part of it, an escaped quote ends it
+        # after an escape, `%3A%20Bearer`, a JSON `\tBearer`) and a separator; never a second `bearer` (`Bearer
+        # Bearer x`, a client that stored the prefix with its token); an escape inside it (`\/`, JSON) is part of
+        # it, an escaped quote ends it
         "bearer": re.compile(
-            r"(?:(?<!\w)|(?<=%[0-9a-f]{2}))bearer(?:[^\S\n\r\v\f\x1c-\x1e\x85\u2028\u2029]++|(?:%20|%09|\+)++)"
+            rf"(?:(?<!\w)|(?<=%[0-9a-f]{{2}})|(?<=\\[nrt]))bearer{_BEARER_SEP}(?!bearer{_BEARER_SEP})"
             r"(?P<v>(?:[^\s\"',;\\]|\\[^\s\"'\\])++)",
             re.IGNORECASE,
         ),
