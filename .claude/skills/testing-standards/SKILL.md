@@ -89,7 +89,7 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
    exhaustive comparison of the matches over every short string of the characters it reads (TASK-274).
    A run that must hold a word and then end at a delimiter (`[?&][a-z0-9_]*?(?:token|key)[a-z0-9_]*=`) reads the
    rest of the run once for every place the word appears in it; check the word with a lookahead and take the run
-   once, possessive (`[?&](?=[a-z0-9_]*(?:token|key))[a-z0-9_]*+=`, TASK-275). When one pattern is found quadratic,
+   once, possessive (`[?&](?=[a-z0-9_]*(?:token|key))[a-z0-9_]*+=`, simplified from TASK-275's `_SECRET_QUERY`). When one pattern is found quadratic,
    time every pattern beside it that the same text reaches on the same hostile shapes: TASK-275 and TASK-276 each
    named one, and the function holding it had a second (`scrub`'s query pattern, `_split_entry`'s separator).
    One character per class proves output for the class, not cost for each member: a growth case runs every

@@ -74,13 +74,15 @@ _URL_USERINFO = re.compile(
     r"(?<![a-zA-Z0-9+.-])(?P<pre>[0-9+.-]*+)(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*+://)[^/\s@]+@"
 )
 # A parameter's whole name, read once, when it has a secret word anywhere in it (`?access_token=`,
-# `?X-Amz-Signature=`, `?api%5Fkey=`): a lazy scan for the word re-read the rest of the name once per place the
-# word appears in it (TASK-275).
+# `?X-Amz-Signature=`, `?api%5Fkey=`, a fragment's `#access_token=`, `;token=`): a lazy scan for the word re-read
+# the rest of the name once per place the word appears in it (TASK-275).
 _SECRET_QUERY = re.compile(
-    r"(?P<k>[?&](?=[a-z0-9_.%-]*(?:token|key|secret|password|passwd|auth|sig|signature))[a-z0-9_.%-]*+)"
+    r"(?P<k>[?&#;](?=[a-z0-9_.%-]*(?:token|key|secret|password|passwd|auth|sig|signature))[a-z0-9_.%-]*+)"
     r"=[^&\s#]*",
     re.IGNORECASE,
 )
+# An `Authorization: Bearer …` header quoted in exception text; one try per `bearer`, so linear.
+_BEARER = re.compile(r"(?P<b>\bbearer[ \t]+)[^\s\"',;]+", re.IGNORECASE)
 
 # Attributes every LogRecord has; anything else on a record came from `extra=` or `bind()`.
 _STANDARD = frozenset(vars(logging.LogRecord("", 0, "", 0, "", None, None))) | {"message", "asctime"}
@@ -123,9 +125,10 @@ def bind(**fields: object) -> Iterator[None]:
 
 
 def scrub(text: str) -> str:
-    """Remove credentials from any URLs in `text`: userinfo (`user:pass@`) and secret-looking query params."""
+    """Remove credentials from `text`: URL userinfo (`user:pass@`), secret-looking query params, bearer tokens."""
     text = _URL_USERINFO.sub(r"\g<pre>\g<scheme>" + REDACTED + "@", text)
-    return _SECRET_QUERY.sub(r"\g<k>=" + REDACTED, text)
+    text = _SECRET_QUERY.sub(r"\g<k>=" + REDACTED, text)
+    return _BEARER.sub(r"\g<b>" + REDACTED, text)
 
 
 def _sensitive(key: str, log_query_text: bool) -> bool:
@@ -137,12 +140,25 @@ def _sensitive(key: str, log_query_text: bool) -> bool:
     return k in QUERY_FIELDS and not log_query_text
 
 
+def _put(out: dict[str, object], name: str, value: object) -> None:
+    """`out[name] = value`, or under `name#2`, `name#3`, … when two keys scrub to the same name, so neither is lost."""
+    key, n = name, 1
+    while key in out:
+        n += 1
+        key = f"{name}#{n}"
+    out[key] = value
+
+
 def _clean(value: object, log_query_text: bool) -> object:
     if isinstance(value, Mapping):
-        return {
-            scrub(str(k)): (REDACTED if _sensitive(str(k), log_query_text) else _clean(v, log_query_text))
-            for k, v in value.items()
-        }
+        out: dict[str, object] = {}
+        for k, v in value.items():  # `_sensitive` reads the key as given, before its scrub
+            _put(
+                out,
+                scrub(str(k)),
+                REDACTED if _sensitive(str(k), log_query_text) else _clean(v, log_query_text),
+            )
+        return out
     if isinstance(value, list | tuple | set | frozenset):
         return [_clean(v, log_query_text) for v in value]
     if value is None or isinstance(value, bool | int | float):
@@ -159,7 +175,7 @@ def _fields(record: logging.LogRecord, log_query_text: bool) -> dict[str, object
     for key, value in raw.items():
         # a field can never overwrite the line's shape, and a key that is a URL loses its credentials
         name = f"field_{key}" if key in CORE_KEYS else scrub(key)
-        out[name] = REDACTED if _sensitive(key, log_query_text) else _clean(value, log_query_text)
+        _put(out, name, REDACTED if _sensitive(key, log_query_text) else _clean(value, log_query_text))
     return out
 
 
@@ -194,9 +210,12 @@ class _JsonFormatter(_Formatter):
 
 class _TextFormatter(_Formatter):
     def format(self, record: logging.LogRecord) -> str:
-        # Values are JSON-encoded, so a newline inside a value can never start a forged log line.
+        # Values are JSON-encoded, and so is a key that is not a plain name, so a newline inside either can never
+        # start a forged log line.
         parts = [
-            f"{k}={json.dumps(v, default=str, ensure_ascii=False)}" for k, v in self._extras(record).items()
+            f"{k if k.isascii() and k.isidentifier() else json.dumps(k, ensure_ascii=False)}="
+            f"{json.dumps(v, default=str, ensure_ascii=False)}"
+            for k, v in self._extras(record).items()
         ]
         return f"{record.levelname:<7} {record.name}: {scrub(record.getMessage())}" + (
             "  " + " ".join(parts) if parts else ""

@@ -309,9 +309,10 @@ def _scrubbed(texts: list[str], patterns: dict[str, re.Pattern[str]] | None = No
 
 
 # every character each pattern reads: a letter, a digit, `.` for the other scheme punctuation, `:/@`, a space,
-# and `#`, which ends a query value; `?&=` and `sig` (a secret word whose letters are also name characters).
-# `-.%` in a query name are left out: since TASK-275 they are name characters, and redacted (examples below).
-@pytest.mark.parametrize("alphabet", ["a1.:/@ #", "?&=sig #"])
+# and `#`, which ends a query value; `?&=` and `sig` (a secret word whose letters are also name characters), a
+# space and `,`, which neither pattern reads. Since TASK-275 `-.%` are name characters and `#;` start a name too,
+# so they are left out of the query alphabet: what they add is only more redaction (examples below).
+@pytest.mark.parametrize("alphabet", ["a1.:/@ #", "?&=sig ,"])
 def test_scrub_gives_what_it_gave_before_on_every_short_string(alphabet: str) -> None:
     """Every string up to 6 characters (299,593 per alphabet): the same text out, so a log line reads as
     before. A difference first shown at 7 characters (`.a://b@`, a scheme after punctuation) is a named example.
@@ -328,7 +329,7 @@ def test_scrub_gives_what_it_gave_before_on_every_short_string(alphabet: str) ->
     [
         ("1a://u:p@h", "1a://[redacted]@h"),  # a scheme after digits still loses its userinfo
         ("x+1a://u@h", "x+1a://[redacted]@h"),
-        (".a://u@h", ".a://[redacted]@h"),  # 7 characters: past the exhaustive comparison
+        (".a://u@h", ".a://[redacted]@h"),  # past the exhaustive length: the gap first shows at 7 (`.a://b@`)
         ("-a://u@h", "-a://[redacted]@h"),
         ("+a://u@h", "+a://[redacted]@h"),
         ("see https://u@h and ftp://v@g", "see https://[redacted]@h and ftp://[redacted]@g"),
@@ -342,6 +343,13 @@ def test_scrub_gives_what_it_gave_before_on_every_short_string(alphabet: str) ->
         ("https://h/x?api-key=ab", "https://h/x?api-key=[redacted]"),
         ("https://h/x?api%5Fkey=ab", "https://h/x?api%5Fkey=[redacted]"),
         ("https://h/x?auth.v2=ab", "https://h/x?auth.v2=[redacted]"),
+        ("https://h/x?client.secret=ab", "https://h/x?client.secret=[redacted]"),  # the word after a `.`
+        ("https://h/cb#access_token=ab&x=1", "https://h/cb#access_token=[redacted]&x=1"),  # a fragment
+        ("https://h/x?a=1;token=2", "https://h/x?a=1;token=[redacted]"),
+        ("Authorization: Bearer ab.c-d", "Authorization: Bearer [redacted]"),
+        ('{"authorization": "bearer ab"}', '{"authorization": "bearer [redacted]"}'),
+        ("a bearer of news", "a bearer [redacted] news"),  # a backstop: an ordinary `bearer` loses a word
+        ("a forbearer of x", "a forbearer of x"),  # `bearer` only as a whole word
         (
             "https://h/x?designer=1",
             "https://h/x?designer=[redacted]",
@@ -361,12 +369,18 @@ def test_scrub_examples(value: str, expected: str) -> None:
         lambda n: "a1." * (n // 3),  # a scheme tried at every third character
         lambda n: "a+" * (n // 2),  # each scheme punctuation character the lookbehind must read
         lambda n: "a-" * (n // 2),
-        lambda n: "?" + "a-%." * (n // 4) + "token",  # a query name of each added name character
+        lambda n: "?" + "-token" * (n // 6),  # the word again after each added name character
+        lambda n: "?" + ".key" * (n // 4),
+        lambda n: "?" + "%sig" * (n // 4),
+        lambda n: "#" * n,
+        lambda n: "bearer" + " " * n,
+        lambda n: "bearer " * (n // 7),
     ],
 )
 def test_scrub_is_linear_on_a_long_run(build: object) -> None:
     """About 20k characters took 97-760 ms before TASK-275 by shape (292 ms on a run of letters, 758 ms on
-    `?` + `token` x 4,000), 16 times 5k's: crawled text reaching a log line."""
+    `?` + `token` x 4,000), 16 times 5k's: crawled text reaching a log line. The `-.%`, `#` and `bearer` shapes
+    guard what TASK-275 added (the old patterns didn't read them)."""
     assert_near_linear(logs.scrub, build, 5_000)  # type: ignore[arg-type]
 
 
@@ -379,3 +393,33 @@ def test_a_url_used_as_a_key_loses_its_credentials(stream: io.StringIO) -> None:
     assert rec["https://[redacted]@h/?token=[redacted]"] == 1
     assert rec["m"] == {"https://[redacted]@g": [{"a://[redacted]@f": 2}]}
     assert "p@" not in json.dumps(rec) and "q@" not in json.dumps(rec)
+
+
+def test_a_secret_named_url_key_is_judged_on_its_own_name(stream: io.StringIO) -> None:
+    """`_sensitive` reads the key as given: its value is redacted, and its name is scrubbed."""
+    logging.getLogger("openproceedings.x").info("e", extra={"m": {"https://u@h/?x=1_token": "v"}})
+    (rec,) = lines(stream)
+    assert rec["m"] == {"https://[redacted]@h/?x=1_token": "[redacted]"}
+
+
+def test_two_keys_that_scrub_alike_are_both_kept(stream: io.StringIO) -> None:
+    logging.getLogger("openproceedings.x").info(
+        "e",
+        extra={
+            "https://a:1@h": "A",
+            "https://b:2@h": "B",
+            "m": {"https://a@h": 1, "https://b@h": 2, "https://[redacted]@h": 3},
+        },
+    )
+    (rec,) = lines(stream)
+    assert rec["https://[redacted]@h"] == "A" and rec["https://[redacted]@h#2"] == "B"
+    assert rec["m"] == {"https://[redacted]@h": 1, "https://[redacted]@h#2": 2, "https://[redacted]@h#3": 3}
+
+
+def test_text_format_escapes_a_key_so_a_newline_cannot_fake_a_line() -> None:
+    buf = io.StringIO()
+    logs.configure_logging("INFO", "text", stream=buf)
+    logging.getLogger("openproceedings.x").info("e", extra={"x\nINFO forged": 1, "plain_name": 2})
+    out = buf.getvalue().strip()
+    assert len(out.splitlines()) == 1
+    assert '"x\\nINFO forged"=1' in out and " plain_name=2" in out

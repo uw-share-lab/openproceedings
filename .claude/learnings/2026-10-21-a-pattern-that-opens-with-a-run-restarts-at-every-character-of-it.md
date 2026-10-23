@@ -84,6 +84,15 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
   (pre-existing); it is now `[a-z0-9_.%-]`, so the old-pattern comparison leaves those characters out of its
   alphabet and examples cover them. And `_clean`/`_fields` never scrubbed keys, so `extra={url: …}` logged a
   URL's credentials as a key; every key is now scrubbed. Both widen redaction only.
+- **Scrubbing keys can merge two of them.** `extra={"https://a:1@h": …, "https://b:2@h": …}` scrubs both to one
+  key, and a dict keeps the last value without a trace (code-reviewer, round 2). `_put` keeps both, the second as
+  `key#2`. A transform applied to dict keys must say what happens when it maps two keys to one.
+- **A widened class needs an example per new character in each place it is read.** qa-auditor's round-2
+  survivor dropped `.` from the lookahead's class only: `?client.secret=` leaked while `auth.v2` (word before the
+  dot) passed. And a growth case with the word once at the end (`?a-%.…token`) kills nothing: the old lazy form
+  is slow only when the word repeats (`?-token-token…`).
+- Round 3 also made `#` and `;` start a parameter (`#access_token=` fragments) and redacts `Bearer <token>`;
+  percent-encoded URLs inside a value and a bare `token=` with nothing before it are TASK-283.
 - Propagated to: `.claude/skills/testing-standards/SKILL.md` §7 (the word-in-a-run shape, timing the
   neighbouring patterns, a growth case per character a lookbehind refuses); `.claude/skills/logging-standards/SKILL.md`
   (what scrub redacts, keys included); tests in `backend/tests/unit/test_logs.py` and

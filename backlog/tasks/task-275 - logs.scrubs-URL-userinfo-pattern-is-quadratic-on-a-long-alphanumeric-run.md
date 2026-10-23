@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-20 15:18'
-updated_date: '2026-10-23 14:45'
+updated_date: '2026-10-23 15:06'
 labels:
   - logging
   - security
@@ -40,4 +40,6 @@ TASK-281 review (2026-10-22): a NeurIPS listing warning also logs its see-also l
 2026-10-23: _URL_USERINFO now (?<![a-zA-Z0-9+.-])(?P<pre>[0-9+.-]*+)(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*+://)[^/\s@]+@ (the reviewer's candidate). Timing every pattern in scrub found a second: _SECRET_QUERY took 452 ms on '?' + 'token' x 4,000 (16x for 4x), its lazy scan re-reading the name once per secret word; now a lookahead for the word and a possessive name run. Tests compare scrub against the old patterns (swapped back on logs) over every string up to 6 characters of two alphabets; a one-off run compared each pattern alone over every string up to 7 (7.8M): no difference. Growth checks on four shapes fail on the old patterns and pass now. Tests: backend/tests/unit/test_logs.py.
 
 2026-10-23 review round 1: qa-auditor's Must (no test caught (?P<pre>[0-9]*+), which leaks .a://u@h: 7 characters, past the exhaustive length) fixed with named examples; growth cases now run a+ and a- and a query name of -%. too. At the owner's request two gaps the review found were fixed in this task: _SECRET_QUERY's name class is now [a-z0-9_.%-] (security-reviewer), and _clean/_fields scrub every key (observability-reviewer). Both only widen redaction; the old-pattern comparison's alphabet leaves out -.% and examples cover them.
+
+2026-10-23 review round 2: code-reviewer's Should (two keys scrubbing alike kept only the last value) fixed with _put (name#2, #3, …) at both sites; qa-auditor's Must (dropping . from the lookahead class alone leaked ?client.secret=) fixed with that example; growth cases now repeat the word after each added name character. Round-2 nits fixed: # and ; start a parameter (fragments' #access_token=), Bearer <token> is redacted (_BEARER), the text formatter JSON-encodes a key that is not a plain name. Deferred as TASK-283: percent-encoded URLs inside a value, and a bare token= with no ?&#; before it.
 <!-- SECTION:NOTES:END -->
