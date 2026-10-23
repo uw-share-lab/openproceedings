@@ -512,6 +512,28 @@ def test_scrub_redacts_everything_it_did_before_on_every_short_join_of_pieces() 
         ("https://h/?token=x://y&z@SECRETTAIL", "https://h/?token=[redacted]"),
         ("?token=abc://def#ghi@jkl&p=1", "?token=[redacted]&p=1"),
         ("?token='a://b'#y@SECRET", "?token=[redacted]"),  # quoted: origin/dev's two passes, replayed
+        # every word origin/dev knew, any case, after `&` too: the replay must keep each
+        ("?key='a://b'#y@SECRET", "?key=[redacted]"),
+        ("?secret='a://b'#y@SECRET", "?secret=[redacted]"),
+        ("?password='a://b'#y@SECRET", "?password=[redacted]"),
+        ("?passwd='a://b'#y@SECRET", "?passwd=[redacted]"),
+        ("?auth='a://b'#y@SECRET", "?auth=[redacted]"),
+        ("?signature='a://b'#y@SECRET", "?signature=[redacted]"),
+        ("?TOKEN='a://b'#y@SECRET", "?TOKEN=[redacted]"),
+        ("&sig='a://b'#y@SECRET", "&sig=[redacted]"),
+        # the parameter pattern alone (no `?`/`&` before the name, so no replay)
+        ("token=a://x#y@SECRET", "token=[redacted]"),
+        ("x;token=a://x&y@SECRET", "x;token=[redacted]"),
+        ("token=ab;SECRET", "token=[redacted]"),
+        ("token=ab%SECRET", "token=[redacted]"),
+        # bearer separators of both kinds, mixed; a token that starts with `bearer`; JSON `\\r`, and `\\n` no separator
+        ("Authorization: Bearer\\t SECRET", "Authorization: Bearer\\t [redacted]"),
+        ("Bearer+ SECRET", "Bearer+ [redacted]"),
+        ("Bearer%20 SECRET", "Bearer%20 [redacted]"),
+        ("Authorization: Bearer bearerSECRET", "Authorization: Bearer [redacted]"),
+        ("\\rBearer SECRET", "\\rBearer [redacted]"),
+        ("Bearer\\nSECRET", "Bearer\\nSECRET"),
+        ('{"token" : "SECRET"}', '{"token" : "[redacted]"}'),  # whitespace around the colon
         ('?token="https://u:p"&x@SECRET', "?token=[redacted]"),
         (
             "Authorization: Bearer Bearer SECRET",
