@@ -170,11 +170,29 @@ def bind(**fields: object) -> Iterator[None]:
         _context.reset(token)
 
 
+# origin/dev's query pattern before TASK-275, made linear (the same matches, shown exhaustively in TASK-275):
+# `secret_spans` replays origin/dev's two passes with it, so scrub redacts everything origin/dev did whatever the
+# new patterns miss (a userinfo pass that took a `#` out of a value before this one read it, round 7).
+_LEGACY_QUERY = re.compile(rf"[?&](?=[a-z0-9_]*(?:{_WORDS}))[a-z0-9_]*+=(?P<v>[^&\s#]*)", re.IGNORECASE)
+
+
+def _legacy_spans(text: str) -> Iterator[tuple[int, int]]:
+    """origin/dev's query secrets in `text`, read after its userinfo pass (whose own secrets `_SCRUBS["userinfo"]`
+    finds alike): each userinfo replaced by as many NULs (like `[redacted]`, a NUL is no name character and no
+    delimiter to the query pattern), so positions survive."""
+    hidden = _SCRUBS["userinfo"].sub(
+        lambda m: m.group(0)[: m.start("v") - m.start()] + "\0" * len(m.group("v")) + "@", text
+    )
+    yield from (m.span("v") for m in _LEGACY_QUERY.finditer(hidden))
+
+
 def secret_spans(text: str) -> list[tuple[int, int]]:
-    """The spans of `text` scrub redacts: every `_SCRUBS` pattern's `v` spans over `text` as given, sorted, and
-    merged where they overlap or touch. An empty span is an empty secret (`?token=`), redacted as an insertion."""
+    """The spans of `text` scrub redacts: every `_SCRUBS` pattern's `v` spans over `text` as given, and
+    origin/dev's (`_legacy_spans`), sorted, and merged where they overlap or touch. An empty span is an empty
+    secret (`?token=`), redacted as an insertion."""
+    spans = [m.span("v") for pattern in _SCRUBS.values() for m in pattern.finditer(text)]
     merged: list[tuple[int, int]] = []
-    for a, b in sorted(m.span("v") for pattern in _SCRUBS.values() for m in pattern.finditer(text)):
+    for a, b in sorted([*spans, *_legacy_spans(text)]):
         if merged and a <= merged[-1][1]:
             merged[-1] = (merged[-1][0], max(merged[-1][1], b))
         else:

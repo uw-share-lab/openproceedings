@@ -511,6 +511,8 @@ def test_scrub_redacts_everything_it_did_before_on_every_short_join_of_pieces() 
         ),  # a userinfo inside a value: origin/dev ran on past `@`
         ("https://h/?token=x://y&z@SECRETTAIL", "https://h/?token=[redacted]"),
         ("?token=abc://def#ghi@jkl&p=1", "?token=[redacted]&p=1"),
+        ("?token='a://b'#y@SECRET", "?token=[redacted]"),  # quoted: origin/dev's two passes, replayed
+        ('?token="https://u:p"&x@SECRET', "?token=[redacted]"),
         (
             "?h=Authorization%3A%20Bearer%20abc",
             "?h=Authorization%3A%20Bearer%20[redacted]",
@@ -678,8 +680,8 @@ def test_text_format_escapes_control_characters(ctl: str) -> None:
 def test_scrub_redacts_everything_it_did_before_where_a_userinfo_sits_in_a_value() -> None:
     """origin/dev's userinfo pass took a `#` or `&` out of a URL's userinfo before its query pass read the value,
     so the value ran on past the `@` (`?token=a://x#y@SECRET`); the shortest such string is 7 pieces, past the
-    joins above. Every `?<word>=<s1>a://<s2><#|&><s3>@<s4>` over short parts (9,604)."""
-    parts = ["", "x", "#", "&", "@", "a://", " "]
+    joins above. Every `?<word>=<s1>a://<s2><#|&><s3>@<s4>` over short parts, quotes included (26,244)."""
+    parts = ["", "x", "#", "&", "@", "a://", " ", "'", '"']
     for word in ("token", "sig"):
         for sep in "#&":
             for s1, s2, s3, s4 in product(parts, repeat=4):

@@ -64,7 +64,8 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   value, every key at any depth (two keys that scrub alike are both kept, the second as `key#2`), and exception
   and stack text, in time linear in the text (TASK-275, TASK-283). Every pattern reads the text as given and the
   union of the secrets they find is redacted at once (`logs.secret_spans`), so no pattern can hide a secret from
-  another. It redacts:
+  another; the union also replays the scrub of before TASK-275 (`_legacy_spans`), so nothing it redacted is ever
+  logged. It redacts:
   - URL userinfo (`user:pass@`);
   - the value of a parameter whose name (letters, digits, `_.%-`, starting after any other character) holds
     `token`, `key`, `secret`, `password`, `passwd`, `auth`, `sig`, `cookie`, `credential` or `bearer`:
