@@ -1243,7 +1243,7 @@ g config --unset remote.origin.mirror
 g config --unset remote.Origin.mirror
 g config remote.Origin.push refs/heads/other2:refs/heads/other2
 g config remote.origin.push refs/heads/mut:refs/heads/mut
-check $R block "remote.Origin.push and remote.origin.push" "$(payload_bash 'git push origin')"
+check $R block "remote.Origin.push and remote.origin.push (regression: both refspecs refused)" "$(payload_bash 'git push origin')"
 g config --unset remote.Origin.push
 g config --unset remote.origin.push
 # the matching refspec ':' pushes every branch that exists on both sides
