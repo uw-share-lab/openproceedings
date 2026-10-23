@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-23 15:06'
-updated_date: '2026-10-23 20:04'
+updated_date: '2026-10-23 20:14'
 labels:
   - logging
   - security
@@ -56,4 +56,6 @@ At the owner's request (2026-10-23), in TASK-275's branch: a parameter name star
 2026-10-23 review round 8 (docs-reviewer, code-reviewer): _LEGACY_QUERY now uses origin/dev's own word list, so 'the same matches' is literally true; a test compares it with the original quadratic pattern over every short string.
 
 2026-10-23 review round 8 (security-reviewer): a token ran through an escape or punctuation into a following Bearer, which (matches don't overlap) was never tried: Bearer A\nBearer SECRET kept SECRET (404 of 100k JSON header values). The token now ends right before anything another bearer match would start after (_BEARER_NEXT), and the separator is one or more of any separator unit, mixed (Bearer \tBearer). Linear: each lookahead is bounded.
+
+2026-10-23: the automated review of 2927bf1c: the early stop was broader than where a bearer match starts (Bearer A\fbearer+SECRET stopped before \f, where none starts, leaking SECRET) and narrower in one place (a bare %). _BEARER_NEXT now holds exactly where the pattern would match (start, bearer, separator, no second bearer, a token), and a property test checks every token any overlapping start finds is redacted (69,905 joins + 20,000 seeded).
 <!-- SECTION:NOTES:END -->

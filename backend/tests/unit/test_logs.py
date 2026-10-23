@@ -522,6 +522,10 @@ def test_scrub_redacts_everything_it_did_before_on_every_short_join_of_pieces() 
         ("\\nBearer SECRET", "\\nBearer [redacted]"),
         # a token ends before another `bearer` match would start (matches don't overlap)
         ("Bearer A\\nBearer SECRET", "Bearer [redacted]\\nBearer [redacted]"),
+        ("Bearer A\\fbearer+SECRET", "Bearer [redacted]"),  # no match starts after `\\f`: one token
+        ("Bearer A\\xbearer%20SECRET", "Bearer [redacted]"),
+        ("Bearer A%bearer SECRET", "Bearer [redacted]%bearer [redacted]"),  # one starts after a bare `%`
+        ("Bearer A/Bearer Bearer SECRET", "Bearer [redacted] Bearer [redacted]"),  # no stop before a doubled one
         ("Bearer A\\/Bearer SECRET", "Bearer [redacted]\\/Bearer [redacted]"),
         ("Bearer A\\Bearer SECRET", "Bearer [redacted]\\Bearer [redacted]"),
         ("Bearer A%0ABearer SECRET", "Bearer [redacted]%0ABearer [redacted]"),
@@ -723,3 +727,55 @@ def test_the_replayed_query_pattern_is_origin_devs_on_every_short_string() -> No
     for text in [*_strings("?&=sig #", 6), *_strings("?&=key_", 6)]:
         old = [(m.end("k") + 1, m.end()) for m in _PRE275_QUERY.finditer(text)]
         assert [m.span("v") for m in logs._LEGACY_QUERY.finditer(text)] == old, text
+
+
+# every place a `bearer` match may start, overlapping: the bearer pattern without its early stop, in a lookahead
+_EVERY_BEARER = re.compile(
+    r"(?=(?:(?<!\w)|(?<=%[0-9a-f]{2})|(?<=\\[nrt]))bearer"
+    + logs._BEARER_SEP
+    + r"(?!bearer"
+    + logs._BEARER_SEP
+    + r")(?P<v>(?:[^\s\"',;\\]|\\[^\s\"'\\])++))",
+    re.IGNORECASE,
+)
+_BEARER_PIECES = [
+    "Bearer",
+    " ",
+    "A",
+    "\\n",
+    "\\f",
+    "\\x",
+    "\\/",
+    "\\",
+    "%0A",
+    "%",
+    "/",
+    "+",
+    "%20",
+    "\\t",
+    "x",
+    ",",
+]
+
+
+def _assert_every_bearer_token_redacted(text: str) -> None:
+    matches = list(_EVERY_BEARER.finditer(text))
+    # what may stay in clear: each later match's `bearer`, separator, and the (up to 3-character) escape before it
+    clear = {i for n in matches for i in range(max(n.start() - 3, 0), n.start("v"))}
+    redacted = _redacted(logs.secret_spans(text))
+    for m in matches:
+        assert set(range(*m.span("v"))) - clear <= redacted, text
+
+
+def test_every_bearer_token_is_redacted_where_another_bearer_follows() -> None:
+    """A token ends early before a `bearer` another match starts at (matches don't overlap), so that stop must
+    hold exactly where a match may start (`Bearer A\\fbearer+x` stopped where none could, leaking `x`): every
+    token any start finds is redacted, over every join of up to 4 pieces (69,905) and 20,000 seeded joins of 5-10."""
+    for n in range(5):
+        for parts in product(_BEARER_PIECES, repeat=n):
+            _assert_every_bearer_token_redacted("".join(parts))
+    rng = random.Random(283)
+    for _ in range(20_000):
+        _assert_every_bearer_token_redacted(
+            "".join(rng.choice(_BEARER_PIECES) for _ in range(rng.randint(5, 10)))
+        )

@@ -147,3 +147,8 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
   pass with NULs in place of each secret, then its query pattern, origin/dev's words and all, made linear and tested equal to the original), and
   adds their spans to the union. The superset is then a property of the code, and the tests check the replay
   against the original quadratic patterns instead of being the only guard.
+- **An early stop must hold exactly where the next match would.** Ending a token "before another `bearer`" so a
+  second match is tried (matches don't overlap) leaked in both directions until the stop and the start were the
+  same condition: broader (`\fbearer+x`: stopped where no match starts, so `x` was never redacted) and narrower (a
+  bare `%`). The test that pins it compares with an overlapping version of the pattern (wrapped in a lookahead):
+  every token any start finds must be redacted.

@@ -84,9 +84,15 @@ _ENC_START = r"(?:(?<![a-z0-9_.%-])|(?<=%[0-9a-f]{2})(?<!%5F)(?<!%2D)(?<!%2E)|(?
 # what separates `bearer` from its token: whitespace that is no line break, or `%20`, `%09`, a JSON `\t`, `+`
 _BEARER_ONE = r"(?:[^\S\n\r\v\f\x1c-\x1e\x85\u2028\u2029]|%20|%09|\\t|\+)"
 _BEARER_SEP = rf"{_BEARER_ONE}++"  # mixed too (` \tBearer`)
-# where a token ends early: right before an escape or punctuation that another `bearer` match would start after
-# (`Bearer A\nBearer SECRET`: matches don't overlap, so the second would never be tried)
-_BEARER_NEXT = rf"(?:\\[^\s\"'\\]|\\|%[0-9a-f]{{2}}|[^\w\s\"',;\\%])bearer{_BEARER_ONE}"
+# where a token ends early: right before another `bearer` match (`Bearer A\nBearer SECRET`: matches don't
+# overlap, so the second would never be tried). It holds exactly where that match would: after `\n`, `\r` or `\t`,
+# a backslash and a non-word character (`\/`), an escape (`%0A`), or any other non-word character (a bare `\` or
+# `%` included), then `bearer`, a separator, no second `bearer`, and a token (test_logs checks every case)
+_BEARER_TOKEN = r"(?:[^\s\"',;\\]|\\[^\s\"'\\])"  # one unit of a token: a character, or an escape
+_BEARER_NEXT = (
+    rf"(?:\\(?:[nrt]|[^\w\s\"'\\])|%[0-9a-f]{{2}}|[^\w\s\"',;])"
+    rf"bearer{_BEARER_SEP}(?!bearer{_BEARER_SEP}){_BEARER_TOKEN}"
+)
 _QUOTED = r"(?P<{q}>[\"'])(?:(?!(?P={q}))[^\\]|\\[\s\S])*+(?P={q})"  # a quoted string, escapes inside it
 _SCRUBS = types.MappingProxyType(
     {
@@ -132,7 +138,7 @@ _SCRUBS = types.MappingProxyType(
         # it, an escaped quote ends it
         "bearer": re.compile(
             rf"(?:(?<!\w)|(?<=%[0-9a-f]{{2}})|(?<=\\[nrt]))bearer{_BEARER_SEP}(?!bearer{_BEARER_SEP})"
-            rf"(?P<v>(?:(?!{_BEARER_NEXT})(?:[^\s\"',;\\]|\\[^\s\"'\\]))++)",
+            rf"(?P<v>(?:(?!{_BEARER_NEXT}){_BEARER_TOKEN})++)",
             re.IGNORECASE,
         ),
     }
