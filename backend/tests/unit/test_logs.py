@@ -378,6 +378,13 @@ def test_every_query_value_redacted_before_is_redacted_on_every_short_string() -
         ),
         ("?next=%2F%3Fa%3D1%26API%5FKEY%3Dz%23f", "?next=%2F%3Fa%3D1%26API%5FKEY%3D[redacted]%23f"),
         ("?next=https%3A%2F%2Fu%3Ap%40h%2Fz", "?next=https%3A%2F%2F[redacted]%40h%2Fz"),
+        ("?n=%22https%3A%2F%2Fu%3Ap%40h", "?n=%22https%3A%2F%2F[redacted]%40h"),  # right after another escape
+        (
+            "?n=%2Chttps%3A%2F%2Fu%40h %20ftp%3A%2F%2Fv%40g",
+            "?n=%2Chttps%3A%2F%2F[redacted]%40h %20ftp%3A%2F%2F[redacted]%40g",
+        ),
+        ("?n=%2F%3Ftoken%3Dab!c*d(e)/f:g&x=1", "?n=%2F%3Ftoken%3D[redacted]&x=1"),  # every value character
+        ('{"u": "%2F%3Ftoken%3Dab", "x": 1}', '{"u": "%2F%3Ftoken%3D[redacted]", "x": 1}'),  # a quote ends it
         (
             "?r=%2Fcb%23access_token%3Dab%26x%3D1",
             "?r=%2Fcb%23access_token%3D[redacted]%26x%3D1",
@@ -388,6 +395,8 @@ def test_every_query_value_redacted_before_is_redacted_on_every_short_string() -
         ('{"access_token": "abc", "n": 1}', '{"access_token": "[redacted]", "n": 1}'),
         ("{'client_secret': 'a\\'b', 'x': 'y'}", "{'client_secret': '[redacted]', 'x': 'y'}"),
         ('{"token":"a\\"b"}', '{"token":"[redacted]"}'),  # an escaped quote stays inside the value
+        ('{"token": \'ab"c\'}', "{\"token\": '[redacted]'}"),  # the value's own quote
+        ("{'token': b'ab'}", "{'token': b'[redacted]'}"),  # a bytes value
         ('{"tokens": 3, "page": "2"}', '{"tokens": 3, "page": "2"}'),  # a value that is not quoted is left
         (
             "https://h/x?designer=1",
@@ -427,6 +436,10 @@ def test_scrub_examples(value: str, expected: str) -> None:
         lambda n: "'" + "a" * n,
         lambda n: "'token': '" + "\\a" * (n // 2),
         lambda n: ('"token": "' + "a" * 50) * (n // 60),
+        lambda n: "%22h%3A" * (n // 7),  # an encoded scheme tried after every escape
+        lambda n: "%3Ftoken%3D" + "!" * n,
+        lambda n: "'token': b'" * (n // 11),
+        lambda n: '"token": \'' + "a" * n,
     ],
 )
 def test_scrub_is_linear_on_a_long_run(build: object) -> None:

@@ -78,9 +78,10 @@ _SCRUBS = (
     # userinfo (`user:pass@`). A scheme starts at its run's first letter, after the run's digits and `+.-`, so
     # `1a://user@` and `.a://user@` lose their userinfo (a lookbehind alone would leave them).
     re.compile(r"(?<![a-zA-Z0-9+.-])[0-9+.-]*+[a-zA-Z][a-zA-Z0-9+.-]*+://(?P<v>[^/\s@]+)@"),
-    # the same, percent-encoded in a value (`?next=https%3A%2F%2Fu%3Ap%40h`, TASK-283)
+    # the same, percent-encoded in a value (`?next=https%3A%2F%2Fu%3Ap%40h`, TASK-283), also right after
+    # another escape (`%22https%3A…`)
     re.compile(
-        r"(?<![a-z0-9+.%-])[0-9+.-]*+[a-z][a-z0-9+.-]*+%3A%2F%2F(?P<v>(?:[^%/\s@]|%(?!2F|40)[0-9a-f]{2})++)%40",
+        r"(?:(?<![a-z0-9+.%-])|(?<=%[0-9a-f]{2}))[0-9+.-]*+[a-z][a-z0-9+.-]*+%3A%2F%2F(?P<v>(?:[^%/\s@]|%(?!2F|40)[0-9a-f]{2})++)%40",
         re.IGNORECASE,
     ),
     # a parameter whose name holds a secret word, wherever its name starts (`?access_token=`, `#access_token=`,
@@ -89,13 +90,14 @@ _SCRUBS = (
     # the same, percent-encoded in a value (`?next=https%3A%2F%2Fh%2F%3Ftoken%3Dabc`, TASK-283)
     re.compile(
         rf"(?:%3F|%26|%23|%3B)(?={_ENC_NAME}*(?:{_WORDS})){_ENC_NAME}*+%3D"
-        r"(?P<v>(?:[a-z0-9_.~+-]|%(?!26|23)[0-9a-f]{2})*+)",
+        r"(?P<v>(?:[^%&\s#\"']|%(?!26|23)[0-9a-f]{2})*+)",
         re.IGNORECASE,
     ),
-    # a quoted key holding a secret word and its quoted value (`{"access_token": "abc"}`, a dict's repr, TASK-283)
+    # a quoted key holding a secret word and its quoted value, either quote (`{"access_token": "abc"}`, a dict's
+    # repr, a bytes value `b'abc'`, TASK-283)
     re.compile(
-        rf"(?P<q>[\"'])(?={_NAME}*(?:{_WORDS})){_NAME}*+(?P=q)\s*+:\s*+(?P=q)"
-        r"(?P<v>(?:(?!(?P=q))[^\\]|\\[\s\S])*+)(?P=q)",
+        rf"(?P<q>[\"'])(?={_NAME}*(?:{_WORDS})){_NAME}*+(?P=q)\s*+:\s*+b?(?P<q2>[\"\'])"
+        r"(?P<v>(?:(?!(?P=q2))[^\\]|\\[\s\S])*+)(?P=q2)",
         re.IGNORECASE,
     ),
     # `Authorization: Bearer …` quoted in exception text: the word after a whole-word `bearer` and whitespace that
