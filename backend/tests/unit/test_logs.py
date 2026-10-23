@@ -525,6 +525,7 @@ def test_scrub_redacts_everything_it_did_before_on_every_short_join_of_pieces() 
         ("Bearer A\\fbearer+SECRET", "Bearer [redacted]"),  # no match starts after `\\f`: one token
         ("Bearer A\\xbearer%20SECRET", "Bearer [redacted]"),
         ("Bearer A%bearer SECRET", "Bearer [redacted]%bearer [redacted]"),  # one starts after a bare `%`
+        ("Bearer A\\%0ABearer SECRET", "Bearer [redacted]\\%0ABearer [redacted]"),  # an escape after a `\\`
         (
             "Bearer A/Bearer Bearer SECRET",
             "Bearer [redacted] Bearer [redacted]",
@@ -763,8 +764,8 @@ _BEARER_PIECES = [
 
 def _assert_every_bearer_token_redacted(text: str) -> None:
     matches = list(_EVERY_BEARER.finditer(text))
-    # what may stay in clear: each later match's `bearer`, separator, and the (up to 3-character) escape before it
-    clear = {i for n in matches for i in range(max(n.start() - 3, 0), n.start("v"))}
+    # what may stay in clear: each later match's `bearer`, separator, and the escape before it (up to 4: `\\%0A`)
+    clear = {i for n in matches for i in range(max(n.start() - 4, 0), n.start("v"))}
     redacted = _redacted(logs.secret_spans(text))
     for m in matches:
         assert set(range(*m.span("v"))) - clear <= redacted, text
@@ -782,3 +783,11 @@ def test_every_bearer_token_is_redacted_where_another_bearer_follows() -> None:
         _assert_every_bearer_token_redacted(
             "".join(rng.choice(_BEARER_PIECES) for _ in range(rng.randint(5, 10)))
         )
+
+
+def test_every_bearer_token_is_redacted_whatever_sits_between_two() -> None:
+    """`Bearer A<between>Bearer x` for every join of up to 3 pieces between (4,369): the shapes where a start hides
+    inside a two-character token unit (`A\\%0ABearer`, round 8) are 8 pieces in all, past the joins above."""
+    for n in range(4):
+        for parts in product(_BEARER_PIECES, repeat=n):
+            _assert_every_bearer_token_redacted("Bearer A" + "".join(parts) + "Bearer x")

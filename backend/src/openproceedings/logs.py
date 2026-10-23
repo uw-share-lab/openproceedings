@@ -86,11 +86,12 @@ _BEARER_ONE = r"(?:[^\S\n\r\v\f\x1c-\x1e\x85\u2028\u2029]|%20|%09|\\t|\+)"
 _BEARER_SEP = rf"{_BEARER_ONE}++"  # mixed too (` \tBearer`)
 # where a token ends early: right before another `bearer` match (`Bearer A\nBearer SECRET`: matches don't
 # overlap, so the second would never be tried). It holds exactly where that match would: after `\n`, `\r` or `\t`,
-# a backslash and a non-word character (`\/`), an escape (`%0A`), or any other non-word character (a bare `\` or
+# a backslash and a non-word character (`\/`), an escape (`%0A`, also after a backslash: a token reads `\%` as
+# one unit, so a start inside it would be skipped), or any other non-word character (a bare `\` or
 # `%` included), then `bearer`, a separator, no second `bearer`, and a token (test_logs checks every case)
 _BEARER_TOKEN = r"(?:[^\s\"',;\\]|\\[^\s\"'\\])"  # one unit of a token: a character, or an escape
 _BEARER_NEXT = (
-    rf"(?:\\(?:[nrt]|[^\w\s\"'\\])|%[0-9a-f]{{2}}|[^\w\s\"',;])"
+    rf"(?:\\(?:[nrt]|%[0-9a-f]{{2}}|[^\w\s\"'\\])|%[0-9a-f]{{2}}|[^\w\s\"',;])"
     rf"bearer{_BEARER_SEP}(?!bearer{_BEARER_SEP}){_BEARER_TOKEN}"
 )
 _QUOTED = r"(?P<{q}>[\"'])(?:(?!(?P={q}))[^\\]|\\[\s\S])*+(?P={q})"  # a quoted string, escapes inside it
