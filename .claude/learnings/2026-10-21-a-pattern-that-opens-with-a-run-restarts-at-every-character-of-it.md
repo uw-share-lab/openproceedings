@@ -130,9 +130,9 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
 - **But the old order was part of the old behaviour.** origin/dev's userinfo pass took a `#` or `&` out of a
   URL's userinfo before its query pass read the value, so `?token=a://x#y@SECRET` lost everything after `=`; the
   union cut the value at the `#` and logged `@SECRET` (qa-auditor, round 6). The parameter value now takes a
-  userinfo after `://` whole. The shortest such string is 6 pieces (7 to leak a character after the `@`), past the exhaustive joins of 3, so a targeted
-  generator (`?<word>=<s1>a://<s2><#|&><s3>@<s4>`) covers it: when replacing sequential passes with a union, list
-  what each old pass changed that a later old pass then read.
+  userinfo after `://` whole. The shortest such string is 6 pieces (7 to leak a character after the `@`), past
+  the exhaustive joins of 3, so a targeted generator (`?<word>=<s1>a://<s2><#|&><s3>@<s4>`) covers it: when
+  replacing sequential passes with a union, list what each old pass changed that a later old pass then read.
 - **Test the whole function against the whole old one.** The superset test that checked one pattern alone, over
   an alphabet without the characters where the patterns differ, could not see any of this. The new test runs
   origin/dev's two passes with each secret replaced by as many NULs (so positions survive) and asserts every
@@ -144,8 +144,8 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
 - **Then make the superset hold by construction.** Round 7 found a third shape of the same family
   (`?token='a://b'#y@SECRET`: the quoted value took the `://` the userinfo alternative needed). Patching shapes
   one by one never closes it. `secret_spans` now also replays origin/dev's two passes, linearly (its userinfo
-  pass with NULs in place of each secret, then its query pattern, origin/dev's words and all, made linear and tested equal to the original), and
-  adds their spans to the union. The superset is then a property of the code, and the tests check the replay
+  pass with NULs in place of each secret, then its query pattern, origin/dev's words and all, made linear and
+  tested equal to the original), and adds their spans to the union. The superset is then a property of the code, and the tests check the replay
   against the original quadratic patterns instead of being the only guard.
 - **An early stop must hold exactly where the next match would.** Ending a token "before another `bearer`" so a
   second match is tried (matches don't overlap) leaked in both directions until the stop and the start were the

@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-23 15:06'
-updated_date: '2026-10-23 20:20'
+updated_date: '2026-10-23 20:49'
 labels:
   - logging
   - security
@@ -60,4 +60,6 @@ At the owner's request (2026-10-23), in TASK-275's branch: a parameter name star
 2026-10-23: the automated review of 2927bf1c: the early stop was broader than where a bearer match starts (Bearer A\fbearer+SECRET stopped before \f, where none starts, leaking SECRET) and narrower in one place (a bare %). _BEARER_NEXT now holds exactly where the pattern would match (start, bearer, separator, no second bearer, a token), and a property test checks every token any overlapping start finds is redacted (69,905 joins + 20,000 seeded).
 
 2026-10-23: the automated review of 9c353470: a token reads \% as one unit, so a start after \%0A was skipped (Bearer A\%0ABearer SECRET). The stop also fires on \%XX; a targeted test puts every join of up to 3 pieces between two bearer tokens (4,369). A start depends on at most 4 characters before bearer and a token unit can hide only the % of \%XX, so no other start can be skipped.
+
+2026-10-23 review round 9: correction to an earlier note: the bearer early-stop lookahead is not bounded in length (its separator run is unbounded); it is linear because the run is possessive and each bearer is seen from at most two stopping points. qa-auditor's test gaps closed: the property test's oracle writes its separator out (a {1,2} separator mutant leaked Bearer%20%20%20SECRET), \r joins the pieces, the stop's own refusal and the replay's ;/% value characters are pinned, and the clear allowance is each start's exact context. Escapes other than %XX and JSON \n/\r/\t before Bearer start no match (documented; security-reviewer lists them out of scope).
 <!-- SECTION:NOTES:END -->
