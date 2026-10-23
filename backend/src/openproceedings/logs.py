@@ -66,16 +66,19 @@ SECRET_PREFIXES = ("password", "passwd", "secret", "auth_", "bearer", "credentia
 NOT_SECRET = frozenset({"token_count", "tokens", "token_total"})
 REDACTED = "[redacted]"
 
-# Both are tried at a run's start only, so each run of name characters is read once and scrub is linear in
-# its text (TASK-275): a match tried at every character of a long run read the rest of the run each time.
-# A scheme starts at a run's first letter: `pre` is the run's digits and `+.-` before it, put back as they
-# were, so `1a://user@` still loses its userinfo (a lookbehind alone would leave it).
+# Each run of scheme characters is tried once, at its start, so scrub is linear in its text (TASK-275): tried at
+# every character of a long run, the pattern read the rest of the run each time. A scheme starts at a run's
+# first letter: `pre` is the run's digits and `+.-` before it, put back as they were, so `1a://user@` and
+# `.a://user@` still lose their userinfo (a lookbehind alone would leave them).
 _URL_USERINFO = re.compile(
     r"(?<![a-zA-Z0-9+.-])(?P<pre>[0-9+.-]*+)(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*+://)[^/\s@]+@"
 )
-# A parameter's whole name, read once, when it has a secret word anywhere in it (`?access_token=`).
+# A parameter's whole name, read once, when it has a secret word anywhere in it (`?access_token=`,
+# `?X-Amz-Signature=`, `?api%5Fkey=`): a lazy scan for the word re-read the rest of the name once per place the
+# word appears in it (TASK-275).
 _SECRET_QUERY = re.compile(
-    r"(?P<k>[?&](?=[a-z0-9_]*(?:token|key|secret|password|passwd|auth|sig|signature))[a-z0-9_]*+)=[^&\s#]*",
+    r"(?P<k>[?&](?=[a-z0-9_.%-]*(?:token|key|secret|password|passwd|auth|sig|signature))[a-z0-9_.%-]*+)"
+    r"=[^&\s#]*",
     re.IGNORECASE,
 )
 
@@ -137,7 +140,7 @@ def _sensitive(key: str, log_query_text: bool) -> bool:
 def _clean(value: object, log_query_text: bool) -> object:
     if isinstance(value, Mapping):
         return {
-            str(k): (REDACTED if _sensitive(str(k), log_query_text) else _clean(v, log_query_text))
+            scrub(str(k)): (REDACTED if _sensitive(str(k), log_query_text) else _clean(v, log_query_text))
             for k, v in value.items()
         }
     if isinstance(value, list | tuple | set | frozenset):
@@ -145,6 +148,7 @@ def _clean(value: object, log_query_text: bool) -> object:
     if value is None or isinstance(value, bool | int | float):
         return value
     # Everything else is logged via str(), so scrub that: an exception or an httpx.URL can carry credentials.
+    # Keys are scrubbed too (above and in `_fields`): `extra={url: …}` would log its URL as a key.
     return scrub(value if isinstance(value, str) else str(value))
 
 
@@ -153,7 +157,8 @@ def _fields(record: logging.LogRecord, log_query_text: bool) -> dict[str, object
     raw.update({k: v for k, v in vars(record).items() if k not in _STANDARD})
     out: dict[str, object] = {}
     for key, value in raw.items():
-        name = f"field_{key}" if key in CORE_KEYS else key  # a field can never overwrite the line's shape
+        # a field can never overwrite the line's shape, and a key that is a URL loses its credentials
+        name = f"field_{key}" if key in CORE_KEYS else scrub(key)
         out[name] = REDACTED if _sensitive(key, log_query_text) else _clean(value, log_query_text)
     return out
 

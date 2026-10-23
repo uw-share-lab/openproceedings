@@ -69,10 +69,22 @@ cost seconds of CPU on every public `/export?format=bibtex` that included it), k
 - **Swapping the old patterns back needs the new group.** `scrub`'s replacement now names `pre`, so the old
   userinfo pattern goes back on `logs` with an empty `(?P<pre>)` in front, which matches nothing; the comparison
   then runs today's `scrub` itself, as the swap rule above asks.
-- **Evidence.** A one-off run compared each pattern alone, old against new, over 16.5M short strings of its
-  characters (scrub's two up to 7, 7.8M; `_split_entry`'s two up to 8, 8.7M): no difference. The tests compare
-  the functions themselves, up to 6 (scrub) and 7 (`_split_entry`). On the old patterns all seven growth cases failed; seven wrong patterns
-  (the digit-less lookbehind, `(?<! )` for `(?<!\s)`, `_` dropped from the name class, …) were each killed.
-- Propagated to: `.claude/skills/testing-standards/SKILL.md` §7 (the word-in-a-run shape, and timing the
-  neighbouring patterns); tests in `backend/tests/unit/test_logs.py` and
+- **Evidence.** A one-off run compared each pattern alone, old against new, over 16.5M short strings: userinfo
+  over `a1.:/@ #` up to 7 (2.4M), the query over `?&=sigx #` up to 7 (5.4M), `_TRAILING_AND` over `and \nx` up to
+  8 (2.0M), `_AUTHOR_SEPARATOR` over `and ,\nx` up to 8 (6.7M): no difference. The tests compare the functions
+  themselves, up to 6 (scrub) and 7 (`_split_entry`).
+- **The exhaustive length hides the punctuation before a scheme.** qa-auditor found `(?P<pre>[0-9]*+)` (no
+  `+.-`) passed every test and leaked `.a://u@h`: the shortest string that shows it has 7 characters. Named
+  examples (`.a://`, `-a://`, `+a://`) cover it. Likewise one stand-in per class in a growth case lets a
+  narrower lookbehind through: `(?<![a-zA-Z0-9.])` is quadratic on `a+a+…`, `(?<![ \n])` on a tab run, so the
+  growth cases now run each scheme punctuation character and each kind of whitespace `\s` reads. An alphabet
+  proves output for the classes it stands in for, not cost for every member of them.
+- **Gaps the review found beside the fix, fixed here at the owner's request (2026-10-23).** `_SECRET_QUERY`'s
+  name class had no `-`, `.` or `%`, so `?X-Amz-Signature=`, `?api-key=` and `?api%5Fkey=` were logged in clear
+  (pre-existing); it is now `[a-z0-9_.%-]`, so the old-pattern comparison leaves those characters out of its
+  alphabet and examples cover them. And `_clean`/`_fields` never scrubbed keys, so `extra={url: …}` logged a
+  URL's credentials as a key; every key is now scrubbed. Both widen redaction only.
+- Propagated to: `.claude/skills/testing-standards/SKILL.md` §7 (the word-in-a-run shape, timing the
+  neighbouring patterns, a growth case per character a lookbehind refuses); `.claude/skills/logging-standards/SKILL.md`
+  (what scrub redacts, keys included); tests in `backend/tests/unit/test_logs.py` and
   `backend/tests/unit/ingest/test_openreview_v1_authors.py`.

@@ -60,8 +60,9 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   bodies. Never log `Diagnostic.message` or `OpenProceedingsError.message`: they quote user input. Log
   the `code` (a `UserInputError` at DEBUG, an `InternalError` at ERROR with the traceback). Never log IPs beyond what the rate limiter needs in memory.
 - Exceptions from HTTP clients can carry URLs with credentials or tokens. `logs.py` scrubs `user:pass@` and
-  secret-looking query parameters (`token`, `key`, `secret`, `password`, `auth`, `sig`) from every string
-  value and from exception and stack text, and redacts secret-shaped keys (starting or ending with a secret word: `password…`, `…_token`, `auth_…`,
+  secret-looking query parameters (a name of letters, digits and `_.%-` holding `token`, `key`, `secret`,
+  `password`, `auth` or `sig`: `?access_token=`, `?X-Amz-Signature=`, `?api%5Fkey=`) from every string value,
+  every key at any depth, and exception and stack text, in time linear in the text (TASK-275), and redacts secret-shaped keys (starting or ending with a secret word: `password…`, `…_token`, `auth_…`,
   `secret…`, `bearer…`, `…api_key`) case-insensitively at any depth, while ordinary fields like
   `tokenizer_version`, `token_count` and `author_count` stay visible.
   That is a backstop, not permission: still never pass credentials to a log call.

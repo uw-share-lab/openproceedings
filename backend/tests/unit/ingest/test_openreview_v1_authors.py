@@ -220,8 +220,9 @@ def _split(entries: list[str], patterns: dict[str, re.Pattern[str]] | None = Non
 
 def test_an_entry_splits_as_before_on_every_short_string() -> None:
     """Every string up to 7 characters of `and`, a space, a newline (where `$` also matches), a comma and one
-    other letter (960,800): the same pieces; each pattern alone, compared over every string up to 8 characters
-    (8.7M in all), showed no difference either."""
+    other letter (960,800): the same pieces. Once, not in CI: each pattern alone over every string up to 8
+    characters (`_TRAILING_AND` over `and \\nx`, 2.0M; `_AUTHOR_SEPARATOR` over `and ,\\nx`, 6.7M) showed no
+    difference."""
     entries = ["".join(chars) for n in range(8) for chars in product("and \n,x", repeat=n)]
     before = _split(entries, _PRE276)
     for entry, now, then in zip(entries, _split(entries), before, strict=True):
@@ -233,9 +234,11 @@ def test_an_entry_splits_as_before_on_every_short_string() -> None:
     [
         lambda n: "a" + " " * n + "b",  # `\s+and` tried at every space
         lambda n: "a" + " " * n + "andb",
-        lambda n: "a" + " \n" * (n // 2) + "b",  # any whitespace, as `\s` reads it
+        lambda n: "a" + " \n" * (n // 2) + "b",
+        lambda n: "a" + " \t\n\r\f\v\u00a0\u2028" * (n // 8) + "b",  # each kind of whitespace `\s` reads
     ],
 )
 def test_an_entry_with_a_long_run_of_spaces_splits_in_linear_time(build: object) -> None:
-    """20k spaces took 791 ms before TASK-276, 16 times 5k's (crawl time only)."""
+    """20k spaces took 791 ms in `_split_entry` before TASK-276 (each of its two patterns about 400 ms), 16
+    times 5k's (crawl time only)."""
     assert_near_linear(v1._split_entry, build, 5_000)  # type: ignore[arg-type]

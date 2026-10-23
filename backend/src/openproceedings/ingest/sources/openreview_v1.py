@@ -639,8 +639,8 @@ def _pdf(nid: str, value: Any) -> str | None:
 _LEADING_AND = re.compile(
     r"^and(\s+|$)"
 )  # lowercase only, as every `and` seen live; `And`/`AND` are left as is
-# `\s+and` is tried at a run of spaces' first space only (`(?<!\s)`), so a long run is read once, not once from
-# each of its spaces (TASK-276); the matches are the same
+# Both `\s+and` patterns are tried at a whitespace run's first character only (`(?<!\s)`), so a long run is read
+# once, not once from each of its characters (TASK-276); the matches are the same
 _TRAILING_AND = re.compile(r"(?<!\s)\s+and$")  # a dangling `A and`
 _AUTHOR_SEPARATOR = re.compile(
     r",\s*and\s+|,|(?<!\s)\s+and\s+"

@@ -309,12 +309,14 @@ def _scrubbed(texts: list[str], patterns: dict[str, re.Pattern[str]] | None = No
 
 
 # every character each pattern reads: a letter, a digit, `.` for the other scheme punctuation, `:/@`, a space,
-# and one character neither reads; `?&=` and `sig` (a secret word whose letters are also name characters)
+# and `#`, which ends a query value; `?&=` and `sig` (a secret word whose letters are also name characters).
+# `-.%` in a query name are left out: since TASK-275 they are name characters, and redacted (examples below).
 @pytest.mark.parametrize("alphabet", ["a1.:/@ #", "?&=sig #"])
 def test_scrub_gives_what_it_gave_before_on_every_short_string(alphabet: str) -> None:
     """Every string up to 6 characters (299,593 per alphabet): the same text out, so a log line reads as
-    before; each pattern alone, compared over every string up to 7 characters (7.8M in all), showed no
-    difference either."""
+    before. A difference first shown at 7 characters (`.a://b@`, a scheme after punctuation) is a named example.
+    Once, not in CI: each pattern alone over every string up to 7 characters (userinfo over `a1.:/@ #`, 2.4M;
+    the query over `?&=sigx #`, 5.4M) showed no difference."""
     texts = ["".join(chars) for n in range(7) for chars in product(alphabet, repeat=n)]
     before = _scrubbed(texts, _PRE275)
     for text, now, then in zip(texts, _scrubbed(texts), before, strict=True):
@@ -326,8 +328,20 @@ def test_scrub_gives_what_it_gave_before_on_every_short_string(alphabet: str) ->
     [
         ("1a://u:p@h", "1a://[redacted]@h"),  # a scheme after digits still loses its userinfo
         ("x+1a://u@h", "x+1a://[redacted]@h"),
+        (".a://u@h", ".a://[redacted]@h"),  # 7 characters: past the exhaustive comparison
+        ("-a://u@h", "-a://[redacted]@h"),
+        ("+a://u@h", "+a://[redacted]@h"),
         ("see https://u@h and ftp://v@g", "see https://[redacted]@h and ftp://[redacted]@g"),
         ("https://h/x?an_Auth_code=1&sig=2", "https://h/x?an_Auth_code=[redacted]&sig=[redacted]"),
+        (
+            "?\u017fig=1",
+            "?\u017fig=[redacted]",
+        ),  # long s folds to `s` under IGNORECASE, in the word and the name
+        ("?\u212aey=1", "?\u212aey=[redacted]"),  # Kelvin sign folds to `k`
+        ("https://s3/x?X-Amz-Signature=ab&p=1", "https://s3/x?X-Amz-Signature=[redacted]&p=1"),
+        ("https://h/x?api-key=ab", "https://h/x?api-key=[redacted]"),
+        ("https://h/x?api%5Fkey=ab", "https://h/x?api%5Fkey=[redacted]"),
+        ("https://h/x?auth.v2=ab", "https://h/x?auth.v2=[redacted]"),
         (
             "https://h/x?designer=1",
             "https://h/x?designer=[redacted]",
@@ -345,8 +359,23 @@ def test_scrub_examples(value: str, expected: str) -> None:
         lambda n: "x a://" + "b" * n,
         lambda n: "?" + "token" * (n // 5),  # a secret word found again at every repeat
         lambda n: "a1." * (n // 3),  # a scheme tried at every third character
+        lambda n: "a+" * (n // 2),  # each scheme punctuation character the lookbehind must read
+        lambda n: "a-" * (n // 2),
+        lambda n: "?" + "a-%." * (n // 4) + "token",  # a query name of each added name character
     ],
 )
 def test_scrub_is_linear_on_a_long_run(build: object) -> None:
-    """20k characters took 289-453 ms before TASK-275, 16 times 5k's: crawled text reaching a log line."""
+    """About 20k characters took 97-760 ms before TASK-275 by shape (292 ms on a run of letters, 758 ms on
+    `?` + `token` x 4,000), 16 times 5k's: crawled text reaching a log line."""
     assert_near_linear(logs.scrub, build, 5_000)  # type: ignore[arg-type]
+
+
+def test_a_url_used_as_a_key_loses_its_credentials(stream: io.StringIO) -> None:
+    """Keys are scrubbed at any depth, top-level `extra` keys included."""
+    logging.getLogger("openproceedings.x").info(
+        "e", extra={"https://u:p@h/?token=t": 1, "m": {"https://v:q@g": [{"a://w@f": 2}]}}
+    )
+    (rec,) = lines(stream)
+    assert rec["https://[redacted]@h/?token=[redacted]"] == 1
+    assert rec["m"] == {"https://[redacted]@g": [{"a://[redacted]@f": 2}]}
+    assert "p@" not in json.dumps(rec) and "q@" not in json.dumps(rec)

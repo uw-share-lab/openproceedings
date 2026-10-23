@@ -92,6 +92,10 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
    once, possessive (`[?&](?=[a-z0-9_]*(?:token|key))[a-z0-9_]*+=`, TASK-275). When one pattern is found quadratic,
    time every pattern beside it that the same text reaches on the same hostile shapes: TASK-275 and TASK-276 each
    named one, and the function holding it had a second (`scrub`'s query pattern, `_split_entry`'s separator).
+   One character per class proves output for the class, not cost for each member: a growth case runs every
+   character a lookbehind must refuse (each of `+.-`, each kind of whitespace `\s` reads), or a narrower
+   lookbehind (`(?<![ \n])`) passes it and is quadratic on a tab run. A difference only a string past the
+   exhaustive length shows (`.a://b@`, 7 characters) gets a named example.
 8. **A failure that appears in one checkout only is a stored example.** The `.hypothesis` database holds an input
    no `@example` covers. Extract the falsifying input and pin it as an `@example` before bisecting or calling it
    pre-existing (a database copied between checkouts stores choice sequences, so the bisect proves nothing; the
