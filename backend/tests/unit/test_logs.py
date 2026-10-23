@@ -534,6 +534,10 @@ def test_scrub_redacts_everything_it_did_before_on_every_short_join_of_pieces() 
         ("a ébearer x", "a ébearer x"),  # `bearer` only as a whole word, Unicode letters included
         ("?n=%7Btoken%3Dabc", "?n=%7Btoken%3D[redacted]"),  # after any escape that is no name character
         ("100%token%3Dabc", "100%token%3D[redacted]"),  # after a `%` that starts no escape
+        ("100%ftoken%3Dabc", "100%ftoken%3D[redacted]"),  # a hex digit after it, but no escape
+        ("?h=%0ABearer%20abc", "?h=%0ABearer%20[redacted]"),  # after any escape
+        ("?h=%5BBearer%20abc", "?h=%5BBearer%20[redacted]"),
+        ("token='a\nb', x", "token=[redacted] x"),  # a raw line break inside a quoted value
         ("token='ab\"cd ef', x", "token=[redacted] x"),  # the other quote inside a quoted value
         ("token='a\\' b', x", "token=[redacted] x"),  # an escaped quote inside it
         ("token='a\\\nb c', x", "token=[redacted] x"),  # a backslash before a line break
