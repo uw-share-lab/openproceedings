@@ -145,6 +145,18 @@ def test_2010_on_is_never_read(tmp_path: Path) -> None:
         dblp_aaai.mine_year(2024, extract, table=aaai)
 
 
+@pytest.mark.parametrize("raw", ["²", "١٩٨٦", "٢٠٢٤"])  # superscript two; Arabic-Indic 1986 and 2024
+def test_a_year_of_non_ascii_digits_is_no_year(tmp_path: Path, raw: str) -> None:
+    """TASK-282: `isdigit()` is true for each, but `int('²')` raises and `int('٢٠٢٤')` reads 2024 (past 2009:
+    ignored). Only ASCII digits are a year, so the unlisted conf/aaai/2024 dated so is refused as having none."""
+    _t, aaai, extract = setup(tmp_path)
+    entries = tuple(replace(e, fields=e.fields | {"year": raw}) if e.key == "conf/aaai/2024" else e
+                    for e in extract.entries)  # fmt: skip
+    with pytest.raises(CrawlError, match=r"conf/aaai/2024 \(no year\)") as e:
+        dblp_aaai.check_extract(replace(extract, entries=entries), aaai)
+    assert e.value.reason == "unlisted_proceedings"
+
+
 def test_an_aaai_dblp_record_names_itself_and_passes_dedup(tmp_path: Path) -> None:
     _t, aaai, extract = setup(tmp_path)
     records = dblp_aaai.mine_year(1986, extract, table=aaai).records

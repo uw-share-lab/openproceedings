@@ -61,7 +61,7 @@ __all__ = ["NATIVE", "PREFIX", "SOURCE", "check_extract", "mine_year"]
 
 def _year_of(e: DblpEntry) -> int | None:
     raw = e.fields.get("year", "")
-    return int(raw) if raw.isdigit() else None
+    return int(raw) if raw.isascii() and raw.isdigit() else None  # '²' or '١٩٨٠' is no year (TASK-282)
 
 
 def check_extract(extract: Extract, table: Table | None = None) -> None:

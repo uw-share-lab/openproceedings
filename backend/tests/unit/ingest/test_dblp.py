@@ -290,6 +290,18 @@ def test_a_table_year_the_release_dates_otherwise_or_a_later_icml_key_are_judged
     assert e.value.reason == "table_mismatch"
 
 
+@pytest.mark.parametrize("raw", ["²", "١٩٩٠", "٢٠٢٥"])  # superscript two; Arabic-Indic 1990 and 2025
+def test_a_year_of_non_ascii_digits_is_no_year(tmp_path: Path, raw: str) -> None:
+    """TASK-282: `isdigit()` is true for each, but `int('²')` raises and `int('٢٠٢٥')` reads 2025 (out of range:
+    ignored). Only ASCII digits are a year, so an unlisted record dated so is refused as having no year."""
+    extract = prepared(tmp_path)
+    odd = dblp_xml.DblpEntry("proceedings", "conf/icml/odd", "2025-07-01", None, {"year": raw}, {})
+    with pytest.raises(CrawlError, match=r"conf/icml/odd \(no year\)") as e:
+        dblp.check_extract(dblp.Extract(extract.doi, extract.sha256, extract.fetched_at,
+                                        (*extract.entries, odd)), TABLE)  # fmt: skip
+    assert e.value.reason == "unlisted_proceedings"
+
+
 def test_an_informal_or_repeated_paper_is_counted_never_a_record(tmp_path: Path) -> None:
     extract = prepared(tmp_path)
     [paper] = [e for e in extract.entries if e.key == "conf/icml/Synthetic90"]

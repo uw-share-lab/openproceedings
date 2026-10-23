@@ -67,6 +67,30 @@ def test_429_honours_retry_after(tmp_path: Path, headers: dict[str, str], wait: 
     assert clock.sleeps == [wait] and f.stats.retries == 1
 
 
+# TASK-282: urllib decodes headers as latin-1, so a byte 0xB2 arrives as '²', a digit to `isdigit()` that
+# `float()` refuses. It is no hint, never an exception that aborts the crawl.
+LATIN1_TWO = b"\xb2".decode("latin-1")
+
+
+@pytest.mark.parametrize("value", [LATIN1_TWO, f"1{LATIN1_TWO}", "١٢", "1.²"])
+def test_a_non_ascii_retry_after_on_a_429_is_no_hint(tmp_path: Path, value: str) -> None:
+    t = FakeTransport({URL: [response("", 429, {"retry-after": value}), response(PAGE)]})
+    f, clock = fetcher(tmp_path, t, HOSTS, min_interval=0)
+    assert f.get(URL).ok
+    assert clock.sleeps == [5.0]  # the first back-off step, as with no header
+
+
+@pytest.mark.parametrize("header", ["ratelimit-remaining", "ratelimit-reset"])
+def test_a_non_ascii_ratelimit_header_on_a_200_is_no_hint(tmp_path: Path, header: str) -> None:
+    """`_respect_budget` reads both on every 200, outside the transport's try: a '²' there is no hint too."""
+    spent = {"content-type": "text/html; charset=utf-8", "ratelimit-remaining": "0", "ratelimit-reset": "3"}
+    t = FakeTransport({URL: response(PAGE, headers=spent | {header: LATIN1_TWO})})
+    f, clock = fetcher(tmp_path, t, HOSTS, min_interval=0)
+    assert f.get(URL).text == PAGE
+    # no remaining count: no budget wait; a spent budget with no reset: the 60s default (+ the pad)
+    assert clock.sleeps == ([] if header == "ratelimit-remaining" else [60.0 + f.policy.hint_pad])
+
+
 def test_5xx_backs_off_exponentially_then_gives_up(tmp_path: Path) -> None:
     t = FakeTransport({URL: response("", 503)})
     f, clock = fetcher(tmp_path, t, HOSTS, min_interval=0, attempts=3)
