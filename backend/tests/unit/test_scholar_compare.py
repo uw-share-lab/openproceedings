@@ -4,11 +4,16 @@ hand-built corpus with a known answer. The engine here is the oracle itself: no 
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 import pytest
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
+from openproceedings.api.config import MAX_COMPARE_LINE
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.eval.scholar_compare import (
@@ -43,7 +48,7 @@ from openproceedings.eval.scholar_compare import (
     with_variants,
 )
 from openproceedings.ingest import volumes
-from openproceedings.ingest.caps import CUT
+from openproceedings.ingest.caps import CUT, MAX_DOI
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.query.ast import Node, _Node
 from openproceedings.query.canonical import render
@@ -1024,6 +1029,12 @@ HOSTILE_DOIS: dict[str, Callable[[int], str]] = {
     "long-registrant-ok": lambda n: "10." + "1." * (n // 2) + "1/x",
     "link-registrant": lambda n: "https://doi.org/10." + "1." * (n // 2) + "/x!",
     "label-link": lambda n: "doi:" + " " * n + "https://doi.org/10.1/x",
+    # a percent-encoded link path: unquote held ~20 bytes a character (TASK-273)
+    "link-encoded": lambda n: "https://doi.org/10.1/" + "%41" * (n // 3),
+    "link-encoded-utf8": lambda n: "https://doi.org/10.1/" + "%c3%a9" * (n // 6),
+    "link-encoded-run": lambda n: "https://doi.org/10.1/x" + "%2e" * (n // 3),
+    "link-encoded-closes": lambda n: "https://doi.org/10.1/x(" + "%29" * (n // 3),
+    "link-dots": lambda n: "https://doi.org/10.1/x" + "." * n,
 }
 
 
@@ -1043,6 +1054,87 @@ def test_doi_key_keeps_no_backtracking_state_on_a_hostile_value(hostile: str) ->
     value = HOSTILE_DOIS[hostile](1_000_000)
     peak = peak_bytes(lambda: doi_key(value))
     assert peak < 4 * len(value), peak  # the old pattern held ~63 MB on the registrant shapes
+
+
+def test_doi_key_reads_the_largest_compare_line_in_bounded_memory() -> None:
+    """At /compare's largest line (`MAX_COMPARE_LINE`, 16 MB) a percent-encoded link path is never unquoted: it
+    can't unquote to a DOI within `caps.MAX_DOI`. Unquoting it held ~329 MB, past a file's ~250 MB budget
+    (api/config.py); refused, the path's two copies (it, and it reversed) are the peak (TASK-273)."""
+    for value in (
+        "https://doi.org/10.1/" + "%41" * (MAX_COMPARE_LINE // 3),
+        "https://doi.org/10.1/x(" + "%29" * (MAX_COMPARE_LINE // 3),
+    ):
+        peak = peak_bytes(lambda v=value: doi_key(v))
+        assert peak < 3 * len(value), peak
+
+
+# --- frozen: `doi_key` before TASK-273, which unquoted a link's whole path ---------------------------------
+_OLD_DOI = re.compile(
+    r"10\.\d++(?:\.\d++)*+/[^\s\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]+"
+)
+_OLD_DOI_LINK = re.compile(r"(?:https?://)?(?:www\.|dx\.)?doi\.org/", re.IGNORECASE)
+_OLD_DOI_LABEL = re.compile(r"doi(?::\s*|\s+)", re.IGNORECASE)
+
+
+def _old_doi_key(text: str) -> str | None:
+    v = text.strip()
+    if label := _OLD_DOI_LABEL.match(v):
+        v = v[label.end() :]
+    if link := _OLD_DOI_LINK.match(v):
+        v = unquote(re.split(r"[?#]", v[link.end() :], maxsplit=1)[0])
+    kept = v.rstrip(".,;)")
+    tail = v[len(kept) :]
+    closes = min(len(tail) - len(tail.lstrip(")")), max(kept.count("(") - kept.count(")"), 0))
+    v = kept + ")" * closes
+    return v.lower() if _OLD_DOI.fullmatch(v) else None
+
+
+# ------------------------------------------------------------------------------------------------------------
+
+# the pieces the trim and the unquoting read: the run's characters raw and escaped in both cases, other escapes
+# (UTF-8 lead and continuation bytes, an invalid run, a bidi mark, `%` with no or one hex digit), and long runs
+# either side of `caps.MAX_DOI` once unquoted
+_DOI_PIECE = st.sampled_from(
+    [
+        "https://doi.org/", "doi.org/", "dx.doi.org/", "doi:", "DOI ", "10.", "10.1/", "1", ".", "/", "a", "X", "(",
+        ")", ",", ";", " ", "?", "#", "%", "%2", "%2e", "%2E", "%2c", "%2C", "%3b", "%3B", "%29", "%28", "%41",
+        "%20", "%00", "%c3", "%a9", "%C3%A9", "%e2%80%ae", "%f0%9f", "%98%80", "%ff", "é", "\u202e",
+        "A" * 499, "%41" * 499, "%2e" * 300, "." * 300, "%29" * 200,
+    ]
+)  # fmt: skip
+
+
+@settings(max_examples=3_000)
+@given(st.lists(_DOI_PIECE, max_size=12).map("".join))
+@example("https://doi.org/10.1/x(%29%29.")
+@example("https://doi.org/10.1/x%c3%2e")  # an unfinished UTF-8 character before the run
+@example("https://doi.org/10.1/x%%2e")
+@example("https://doi.org/10.1/x%2.")
+@example("https://doi.org/10.1/" + "a" * (MAX_DOI - 5))  # exactly the cap
+@example("https://doi.org/10.1/" + "a" * (MAX_DOI - 4))  # one past it
+@example("https://doi.org/10.1/" + "%41" * (MAX_DOI - 5) + "%2e" * 5_000)
+@example("https://doi.org/10.1/" + "%f0%9f%98%80" * (MAX_DOI - 5))  # the cap in four-byte characters
+@example("10.1/" + "a" * (MAX_DOI - 5) + ")" * 3)
+@example("10.1/(" + "a" * (MAX_DOI - 6) + ")" * 3)
+def test_doi_key_is_the_frozen_function_up_to_the_doi_cap(text: str) -> None:
+    """Every value that keys to a DOI within `caps.MAX_DOI` keys as it did, every other value as before or to
+    None: a longer one names no record, whose `urls.doi` is cut at the cap (decision-053; TASK-273)."""
+    old = _old_doi_key(text)
+    assert doi_key(text) == (old if old is None or len(old) <= MAX_DOI else None)
+
+
+@pytest.mark.parametrize("escape", ["%2e", "%2E", "%2c", "%2C", "%3b", "%3B", "%29"])
+def test_doi_key_strips_each_escaped_trailing_character_as_it_did(escape: str) -> None:
+    for text in (f"https://doi.org/10.1/x{escape}", f"https://doi.org/10.1/x({escape}{escape}"):
+        assert doi_key(text) == _old_doi_key(text)
+
+
+def test_doi_key_keeps_a_doi_before_a_long_encoded_run() -> None:
+    # the run is never unquoted, at any length: the DOI before it keys as it did
+    assert doi_key("https://doi.org/10.1/x" + "%2E" * 400_000 + "?q") == "10.1/x"
+    assert doi_key("https://doi.org/10.1/x(" + "%29" * 400_000) == "10.1/x()"
+    # a path that can't unquote to `caps.MAX_DOI` characters is refused unread
+    assert doi_key("https://doi.org/10.1/" + "%c3%a9" * (2 * MAX_DOI)) is None
 
 
 def test_a_di_tag_is_not_read() -> None:

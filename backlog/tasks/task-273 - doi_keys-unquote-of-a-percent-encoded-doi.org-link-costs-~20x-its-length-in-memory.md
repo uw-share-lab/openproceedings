@@ -3,10 +3,11 @@ id: TASK-273
 title: >-
   doi_key's unquote of a percent-encoded doi.org link costs ~20x its length in
   memory
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@jeevanparmar'
 created_date: '2026-10-20 15:03'
-updated_date: '2026-10-20 15:05'
+updated_date: '2026-10-24 07:06'
 labels:
   - eval
   - security

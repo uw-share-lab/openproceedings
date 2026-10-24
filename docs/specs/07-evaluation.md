@@ -83,7 +83,14 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   label is dropped, then a doi.org link's prefix with or without its scheme, `www.` or `dx.`, and its query and
   fragment (so `DOI https://doi.org/…` reads), then the `.`, `,`, `;` or unbalanced `)` a sentence leaves after
   it; a suffix with whitespace, a control character or a bidi format character (marks, embeddings, overrides,
-  isolates) is no DOI; compared case-blind) names the index record whose `urls.doi` it is, **only when the record's year
+  isolates) is no DOI, and nor is one longer than `caps.MAX_DOI` (1,000 characters), the ingest cap on
+  `urls.doi` (decision-053), so it could name no record; compared case-blind). A link's path is unquoted only up to
+  that trailing run, which is read percent-encoded (`%2E`, `%29`) as well as raw, and not at all when the rest is
+  longer than 12,000 characters (a character is at most four UTF-8 bytes of three characters each, so it can't
+  unquote within the cap): urllib's unquote holds about 20 bytes a character, ~329 MB on a link at
+  `MAX_COMPARE_LINE` (16 MB) against a file's ~250 MB budget, where the path's two copies (34 MB) are now the
+  peak (TASK-273; every value that keys to a DOI within the cap keys as before, held to a frozen copy of the old
+  function). A DOI so read names the index record whose `urls.doi` it is, **only when the record's year
   is the year the file states and its venue the venue the file states**, each where the file states one (a year;
   one of the three venues by Scholar mode's source names). A DOI that names a record in another venue or year is
   never a match: the record falls to the title rule, and its row names that record (`doi_elsewhere`, "its DOI
