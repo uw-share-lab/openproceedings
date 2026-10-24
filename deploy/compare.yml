@@ -8,11 +8,11 @@
 # It changes three things, and nothing else:
 #   api    `op serve --compare`. Compose replaces a list, so this is compose.yml's command with `--compare`
 #          added; deploy/smoke-test.sh --compare checks the two stay that way;
-#   caddy  OP_COMPARE=on (deploy/Caddyfile: the 64KiB body cap kept off /api/v1/compare, which gets 16MiB,
-#          buffers the whole file before the API is asked and wants a Content-Length; no HTTP/3), a longer
+#   caddy  OP_COMPARE=on (deploy/Caddyfile: the 64KiB body cap kept off a POST to /api/v1/compare, which
+#          gets 16MiB, buffers the whole file before the API is asked and wants a Content-Length), a longer
 #          read_body for the whole server, and a memory limit, since the proxy holds every upload in flight in
-#          memory (about 50 MiB each) however many arrive at once. compose.yml still publishes 443/udp, which
-#          nothing then listens on (an overlay can add ports, not remove them).
+#          memory (about 50 MiB each) however many arrive at once. HTTP/3 stays on: read_body cuts a stalled
+#          QUIC upload too (TASK-257).
 #
 # Settings (environment, or deploy/.env):
 #   OP_READ_BODY          the proxy's read_body timeout, for every request (default here 60s: a 16 MiB file

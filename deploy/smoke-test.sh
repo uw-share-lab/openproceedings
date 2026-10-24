@@ -15,15 +15,22 @@
 #   6. comparisons: without --compare, /meta offers none. With --compare (which adds deploy/compare.yml;
 #      TASK-183): compare.yml's api command is compose.yml's plus --compare; caddy has a memory limit; through
 #      the proxy, while OP_SMOKE_STALLS uploads (default 8) that stop a byte short of 16 MiB are held, a whole
-#      16 MiB file is compared; the stalled ones never reach the API and are cut at read_body; the proxy's
-#      memory peak is printed and must stay under its limit with no OOM kill; a file one byte over 16 MiB is
-#      413, and one sent without a length (chunked, or HTTP/2 unsized) 411. Either way, every other path keeps
-#      the 64 KiB cap;
+#      16 MiB file is compared; the stalled ones never reach the API and are cut at read_body; two batches as
+#      large over HTTP/3, trickling a byte a second, are cut at read_body too and get no comparison (TASK-257);
+#      the proxy's memory peak is printed and must stay under its limit with no OOM kill, the second HTTP/3
+#      batch raising it by less than 25 MiB an upload; a file one byte over 16 MiB is 413, and one sent without
+#      a length (chunked, or HTTP/2 unsized) 411. Either way, every other request keeps the 64 KiB cap, refused by the
+#      proxy before the API holds a connection for it: a declared length one byte over is the proxy's 413 in
+#      the API's own words, 20 times over HTTP/1.1 and HTTP/2 (TASK-259); a chunked body is 411, a PUT to
+#      /api/v1/compare included (TASK-268), which with a length gets the API's own 405; an unsized HTTP/2 body
+#      over the cap is 413, and one that stops at the cap holds no API connection (TASK-255);
 #   7. no log line holds the query text.
 # Run from the repository root: deploy/smoke-test.sh [--compare]. It needs docker (with compose) and uv. It uses its own
-# compose project (openproceedings-smoke) and its own image tag (smoke-<pid>), so it never touches a running
-# deployment or the images it runs; it writes only under a mktemp directory, and removes that directory, its
-# containers, networks, volumes and images on exit. Ports: OP_HTTP_PORT and OP_HTTPS_PORT (default
+# compose project (OP_SMOKE_PROJECT, default openproceedings-smoke), its own image tag (smoke-<pid>) and its own
+# internal network (172.30.81.0/24: compose.yml's default 172.30.80.0/24 is a running deployment's, and Docker
+# refuses a second network that overlaps it), so it never touches a running deployment or the images it runs;
+# it writes only under a mktemp directory, and removes that directory, its containers, networks, volumes and
+# images on exit. Ports: OP_HTTP_PORT and OP_HTTPS_PORT (default
 # 127.0.0.1:80 and 127.0.0.1:443: loopback only; an address is optional, as in compose.yml); the TLS checks
 # connect to https://localhost:<the port>.
 set -euo pipefail
@@ -43,8 +50,11 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/openproceedings-smoke.XXXXXX")
 export OP_DATA_HOST="$work/data" OP_INSTANCE=private OP_DOMAIN=localhost OP_IMAGE_TAG="smoke-$$"
 # the API's ids, pinned here (the shell's environment wins over a deploy/.env compose would otherwise read)
 export OP_API_UID=10001 OP_API_GID=10001
+# and the internal network: never the default, which a running deployment on this host has
+export OP_INTERNAL_SUBNET=172.30.81.0/24 OP_INTERNAL_IP_RANGE=172.30.81.128/25 OP_PROXY_ADDRESS=172.30.81.2
 export OP_HTTP_PORT="${OP_HTTP_PORT:-127.0.0.1:80}" OP_HTTPS_PORT="${OP_HTTPS_PORT:-127.0.0.1:443}"
-dc=(docker compose -p openproceedings-smoke -f deploy/compose.yml)
+project=${OP_SMOKE_PROJECT:-openproceedings-smoke}
+dc=(docker compose -p "$project" -f deploy/compose.yml)
 if $compare; then dc+=(-f deploy/compare.yml); fi
 api_image="openproceedings-api:$OP_IMAGE_TAG"
 https_port=${OP_HTTPS_PORT##*:}
@@ -74,7 +84,7 @@ cleanup() {
   # shellcheck disable=SC2016 # "$1" expands inside the container's sh, on purpose
   if $linux; then as_root 'rm -rf "$1"' "$work/data/records" >/dev/null 2>&1 || true; fi # op-api's, 0700
   docker image rm "openproceedings-api:$OP_IMAGE_TAG" "openproceedings-web:$OP_IMAGE_TAG" \
-    "openproceedings-caddy:$OP_IMAGE_TAG" >/dev/null 2>&1 || true
+    "openproceedings-caddy:$OP_IMAGE_TAG" "openproceedings-smoke-h3:$OP_IMAGE_TAG" >/dev/null 2>&1 || true
   chmod -R u+w "$work" 2>/dev/null || true
   rm -rf "$work"
 }
@@ -262,40 +272,43 @@ echo "/meta limits.compare.max_body_bytes: $offered"
 # a status from curl without --fail: the refusals below are the point. The body goes to $work/answer
 status_of() { curl -sS --cacert "$cert" -o "$work/answer" -w '%{http_code}' "$@" || true; }
 head -c 65537 /dev/zero | tr '\0' x >"$work/over64k.json"
-# the proxy's own body caps and protocols, as Caddy adapted the Caddyfile in the running container: a body
-# that declares its length over 64 KiB is refused by the API from the header whatever the proxy does, so the
-# 413 below can't show the proxy's cap
+# the proxy's own body caps, refusals and protocols, as Caddy adapted the Caddyfile in the running container
 "${dc[@]}" exec -T caddy caddy adapt --config /etc/caddy/Caddyfile 2>/dev/null | python3 -c '
 import json, sys
 on = sys.argv[1] == "true"
 srv = next(s for s in json.load(sys.stdin)["apps"]["http"]["servers"].values() if ":443" in s.get("listen", []))
-site = srv["routes"][0]["handle"][0]["routes"]
-caps = [(r.get("match"), h["max_size"]) for r in site for h in r.get("handle", []) if h["handler"] == "request_body"]
-compare = [r["handle"][0]["routes"] for r in site if r.get("match") == [{"path": ["/api/v1/compare"]}]]
-api = [h.get("request_buffers") for r in site if r.get("match") == [{"path": ["/api/*"]}] for h in r["handle"]]
+site = [(r.get("match"), h) for r in srv["routes"][0]["handle"][0]["routes"] for h in r.get("handle", [])]
+caps = [(m, h["max_size"]) for m, h in site if h["handler"] == "request_body"]
+post = [{"method": ["POST"], "path": ["/api/v1/compare"]}]
+compare = [h["routes"] for m, h in site if m == post]
+api = [h.get("request_buffers") for m, h in site if m == [{"path": ["/api/*"]}]]
+refusals = [(h["handler"], h["status_code"], m) for m, h in site if h["handler"] in ("error", "static_response")]
+length = "string({http.request.header.Content-Length})"
+want_refusals = [("error", 413, [{"expression": f"{length}.matches(\x27^0*[0-9]{{1,18}}$\x27) && int({length}) > 65536"}]),
+                 ("static_response", 411, [{"header": {"Transfer-Encoding": ["*"]}, "path": ["/api/*"]}])]
+envelope = "API_BODY_TOO_LARGE" in json.dumps(srv.get("errors"))
 inner = [(h["handler"], h.get("max_size") or h.get("request_buffers") or h.get("status_code"), r.get("match"))
          for routes in compare for r in routes for h in r["handle"]]
 want_inner = [("request_body", 16777216, None),
-              ("static_response", 411, [{"method": ["POST"], "not": [{"header": {"Content-Length": ["*"]}}]}]),
-              ("static_response", 400, [{"method": ["POST"], "expression": {"name": "badlength",
-               "expr": "!string({http.request.header.Content-Length}).matches(\x27^0*[0-9]{1,18}$\x27)"}}]),
-              ("static_response", 413, [{"method": ["POST"], "expression": "int(\x270\x27 + string({http.request.header.Content-Length})) > 16777216"}]),
+              ("static_response", 411, [{"not": [{"header": {"Content-Length": ["*"]}}]}]),
+              ("static_response", 400, [{"expression": {"name": "badlength",
+               "expr": f"!{length}.matches(\x27^0*[0-9]{{1,18}}$\x27)"}}]),
+              ("static_response", 413, [{"expression": f"int(\x270\x27 + {length}) > 16777216"}]),
               ("reverse_proxy", 16777216, None)]
-print("proxy: protocols", srv.get("protocols"), "| body caps", caps, "| /api/* buffers", api, "| /api/v1/compare", inner)
-ok = api == [65536] and ((srv.get("protocols") == ["h1", "h2"] and inner == want_inner
-      and caps == [([{"not": [{"path": ["/api/v1/compare"]}]}], 65536)]) if on else (
-      srv.get("protocols") == ["h1", "h2", "h3"] and caps == [(None, 65536)] and not compare))
-sys.exit(0 if ok else 1)' "$compare" || fail "the proxy's adapted body caps or protocols are not what compare=$compare needs"
-# HTTP/3 is advertised (Alt-Svc) only with comparisons off: no stall over QUIC has been run against the block
-# (deploy/Caddyfile)
+print("proxy: protocols", srv.get("protocols"), "| body caps", caps, "| /api/* buffers", api, "| refusals",
+      refusals, "| 413 in the API envelope", envelope, "| POST /api/v1/compare", inner)
+ok = (srv.get("protocols") == ["h1", "h2", "h3"] and api == [65537] and refusals == want_refusals and envelope
+      and ((inner == want_inner and caps == [([{"not": post}], 65536)]) if on else (caps == [(None, 65536)] and not compare)))
+sys.exit(0 if ok else 1)' "$compare" || fail "the proxy's adapted body caps, refusals or protocols are not what compare=$compare needs"
+# HTTP/3 is advertised (Alt-Svc) with comparisons on or off: a stalled upload over QUIC is cut at read_body
+# (TASK-257; the --compare run checks it below)
 headers=$("${curl_tls[@]}" -D - -o /dev/null "$base/api/v1/healthz") || fail "GET /api/v1/healthz headers"
 h3=$(grep -ci '^alt-svc: h3' <<<"$headers" || true)
 echo "Alt-Svc h3 headers: $h3"
+[ "$h3" = 1 ] || fail "the proxy doesn't advertise HTTP/3"
 if ! $compare; then
   [ "$offered" = None ] || fail "comparisons are offered without deploy/compare.yml"
-  [ "$h3" = 1 ] || fail "the proxy doesn't advertise HTTP/3 with comparisons off"
 else
-  [ "$h3" = 0 ] || fail "the proxy still advertises HTTP/3 with comparisons on"
   [ "$offered" = 16777216 ] || fail "comparisons on, but /meta offers $offered"
   # compare.yml repeats compose.yml's api command (compose replaces a list): it must be that plus --compare
   python3 -c '
@@ -360,6 +373,61 @@ sys.exit(0 if abs(cut["cut_min_s"] - limit) <= 2 and abs(cut["cut_max_s"] - limi
   after=$(compared)
   echo "API compare requests: $((after - before)) (the 16 MiB comparison; no stalled upload reached the API)"
   [ "$((after - before))" = 1 ] || fail "a stalled upload reached the API"
+  # two batches as large over HTTP/3 once those are cut (TASK-257), from a container on the stack's edge
+  # network to caddy:443 over UDP: each upload sends 16 MiB less 1,216 bytes and then a byte a second, so that
+  # QUIC's own 30 s idle timeout never ends it first. Caddy's access log (these are the only HTTP/3 POSTs here)
+  # must show each cut at read_body; after the cut the proxy forwards what it read, which the API refuses (408,
+  # or 429 while another comparison runs or the client's bucket is empty), so none may get a comparison; and
+  # the second batch, sent once the first is cut, must raise the proxy's memory peak by less than 25 MiB an
+  # upload (memory.current is no evidence: Go keeps what it freed)
+  h3_image="openproceedings-smoke-h3:$OP_IMAGE_TAG"
+  docker build --quiet -t "$h3_image" - <deploy/smoke-h3.Dockerfile >/dev/null || fail "building the HTTP/3 client"
+  h3_batch() {
+    # shellcheck disable=SC2016 # "$1"…"$3" expand inside the container's bash, on purpose
+    docker run --rm --network "${project}_edge" -v "$cert:/ca.crt:ro" "$h3_image" bash -c '
+for _ in $(seq 1 "$1"); do
+  (head -c 16776000 /dev/zero | tr "\0" x; while printf x; do sleep 1; done) | timeout "$3" curl -sS --http3-only \
+    -X POST -T - -H "Content-Length: 16777216" -H "content-type: application/x-research-info-systems" \
+    --cacert /ca.crt --connect-to localhost:443:caddy:443 -o /dev/null -w "%{http_version} %{http_code}\n" \
+    "https://localhost/api/v1/compare?q=$2" &
+done
+wait' sh "$stalls" "$query" "$((${read_body%s} + 60))" >"$work/h3.out" 2>&1 || true
+    echo "HTTP/3 batch $1, version and status each client saw: $(sort "$work/h3.out" | uniq -c | tr -s ' \n' ' ')"
+  }
+  before=$(compared)
+  h3_batch 1
+  peak_between=$(mem memory.peak 2>/dev/null) || peak_between=
+  h3_batch 2
+  "${dc[@]}" logs --no-color caddy | python3 -c '
+import json, sys
+limit, n = float(sys.argv[1]), int(sys.argv[2])
+cuts = []
+for line in sys.stdin:
+    try:
+        d = json.loads(line.partition("| ")[2])
+    except ValueError:
+        continue
+    r = d.get("request") or {}
+    if d.get("logger", "").startswith("http.log.access") and r.get("proto") == "HTTP/3.0" and r.get("method") == "POST":
+        cuts.append((round(d["duration"], 2), d["status"], d.get("bytes_read")))
+print("HTTP/3 uploads in the access log (seconds, status, bytes read):", sorted(cuts))
+sys.exit(0 if len(cuts) == n and all(abs(c[0] - limit) <= 2 for c in cuts) else 1)' "${read_body%s}" "$((2 * stalls))" \
+    || fail "an HTTP/3 upload was not cut at read_body ($read_body)"
+  answers=$("${dc[@]}" logs --no-color api | grep '"route": "/api/v1/compare"' | tail -n +"$((before + 1))" \
+    | grep -o '"status": [0-9]*' | sort | uniq -c | tr -s ' \n' ' ' || true)
+  echo "the API's answers to them after the cut: ${answers:-none}"
+  if grep -q '"status": 200' <<<"$answers"; then fail "a cut HTTP/3 upload was compared"; fi
+  if [ -n "$peak_between" ]; then
+    peak=$(mem memory.peak) || fail "reading caddy's memory peak"
+    echo "proxy memory peak $((peak_between / 1048576)) MiB after the first HTTP/3 batch, $((peak / 1048576)) MiB after the second"
+    [ "$((peak - peak_between))" -lt "$((stalls * 25 * 1048576))" ] \
+      || fail "the second HTTP/3 batch raised the proxy's memory peak by $(((peak - peak_between) / 1048576)) MiB"
+  fi
+  oom=$(mem memory.events | sed -n 's/^oom_kill //p') || fail "reading caddy's OOM kills"
+  restarts=$(docker inspect --format '{{.RestartCount}}' "$caddy_id") || fail "reading caddy's restarts"
+  if [ "$oom" != 0 ] || [ "$restarts" != 0 ] || [ "$("${dc[@]}" ps -q caddy)" != "$caddy_id" ]; then
+    fail "the proxy was killed during the HTTP/3 uploads (over its memory limit?)"
+  fi
   head -c 16777217 /dev/zero | tr '\0' x >"$work/over.ris"
   status=$(status_of -H 'content-type: application/x-research-info-systems' --data-binary "@$work/over.ris" \
     "$base/api/v1/compare?q=$query")
@@ -381,11 +449,74 @@ sys.exit(0 if abs(cut["cut_min_s"] - limit) <= 2 and abs(cut["cut_max_s"] - limi
   echo "an HTTP/2 file with no content-length to /api/v1/compare -> $status"
   [ "$status" = 411 ] || fail "an unsized HTTP/2 file answered $status"
 fi
-# every other path still refuses a body over 64 KiB (the API's 413, from the declared length; the proxy's own
-# cap is the adapted config above)
-status=$(status_of -H 'content-type: application/json' --data-binary "@$work/over64k.json" "$base/api/v1/records")
-echo "64 KiB + 1 byte to /api/v1/records -> $status"
-[ "$status" = 413 ] || fail "a body one byte over 64 KiB to /api/v1/records answered $status"
+# every other request keeps the API's 64 KiB cap, and the proxy refuses what is over it before the API holds a
+# connection for it. A declared length over the cap is the proxy's 413 from the header, in the API's own words
+# (read here from the API itself): forwarded, the API's refusal raced the proxy's sending and once reached the
+# client as a 502 (TASK-259), so 20 tries over each protocol
+api_413=$("${dc[@]}" exec -T api python -c '
+import socket
+s = socket.create_connection(("127.0.0.1", 8000), timeout=10)
+s.sendall(b"POST /api/v1/records HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n"
+          b"Content-Length: 65537\r\n\r\n")
+got = b""
+while chunk := s.recv(65536):
+    got += chunk
+print(got.partition(b"\r\n\r\n")[2].decode())') || fail "asking the API itself for its 413"
+grep -qF API_BODY_TOO_LARGE <<<"$api_413" || fail "the API's own refusal of 64 KiB + 1 byte: $api_413"
+for proto in --http1.1 --http2; do
+  for _ in $(seq 1 20); do
+    status=$(status_of "$proto" -H 'content-type: application/json' --data-binary "@$work/over64k.json" \
+      "$base/api/v1/records")
+    if [ "$status" != 413 ] || [ "$(cat "$work/answer")" != "$api_413" ]; then
+      fail "64 KiB + 1 byte to /api/v1/records ($proto) answered $status: $(cat "$work/answer")"
+    fi
+  done
+done
+echo "64 KiB + 1 byte to /api/v1/records, 20 times over HTTP/1.1 and over HTTP/2 -> 413: $api_413"
+# a chunked body must declare its length instead (411, any method; TASK-255), a PUT to /api/v1/compare included:
+# with comparisons on, only a POST there is a file (TASK-268), and a PUT with a length gets the API's own 405
+status=$(status_of --http1.1 -H 'Transfer-Encoding: chunked' -H 'content-type: application/json' \
+  -d '{"q":"learning"}' "$base/api/v1/records")
+echo "a chunked search record to /api/v1/records -> $status"
+[ "$status" = 411 ] || fail "a chunked body to /api/v1/records answered $status"
+status=$(status_of --http1.1 -X PUT -H 'Transfer-Encoding: chunked' -H 'content-type: application/x-research-info-systems' \
+  --data-binary "@$work/over64k.json" "$base/api/v1/compare?q=$query")
+echo "a chunked PUT to /api/v1/compare -> $status"
+[ "$status" = 411 ] || fail "a chunked PUT to /api/v1/compare answered $status"
+status=$(status_of -D "$work/headers" -X PUT -H 'content-type: application/x-research-info-systems' -d 'TY  - JOUR' \
+  "$base/api/v1/compare?q=$query")
+echo "a PUT with a length to /api/v1/compare -> $status: $(cat "$work/answer")"
+if [ "$status" != 405 ] || ! grep -qF API_METHOD_NOT_ALLOWED "$work/answer" || ! grep -qi '^allow: POST' "$work/headers"; then
+  fail "a PUT to /api/v1/compare didn't get the API's own 405 with Allow: POST ($status)"
+fi
+# an unsized HTTP/2 body (nothing in its headers says so) over the cap fails at it in the proxy: 413, the same
+# words. One that stops at the cap and stays open waits inside the proxy's buffer, holding no API connection
+status=$(status_of --http2 -X POST -T - -H 'content-type: application/json' "$base/api/v1/records" <"$work/over64k.json")
+echo "an unsized HTTP/2 body of 64 KiB + 1 byte to /api/v1/records -> $status"
+if [ "$status" != 413 ] || [ "$(cat "$work/answer")" != "$api_413" ]; then
+  fail "an unsized HTTP/2 body over 64 KiB answered $status: $(cat "$work/answer")"
+fi
+head -c 65536 /dev/zero | tr '\0' x >"$work/cap64k.json"
+# the API's open connections from the proxy (its healthcheck connects from loopback)
+proxied() {
+  "${dc[@]}" exec -T api python -c '
+import socket, sys
+peer = socket.inet_aton(sys.argv[1])[::-1].hex().upper()
+rows = [line.split() for line in open("/proc/net/tcp").read().splitlines()[1:]]
+print(sum(1 for r in rows if r[1].endswith(":1F40") and r[2].startswith(peer + ":") and r[3] == "01"))' "$OP_PROXY_ADDRESS"
+}
+sleep 6 # until the proxy's idle connections to the API are closed (uvicorn keeps one 5 s)
+{
+  cat "$work/cap64k.json"
+  sleep 10
+} | curl -sS --http2 -X POST -T - --cacert "$cert" -H 'content-type: application/json' -o /dev/null \
+  "$base/api/v1/records" 2>/dev/null &
+open_pid=$!
+sleep 5
+held=$(proxied) || fail "reading the API's connections"
+wait "$open_pid" || true
+echo "an unsized HTTP/2 body that stops at 64 KiB and stays open: API connections from the proxy after 5 s: $held"
+[ "$held" = 0 ] || fail "an unsized body that stopped at the 64 KiB cap held $held API connection(s)"
 
 step "7. no query text in any log"
 "${dc[@]}" logs --no-color >"$work/logs.txt" 2>&1 || fail "reading the logs"

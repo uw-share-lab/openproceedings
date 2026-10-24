@@ -3,10 +3,11 @@ id: TASK-259
 title: >-
   Smoke test step 6: the api's early 413 can reach the client as Caddy's 502
   under load
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@jeevanparmar'
 created_date: '2026-10-18 04:43'
-updated_date: '2026-10-18 14:16'
+updated_date: '2026-10-24 07:06'
 labels:
   - ops
   - deploy

@@ -1,10 +1,11 @@
 ---
 id: TASK-255
 title: 'Proxy: cut unsized request bodies that stall on the non-compare API routes'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@jeevanparmar'
 created_date: '2026-10-16 23:07'
-updated_date: '2026-10-16 23:17'
+updated_date: '2026-10-24 07:06'
 labels:
   - ops
   - security

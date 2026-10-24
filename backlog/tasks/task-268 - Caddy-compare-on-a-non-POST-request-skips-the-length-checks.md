@@ -1,9 +1,11 @@
 ---
 id: TASK-268
 title: 'Caddy compare-on: a non-POST request skips the length checks'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@jeevanparmar'
 created_date: '2026-10-19 11:49'
+updated_date: '2026-10-24 07:06'
 labels:
   - deploy
   - security

@@ -3,10 +3,11 @@ id: TASK-257
 title: >-
   Test an HTTP/3 upload stall and re-enable HTTP/3 with comparisons on if it is
   cut
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@jeevanparmar'
 created_date: '2026-10-16 23:07'
-updated_date: '2026-10-16 23:32'
+updated_date: '2026-10-24 07:06'
 labels:
   - ops
 dependencies: []
