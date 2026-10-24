@@ -7,7 +7,7 @@ import json
 import stat
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 import tantivy
@@ -393,6 +393,55 @@ def test_a_dead_worker_is_a_refusal(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     with pytest.raises(IndexBuildError, match="worker process died"):
         build_index(snapshot_of(CORPUS, tmp_path / "snap"), tmp_path / "indexes", BUILT, workers=2)
     assert [p.name for p in (tmp_path / "indexes").iterdir() if p.name != ".lock"] == []
+
+
+class Recorded(idx.ProcessPoolExecutor):
+    """The real pool, recording each start (its worker count) and each shutdown in `events`."""
+
+    events: ClassVar[list[str]] = []
+
+    def __init__(self, **kw: Any) -> None:
+        Recorded.events.append(f"start {kw['max_workers']}")
+        super().__init__(**kw)
+
+    def shutdown(self, *a: Any, **kw: Any) -> None:
+        Recorded.events.append("shutdown")
+        super().shutdown(*a, **kw)
+
+
+@pytest.fixture
+def recorded(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    monkeypatch.setattr(Recorded, "events", [])
+    monkeypatch.setattr(idx, "ProcessPoolExecutor", Recorded)
+    return Recorded.events
+
+
+def test_the_test_session_builds_and_checks_a_5k_corpus_in_one_process(
+    tmp_path: Path, recorded: list[str]
+) -> None:
+    """TASK-284: a build or parity check at its default workers starts no pool in the test session (conftest),
+    though 5,000 records are over the product's PARALLEL_FROM (2,000). Each of about 60 such builds started a
+    spawn pool of `os.cpu_count()` workers inside every xdist worker, costing 4 times a serial build's CPU."""
+    from openproceedings.engine.parity import check_parity
+
+    snap = snapshot_of(many(5_000), tmp_path / "snap")
+    built = build_index(snap, tmp_path / "indexes", BUILT)
+    assert check_parity(built.path, snap).records == 5_000
+    assert recorded == []
+
+
+def test_a_build_that_fails_part_way_has_shut_its_pool_when_the_error_arrives(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recorded: list[str]
+) -> None:
+    """The refusal reaches the caller with the pool already shut down, while its traceback still holds the
+    failed build's frames (no garbage collection needed)."""
+    monkeypatch.setattr(idx, "PARALLEL_FROM", 1)
+    monkeypatch.setattr(idx, "CHUNK", 16)  # the bad record is in the third chunk: two were yielded
+    over = paper("Zz999999", "ø" * (MAX_TOKEN_BYTES // 2) + "x")  # sorts after every `Id…` record
+    snap = snapshot_of([*many(40), over], tmp_path / "snap")
+    with pytest.raises(IndexBuildError, match="over 65530 bytes") as failed:
+        build_index(snap, tmp_path / "indexes", BUILT, workers=2)
+    assert failed.traceback and recorded == ["start 2", "shutdown"]
 
 
 def test_ranking_numbers_are_canonical() -> None:

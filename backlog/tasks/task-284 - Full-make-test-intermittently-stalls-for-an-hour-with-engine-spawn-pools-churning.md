@@ -3,10 +3,11 @@ id: TASK-284
 title: >-
   Full make test intermittently stalls for an hour with engine spawn pools
   churning
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@jeevanparmar'
 created_date: '2026-10-23 17:57'
-updated_date: '2026-10-23 18:25'
+updated_date: '2026-10-24 07:06'
 labels:
   - test
   - engine

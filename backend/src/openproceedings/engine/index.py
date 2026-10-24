@@ -27,9 +27,10 @@ import shutil
 import tempfile
 import time
 import unicodedata
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Iterator, Mapping
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
@@ -334,11 +335,12 @@ def _title_ranks(snapshot: Path) -> dict[str, int]:
 
 def normalized(
     snapshot: Path, workers: int, tokenizer: str = TOKENIZER_VERSION
-) -> Iterator[tuple[PaperRecord, dict[str, list[str]]]]:
+) -> Generator[tuple[PaperRecord, dict[str, list[str]]]]:
     """The snapshot's records (in id order, verified), each with its `normalize()`d title and abstract (a
     missing abstract is ""; by tokenizer version `tokenizer`), a chunk at a time, across `workers` processes
     once the corpus is big enough to repay starting them. Shared by the build and the parity check, so both
-    normalize alike."""
+    normalize alike. Both close it (`contextlib.closing`), so a loop that stops early shuts the pool down at
+    once, never only when the generator is collected (TASK-284)."""
     pool = None
     each = partial(_normalize_pair, tokenizer=tokenizer)
     try:
@@ -373,25 +375,30 @@ def _add_all(
     ranks = _title_ranks(snapshot)
     added = 0
     started = time.perf_counter()
-    for r, fields in normalized(snapshot, workers, tokenizer):
-        if not form.abstract_kind and r.abstract_kind == "openalex":
-            # a schema-3 index could neither filter nor label it, and its display derives the kind from the
-            # stored abstract (`TantivyEngine._display`), which is exact only while no schema-3 index holds one
-            raise IndexBuildError(f"{r.id}: an OpenAlex abstract needs index schema 4 (schema 3 can't filter or "
-                                  "label it): build at the current schema")  # fmt: skip
-        _check_tokens(r, fields, exact)
-        if r.id not in ranks:  # can't happen for a valid line; refuse rather than guess a rank
-            raise IndexBuildError(f"{r.id}: no title rank (the snapshot's lines didn't read the same twice)")
-        writer.add_document(_document(r, fields, added, ranks[r.id], form))
-        if commit_every and (added + 1) % commit_every == 0:
-            writer.commit()  # tests: several segments
-        ids.write(r.id + "\n")
-        added += 1
-        if added % PROGRESS_EVERY == 0:  # a long build says it's alive (logging-standards: at most every 10k)
-            log.info(
-                "index_build_progress",
-                extra={"docs": added, "ms": elapsed_ms(started)},
-            )
+    # closed when the loop stops, a refusal included: its worker pool shuts down then, not when collected
+    with closing(normalized(snapshot, workers, tokenizer)) as rows:
+        for r, fields in rows:
+            if not form.abstract_kind and r.abstract_kind == "openalex":
+                # a schema-3 index could neither filter nor label it, and its display derives the kind from the
+                # stored abstract (`TantivyEngine._display`), which is exact only while no schema-3 index holds one
+                raise IndexBuildError(f"{r.id}: an OpenAlex abstract needs index schema 4 (schema 3 can't filter or "
+                                      "label it): build at the current schema")  # fmt: skip
+            _check_tokens(r, fields, exact)
+            if r.id not in ranks:  # can't happen for a valid line; refuse rather than guess a rank
+                raise IndexBuildError(
+                    f"{r.id}: no title rank (the snapshot's lines didn't read the same twice)"
+                )
+            writer.add_document(_document(r, fields, added, ranks[r.id], form))
+            if commit_every and (added + 1) % commit_every == 0:
+                writer.commit()  # tests: several segments
+            ids.write(r.id + "\n")
+            added += 1
+            # a long build says it's alive (logging-standards: at most every 10k)
+            if added % PROGRESS_EVERY == 0:
+                log.info(
+                    "index_build_progress",
+                    extra={"docs": added, "ms": elapsed_ms(started)},
+                )
     return added
 
 
