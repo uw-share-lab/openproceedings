@@ -194,10 +194,12 @@ def record_of(stored: bytes) -> dict[str, Any]:
 
 
 PROGRESS_EVERY = 10_000  # documents between index_build_progress lines
-PARALLEL_FROM = 2_000  # below this many records, normalizing in one process is faster than starting workers
-# records normalized and added per step (never all at once). Must be ≥ PARALLEL_FROM, so a first chunk
-# smaller than PARALLEL_FROM is the whole corpus.
-CHUNK = 4_096
+# a corpus of fewer records (the snapshot manifest's `record_count`, read before the first chunk) is normalized in
+# this process. Starting 8 spawn workers costs ~2 s CPU and ~0.3 s wall, repaid from ~1,500 records of 120-250-word
+# abstracts but only ~10,000 of the 5k fixture's 8-60 words: below this, a pool saves under 2 s at most and costs
+# its CPU every time (TASK-284, docs/results/2026-10-24-parallel-normalize-crossover.md). Chunks no longer decide it
+PARALLEL_FROM = 10_000
+CHUNK = 4_096  # records normalized and added per step (never all at once)
 
 
 def _normalize_pair(pair: tuple[str, str], tokenizer: str) -> tuple[list[str], list[str]]:
@@ -333,20 +335,31 @@ def _title_ranks(snapshot: Path) -> dict[str, int]:
     return {rid: rank for rank, (_, rid) in enumerate(sorted(keys))}
 
 
+def _record_count(snapshot: Path) -> int:
+    """The manifest's `record_count`, or 0 when it can't be read (`iter_records` then refuses the snapshot). It only
+    picks one process or several, which normalize alike, so a wrong count costs time, never a different index."""
+    try:
+        count = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))["record_count"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return 0
+    return count if isinstance(count, int) else 0
+
+
 def normalized(
     snapshot: Path, workers: int, tokenizer: str = TOKENIZER_VERSION
 ) -> Generator[tuple[PaperRecord, dict[str, list[str]]]]:
     """The snapshot's records (in id order, verified), each with its `normalize()`d title and abstract (a
     missing abstract is ""; by tokenizer version `tokenizer`), a chunk at a time, across `workers` processes
-    once the corpus is big enough to repay starting them. Shared by the build and the parity check, so both
-    normalize alike. Both close it (`contextlib.closing`), so a loop that stops early shuts the pool down at
+    when the corpus holds at least PARALLEL_FROM records (enough to repay starting them). Shared by the build
+    and the parity check, so both normalize alike. Both close it (`contextlib.closing`), so a loop that stops early shuts the pool down at
     once, never only when the generator is collected (TASK-284)."""
     pool = None
     each = partial(_normalize_pair, tokenizer=tokenizer)
+    parallel = workers > 1 and _record_count(snapshot) >= PARALLEL_FROM
     try:
         for chunk in _chunks(iter_records(snapshot)):
             pairs = [(r.title, r.abstract or "") for r in chunk]
-            if pool is None and workers > 1 and len(pairs) >= PARALLEL_FROM:
+            if pool is None and parallel:
                 pool = ProcessPoolExecutor(
                     max_workers=workers, mp_context=multiprocessing.get_context("spawn")
                 )

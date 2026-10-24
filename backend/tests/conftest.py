@@ -149,10 +149,11 @@ def pytest_configure(config: pytest.Config) -> None:
 
 def _serial_index_builds() -> None:
     """Every index build and parity check normalizes in its own process, unless a test sets `PARALLEL_FROM`
-    itself (`test_index.py`'s parallel rows, which compare the two paths). At the product's 2,000, each build of
-    the synthetic 5k corpus (about 60 a run) started a spawn pool of `os.cpu_count()` workers inside every
-    xdist worker: twice a serial build's wall time and 4 times its CPU, and dozens of interpreters starting
-    at once beside the slow properties (TASK-284)."""
+    itself (`test_index.py`'s parallel rows, which compare the two paths). When the product's threshold was 2,000
+    records, each build of the synthetic 5k corpus (about 60 a run) started a spawn pool of `os.cpu_count()`
+    workers inside every xdist worker: twice a serial build's wall time and 4 times its CPU, and dozens of
+    interpreters starting at once beside the slow properties (TASK-284). It is 10,000 now; this keeps a larger
+    test corpus serial too."""
     from openproceedings.engine import index
 
     index.PARALLEL_FROM = sys.maxsize

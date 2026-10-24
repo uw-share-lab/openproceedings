@@ -105,6 +105,11 @@ regenerates that report each night into its run summary (TASK-057; the real corp
 phrase query per field, and every term's document frequency from the term dictionary
 (`terms_with_prefix(field, "")` lists all of it, across segments, deleted documents left out), against
 `normalize()` run as the build runs it (`index.normalized`, in parallel).
+`index.normalized` starts its spawn pool of `os.cpu_count()` workers only when the manifest's `record_count` is
+at least `PARALLEL_FROM` (10,000). Starting the pool costs about 1.7 s of CPU and 0.3 s of wall time. It pays
+from about 1,500 records of 120-250-word abstracts, but only from about 10,000 of the 5k fixture's 8-60 words
+(table in `docs/results/2026-10-24-parallel-normalize-crossover.md`, TASK-284). Both callers close the generator
+(`contextlib.closing`), so a refusal shuts the pool down at once.
 
 ## Gotchas
 - Stored `title`/`abstract` hold normalized text. Keep the original display text in `record` (or the

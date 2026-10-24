@@ -9,6 +9,8 @@ name: nightly
 # blob. A long pytest step runs verbose (`-v` prints each test as it starts, and its result when it ends) and is
 # interrupted a few minutes before its job's limit, so an overrun fails with an ::error:: and the log shows which
 # test started with no result, rather than a bare cancellation.
+# The 50,000-example steps pass `-o faulthandler_timeout=0`: their tests legitimately run past pyproject's 20-min
+# stack dump (TASK-284), which every other run keeps.
 # A schedule runs from the default branch, `main` since 2026-10-21 (decision-052), so a scheduled run tests `dev`'s head
 # (the `resolve` job below; the workflow file itself is still `main`'s: an edit here reaches the schedule at the
 # next release); a dispatched run tests the sha it was dispatched on (`--ref dev` for spec 08 §Release step 1).
@@ -103,7 +105,7 @@ jobs:
         run: |
           status=0
           # shellcheck disable=SC2086  # ARGS is a list of paths and options, split on spaces
-          timeout --signal=INT --kill-after=2m 130m uv run --locked pytest -v -n auto --hypothesis-profile=nightly \
+          timeout --signal=INT --kill-after=2m 130m uv run --locked pytest -v -n auto --hypothesis-profile=nightly -o faulthandler_timeout=0 \
             $ARGS || status=$?
           if [ "$status" -eq 124 ]; then
             echo "::error::ran past 130 min: the test that started above with no result overran"
@@ -138,7 +140,7 @@ jobs:
         run: |
           echo "rerun: OP_YEAR_EDIT_SHARDS=$OP_YEAR_EDIT_SHARDS uv run --locked pytest -v --hypothesis-profile=nightly --hypothesis-seed=$SEED $TEST"
           status=0
-          timeout --signal=INT --kill-after=2m 130m uv run --locked pytest -v --hypothesis-profile=nightly \
+          timeout --signal=INT --kill-after=2m 130m uv run --locked pytest -v --hypothesis-profile=nightly -o faulthandler_timeout=0 \
             --hypothesis-seed="$SEED" --hypothesis-show-statistics "$TEST" || status=$?
           if [ "$status" -eq 124 ]; then
             echo "::error::ran past 130 min: the test that started above with no result overran"
@@ -176,7 +178,7 @@ jobs:
         run: |
           echo "rerun: OP_DIFFERENTIAL_SHARDS=$OP_DIFFERENTIAL_SHARDS OP_DIFFERENTIAL_SHARD=$OP_DIFFERENTIAL_SHARD uv run --locked pytest -v --hypothesis-profile=nightly --hypothesis-seed=$SEED backend/tests/differential"
           status=0
-          timeout --signal=INT --kill-after=2m 110m uv run --locked pytest -v --hypothesis-profile=nightly \
+          timeout --signal=INT --kill-after=2m 110m uv run --locked pytest -v --hypothesis-profile=nightly -o faulthandler_timeout=0 \
             --hypothesis-seed="$SEED" --hypothesis-show-statistics backend/tests/differential || status=$?
           if [ "$status" -eq 124 ]; then
             echo "::error::ran past 110 min: the test that started above with no result overran"

@@ -52,6 +52,10 @@ quote-style = "double"
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
 addopts = "-ra --strict-markers --benchmark-disable"  # the bench workflow enables them
+# a test still running after 20 min dumps every thread's stack to stderr, once, and goes on (TASK-284: stalls of
+# 35-66 min left no trace). The slowest test at the ci profile took 331 s (task-127); the 50,000-example
+# nightly jobs, whose tests legitimately run past it, turn it off (`-o faulthandler_timeout=0`)
+faulthandler_timeout = 1200
 
 [tool.mypy]
 python_version = "3.12"

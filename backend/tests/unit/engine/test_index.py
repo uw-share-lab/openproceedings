@@ -416,18 +416,33 @@ def recorded(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return Recorded.events
 
 
-def test_the_test_session_builds_and_checks_a_5k_corpus_in_one_process(
+def test_the_test_session_builds_and_checks_a_corpus_at_the_product_threshold_in_one_process(
     tmp_path: Path, recorded: list[str]
 ) -> None:
     """TASK-284: a build or parity check at its default workers starts no pool in the test session (conftest),
-    though 5,000 records are over the product's PARALLEL_FROM (2,000). Each of about 60 such builds started a
-    spawn pool of `os.cpu_count()` workers inside every xdist worker, costing 4 times a serial build's CPU."""
+    even at the product's PARALLEL_FROM (10,000 records). At 2,000, each of about 60 builds of the 5k fixture
+    started a spawn pool of `os.cpu_count()` workers inside every xdist worker, costing 4 times a serial build's
+    CPU."""
     from openproceedings.engine.parity import check_parity
 
-    snap = snapshot_of(many(5_000), tmp_path / "snap")
+    snap = snapshot_of(many(10_000), tmp_path / "snap")
     built = build_index(snap, tmp_path / "indexes", BUILT)
-    assert check_parity(built.path, snap).records == 5_000
+    assert check_parity(built.path, snap).records == 10_000
     assert recorded == []
+
+
+@pytest.mark.parametrize(("records", "pools"), [(40, []), (41, ["start 2", "shutdown"])])
+def test_the_record_count_not_the_first_chunk_decides_on_a_pool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recorded: list[str], records: int, pools: list[str]
+) -> None:
+    """The manifest's record count against PARALLEL_FROM, read before the first chunk: a corpus over it gets its
+    pool though every chunk is smaller (TASK-284), and the index is the serial one (guarantee 4)."""
+    snap = snapshot_of(many(records), tmp_path / "snap")
+    serial = stored(build_index(snap, tmp_path / "one", BUILT, workers=1).path)
+    monkeypatch.setattr(idx, "PARALLEL_FROM", 41)
+    monkeypatch.setattr(idx, "CHUNK", 16)
+    assert stored(build_index(snap, tmp_path / "two", BUILT, workers=2).path) == serial
+    assert recorded == pools
 
 
 def test_a_build_that_fails_part_way_has_shut_its_pool_when_the_error_arrives(
