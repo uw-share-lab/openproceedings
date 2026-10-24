@@ -23,7 +23,9 @@
 #      proxy before the API holds a connection for it: a declared length one byte over is the proxy's 413 in
 #      the API's own words, 20 times over HTTP/1.1 and HTTP/2 (TASK-259); a chunked body is 411, a PUT to
 #      /api/v1/compare included (TASK-268), which with a length gets the API's own 405; an unsized HTTP/2 body
-#      over the cap is 413, and one that stops at the cap holds no API connection (TASK-255);
+#      over the cap is 413, and one that stops at the cap holds no API connection (TASK-255); a chunked body
+#      to the web app that stalls holds no connection to it; the proxy's own 413 on a web path and its 502
+#      while web is stopped carry HSTS and no Server header;
 #   7. no log line holds the query text.
 # Run from the repository root: deploy/smoke-test.sh [--compare]. It needs docker (with compose) and uv. It uses its own
 # compose project (OP_SMOKE_PROJECT, default openproceedings-smoke), its own image tag (smoke-<pid>) and its own
@@ -497,26 +499,63 @@ if [ "$status" != 413 ] || [ "$(cat "$work/answer")" != "$api_413" ]; then
   fail "an unsized HTTP/2 body over 64 KiB answered $status: $(cat "$work/answer")"
 fi
 head -c 65536 /dev/zero | tr '\0' x >"$work/cap64k.json"
-# the API's open connections from the proxy (its healthcheck connects from loopback)
+# <service> <port>: its open connections from the proxy (a healthcheck connects from loopback)
 proxied() {
-  "${dc[@]}" exec -T api python -c '
+  "${dc[@]}" exec -T "$1" cat /proc/net/tcp | python3 -c '
 import socket, sys
 peer = socket.inet_aton(sys.argv[1])[::-1].hex().upper()
-rows = [line.split() for line in open("/proc/net/tcp").read().splitlines()[1:]]
-print(sum(1 for r in rows if r[1].endswith(":1F40") and r[2].startswith(peer + ":") and r[3] == "01"))' "$OP_PROXY_ADDRESS"
+port = ":%04X" % int(sys.argv[2])
+rows = [line.split() for line in sys.stdin.read().splitlines()[1:]]
+print(sum(1 for r in rows if r[1].endswith(port) and r[2].startswith(peer + ":") and r[3] == "01"))' "$OP_PROXY_ADDRESS" "$2"
 }
-sleep 6 # until the proxy's idle connections to the API are closed (uvicorn keeps one 5 s)
+# The web app takes no request body (no server actions, no route handlers): a page answers without reading
+# one, and the web server lets go of the connection as it does after any request (its 5 s keep-alive), though
+# the client is still sending and the proxy passes web bodies on unbuffered. So a body that stalls there holds
+# nothing for read_body (measured; a route that read bodies would, and this would see it at 9 s)
+sleep 6 # until the proxy's idle connections to the API and the web app are closed (each keeps one 5 s)
 {
   cat "$work/cap64k.json"
   sleep 10
 } | curl -sS --http2 -X POST -T - --cacert "$cert" -H 'content-type: application/json' -o /dev/null \
   "$base/api/v1/records" 2>/dev/null &
 open_pid=$!
+{
+  printf 'q=learning'
+  sleep 14
+} | curl -sS --http1.1 -X POST -T - -H 'Transfer-Encoding: chunked' --cacert "$cert" -o /dev/null \
+  -w '%{http_code}' "$base/search?q=$query" >"$work/web-stall" 2>/dev/null &
+web_pid=$!
 sleep 5
-held=$(proxied) || fail "reading the API's connections"
+held=$(proxied api 8000) || fail "reading the API's connections"
+sleep 4
+web_held=$(proxied web 3000) || fail "reading the web app's connections"
 wait "$open_pid" || true
+wait "$web_pid" || true
 echo "an unsized HTTP/2 body that stops at 64 KiB and stays open: API connections from the proxy after 5 s: $held"
 [ "$held" = 0 ] || fail "an unsized body that stopped at the 64 KiB cap held $held API connection(s)"
+echo "a chunked POST to /search that stalls: $(cat "$work/web-stall"); web connections from the proxy after 9 s: $web_held"
+[ "$web_held" = 0 ] || fail "a stalled body to the web app held $web_held connection(s) to it"
+# an error the proxy answers itself carries the site's headers too: HSTS, and no Server header. Its 413 on a
+# web path, and its 502 while the web app is stopped
+check_error_headers() { # <what> <expected status> <curl args…>
+  local what=$1 want=$2 got
+  shift 2
+  got=$(curl -sS --cacert "$cert" -D "$work/headers" -o /dev/null -w '%{http_code}' "$@" || true)
+  echo "$what -> $got; $(grep -ci '^strict-transport-security:' "$work/headers") HSTS, $(grep -ci '^server:' "$work/headers") Server header(s)"
+  if [ "$got" != "$want" ] || ! grep -qi '^strict-transport-security: max-age=' "$work/headers" \
+    || grep -qi '^server:' "$work/headers"; then
+    fail "$what: not $want with HSTS and no Server header"
+  fi
+}
+check_error_headers "64 KiB + 1 byte to /" 413 --data-binary "@$work/over64k.json" "$base/"
+"${dc[@]}" stop web >/dev/null 2>&1 || fail "stopping web"
+check_error_headers "GET / with web stopped" 502 "$base/"
+"${dc[@]}" start web >/dev/null 2>&1 || fail "starting web"
+for _ in $(seq 1 30); do
+  [ "$(status_of "$base/")" = 200 ] && break
+  sleep 1
+done
+[ "$(status_of "$base/")" = 200 ] || fail "the web app didn't come back after the 502 check"
 
 step "7. no query text in any log"
 "${dc[@]}" logs --no-color >"$work/logs.txt" 2>&1 || fail "reading the logs"

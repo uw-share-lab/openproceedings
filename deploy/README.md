@@ -16,7 +16,7 @@ that is TASK-064's decision. The requirements behind each setting are in
 | `caddy.Dockerfile` | Caddy with the Caddyfile, as user `caddy` (uid 10002) |
 | `index-permissions.sh` | gives `op-api` read access to one index version (§Permissions) |
 | `smoke-test.sh` | the whole stack over a throwaway fixture (§Trying it locally) |
-| `smoke-h3.Dockerfile` | an HTTP/3 client (curl) that `smoke-test.sh --compare` builds and runs against the stack; never part of it |
+| `smoke-h3.Dockerfile` | an HTTP/3 client (curl) that `smoke-test.sh --compare` builds and runs against the stack; never part of it. Its packages come from the Debian snapshot its base image was built from, curl at an exact version |
 
 Every base image is pinned by digest (`make tooling` checks it, and Dependabot bumps it). Every container
 has a read-only root filesystem, drops all capabilities and sets `no-new-privileges`. `api` and `web` sit on
@@ -414,6 +414,20 @@ Every 413 the proxy sends on `/api/*` is the API's own JSON error (`API_BODY_TOO
 `Connection: close`; the `Caddyfile`'s `handle_errors 413`), so a client gets one answer whichever of the two
 refuses. `smoke-test.sh` checks each of these, with comparisons on and off.
 
+The web app's paths share the 64 KiB cap and the 413 for a declared length over it (a chunked body over the
+cap there is 413 too), and need nothing more (2026-10-24, measured): the web app takes no request body (no
+server actions, no route handlers; a `POST` gets 405, or the page, or 400 with a `Next-Action` header, within
+0.1 s and without reading the body), and its server lets go of a connection whose client is still sending as
+it does after any request, after its 5 s keep-alive: four chunked bodies that stalled for 30 s held its
+connections 6 s, as a plain `GET` holds one 5 s. The proxy passes web bodies on unbuffered; a route that read
+bodies would change that, and `smoke-test.sh` would see it (it checks that a stalled body holds no web
+connection at 9 s).
+
+Every response the proxy writes from an error rather than from the API or the web app (a 502 while an
+upstream is down, a 504, the cap's 413 on a web path) carries the same `Strict-Transport-Security` and no
+`Server` header, as every other response does (`handle_errors` in the `Caddyfile`; before, a 502 had
+`Server: Caddy` and no HSTS). `smoke-test.sh` checks a 413 on `/` and a 502 with `web` stopped.
+
 ### Tuning comparisons
 
 Each cap and cost below is an `op serve` flag (TASK-184), added to the `api` service's `command` in
@@ -474,7 +488,9 @@ It checks what this runbook claims:
 - the 64 KiB cap on the other routes (§The body cap on the other routes): the proxy's 413, in the API's own
   words (compared with the API's), 20 times over HTTP/1.1 and over HTTP/2; 411 for a chunked body, a `PUT` to
   `/api/v1/compare` included, and the API's own 405 for a `PUT` with a length; 413 for an unsized HTTP/2 body
-  over the cap, and no API connection held by one that stops at it;
+  over the cap, and no API connection held by one that stops at it; no web connection held by a stalled body
+  to `/search`; HSTS and no `Server` header on the proxy's own 413 on `/` and its 502 while `web` is stopped
+  (it stops `web` and starts it again);
 - no query text in any log.
 
 `deploy/smoke-test.sh --compare` runs the same over `compose.yml` and `compare.yml`, and adds what §Comparisons

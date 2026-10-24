@@ -115,6 +115,45 @@ is held for that half second, not for read_body, and the refusal is debited from
 As built: HTTP/3 is on with comparisons on, as with them off (`protocols h1 h2 h3`), and `smoke-test.sh
 --compare` runs two batches of 8 trickles after its HTTP/1.1 stalls.
 
+## The web app's paths, and the proxy's own error responses (follow-ups, same day)
+
+**The web paths** (`reverse_proxy web:3000`, no `request_buffers`). The frontend has no server actions, no route
+handlers and no middleware (`"use server"`, `route.ts`, `middleware.ts`/`proxy.ts`: none under
+`frontend/src`), so it takes no request body. Measured on the same kind of stack (`read_body 60s`), with the
+web container's established connections from the proxy read from its `/proc/net/tcp`:
+
+- a small body: `POST /` 405, `PUT /` 405, `GET /` 200, `POST /search` 200 (the page), and a `POST` with a
+  `Next-Action` header 400, each within 0.1 s, the body unread;
+- 4 stalled bodies each (chunked 1,000 bytes to `/` and `/search`, a declared 2,000 with 1,000 sent, as `POST`
+  and as `GET`), with `Connection: close`: answered in 0.06 to 0.11 s and closed; 0 web connections at 15 s.
+  `Next-Action` stalls over HTTP/1.1 and HTTP/2: 400 in 0.01 to 0.03 s, 0 web connections at 8 s;
+- with keep-alive clients that keep the body open for 30 s: one connection per stall, held 6 s and then
+  dropped by the web server (4 stalls: 4 4 4 4 4 4 0 0 …, sampled each second), the same as the idle
+  keep-alive connection a plain `GET /search` leaves for 5 s (1 1 1 1 1 0 …);
+- a chunked body of 200,000 bytes to `/search`: 413 (the site's 64 KiB `request_body` cap); a declared length
+  over the cap: the proxy's 413 before reading it.
+
+So a body sent to the web app, slow, stalled or large, holds nothing there beyond an ordinary request's
+keep-alive, and nothing was changed for it; `smoke-test.sh` now checks that a stalled chunked `POST /search`
+holds no web connection at 9 s, which a route that read bodies would fail. (The check was not shown failing:
+there is no such route to try it on.)
+
+**Error responses.** The site's `header` directive (HSTS, `-Server`) runs only on the routes that answer
+normally, not on a response Caddy writes from an error. With the committed config, `GET /` while `web` was
+stopped got `502` with `server: Caddy` and no `strict-transport-security`. A site-wide `handle_errors` that
+imports the same two header operations (an `error-headers` snippet the 413 block imports too) gives every
+such response both: the 502 (HTTP/1.1 and HTTP/2) and the web path's empty 413 now carry
+`Strict-Transport-Security: max-age=63072000` and no `Server` header, and the 413 on `/api/*` keeps the API's
+envelope.
+
+**The HTTP/3 client's packages.** `deploy/smoke-h3.Dockerfile` now points apt at the Debian snapshot its base
+image was built from (`20261020T213255Z`, named in the image's own `debian.sources`), for both trixie and
+trixie-security, with `Check-Valid-Until: no`, and asks for `curl=8.14.1-2+deb13u7` and the same
+`libcurl4t64`: every package it installs is then fixed (with them `libnghttp3-9 1.8.0-1`, `openssl
+3.5.7-1~deb13u3`). A `--no-cache` build took 13 s, and the `HTTP3` feature check passed. An exact-version pin
+against deb.debian.org alone would break at the next curl security update, since the security archive keeps
+only the latest version.
+
 ## The smoke test
 
 `OP_HTTP_PORT=127.0.0.1:28080 OP_HTTPS_PORT=127.0.0.1:28443 deploy/smoke-test.sh`: PASS in 165 s (host load
@@ -156,3 +195,15 @@ a PUT with a length to /api/v1/compare -> 405: {"error":{"code":"API_METHOD_NOT_
 an unsized HTTP/2 body of 64 KiB + 1 byte to /api/v1/records -> 413
 an unsized HTTP/2 body that stops at 64 KiB and stays open: API connections from the proxy after 5 s: 0
 ```
+
+After the follow-ups (the error headers, the web-path check, the pinned HTTP/3 client), both runs passed again:
+`deploy/smoke-test.sh` in 111 s and `--compare` in 299 s. The new lines, the same in both:
+
+```
+a chunked POST to /search that stalls: 200; web connections from the proxy after 9 s: 0
+64 KiB + 1 byte to / -> 413; 1 HSTS, 0 Server header(s)
+GET / with web stopped -> 502; 1 HSTS, 0 Server header(s)
+```
+
+The `--compare` run's HTTP/3 batches: 16 cut at 60.10 to 60.11 s (504), the API answering 2 × 408 and 10 × 429,
+and the memory peak 620 MiB after the first batch and 620 MiB after the second.

@@ -42,6 +42,15 @@
 	}
 }
 
+# Every response the proxy writes from an error (handle_errors, at the end of the site) carries the site's
+# headers too
+(error-headers) {
+	header {
+		Strict-Transport-Security "{$OP_HSTS:max-age=63072000}"
+		-Server
+	}
+}
+
 # The body caps with comparisons off: every path gets the API's own 64KiB cap
 (compare-off) {
 	request_body {
@@ -126,14 +135,19 @@
 		# read_body cuts it before the API is asked
 		request_buffers 65537
 	}
+	# no request_buffers: the web app reads no request body (no server actions, no route handlers), and its server
+	# drops a connection whose body is still arriving after its 5 s keep-alive, as after any request (measured
+	# 2026-10-24; smoke-test.sh checks a stalled one). The site's 64KiB cap and the 413 above apply here too
 	reverse_proxy web:3000
-	# the proxy's own 413s on the API (a declared length over 64KiB; an unsized body that passes the cap) in the
-	# API's own words and headers, so a client gets the same refusal whichever of the two answers
+	# An error the proxy answers itself (a 502 or 504 from an upstream, the cap's 413) skips the site's `header`
+	# above, which runs only on the routes that answer normally: each gets the same HSTS and no Server header here
+	handle_errors {
+		import error-headers
+	}
+	# and the proxy's own 413s on the API (a declared length over 64KiB; an unsized body that passes the cap) in
+	# the API's own words and headers, so a client gets the same refusal whichever of the two answers
 	handle_errors 413 {
-		header {
-			Strict-Transport-Security "{$OP_HSTS:max-age=63072000}"
-			-Server
-		}
+		import error-headers
 		@api path /api/*
 		header @api {
 			Content-Type application/json
