@@ -136,6 +136,7 @@ _DOI_LABEL = re.compile(r"doi(?::\s*|\s+)", re.IGNORECASE)
 _TRAILING = ".,;)"  # punctuation a sentence or a list puts after a DOI (a `)` only when unbalanced)
 # a link's path ends at its query or fragment
 _LINK_END = re.compile(r"[?#]")
+_SPACES = re.compile(r"\s*+")  # what `str.strip()` strips: `\s` is `str.isspace`
 # the `_TRAILING` run at the end of a link's path, percent-encoded or not, matched on the path reversed (one pass
 # from the end; a `%HH` is always an escape, since `%` is no hex digit) so that the run is never unquoted
 _ENCODED_RUN = re.compile(r"(?:[.,;)]|[eEcC]2%|92%|[bB]3%)*+")
@@ -174,6 +175,13 @@ class RisRecord:
     dois: tuple[str, ...] = ()  # the DOIs it carries (`DO`, or a doi.org link), as `doi_key` writes them
 
 
+def _run_end(pattern: re.Pattern[str], text: str, pos: int = 0, endpos: int | None = None) -> int:
+    """Where a match of `pattern`, which can be empty, ends: it always matches."""
+    m = pattern.match(text, pos, len(text) if endpos is None else endpos)
+    assert m is not None  # every pattern passed here matches the empty string
+    return m.end()
+
+
 def doi_key(text: str) -> str | None:
     """A DOI as matching compares it, lower-cased (DOIs are case-insensitive): without a `doi:`/`DOI ` label, then
     without a doi.org link's prefix (`https://`, `www.`/`dx.` optional) and its query and fragment, and without the
@@ -181,25 +189,26 @@ def doi_key(text: str) -> str | None:
     (`10.<registrant>/<suffix>`, no whitespace, control or bidi format character in the suffix, once unquoted), and
     for one longer than `caps.MAX_DOI` characters, the ingest cap on `urls.doi` (decision-053): it names no record.
     A link's path is unquoted only up to the trailing run, and not at all when longer than `_MAX_ENCODED_DOI`
-    characters: unquote holds ~20 bytes per character (TASK-273)."""
-    v = text.strip()
-    if label := _DOI_LABEL.match(v):  # `DOI https://doi.org/…` too: the label, then the link
-        v = v[label.end() :]
+    characters: unquote holds ~20 bytes per character (TASK-273). Read in place, by position: the one copy of a
+    long value is the link's path reversed (or the value, trimmed, when it is no link)."""
+    # `text.strip()`'s bounds; `rstrip`'s copy, made only when there is trailing whitespace, is freed at once
+    hi = len(text.rstrip()) if text[-1:].isspace() else len(text)
+    lo = _run_end(_SPACES, text, 0, hi)
+    if label := _DOI_LABEL.match(text, lo, hi):  # `DOI https://doi.org/…` too: the label, then the link
+        lo = label.end()
     # one pass each, never a character at a time (a hostile file must not defeat /compare's time cap): strip the
     # trailing run, then give back the run's leading `)`s that close a `(` the DOI opened
-    if link := _DOI_LINK.match(v):
-        end = q.start() if (q := _LINK_END.search(v, link.end())) else len(v)
-        path = v[link.end() : end]
-        back = _ENCODED_RUN.match(path[::-1])
-        assert back is not None  # the run can be empty
-        cut = len(path) - back.end()
-        if cut > _MAX_ENCODED_DOI:
+    if link := _DOI_LINK.match(text, lo, hi):
+        start = link.end()  # at least `doi.org/`'s 8 characters in, so `start - 1` is no negative index
+        end = q.start() if (q := _LINK_END.search(text, start, hi)) else hi
+        cut = end - _run_end(_ENCODED_RUN, text[end - 1 : start - 1 : -1])
+        if cut - start > _MAX_ENCODED_DOI:
             return None
-        kept = unquote(path[:cut])  # ends in no `_TRAILING` character: the run took every one
-        closes = _ENCODED_CLOSES.match(path, cut)
-        assert closes is not None  # so can its `)`s
-        tail_closes = path.count(")", cut, closes.end()) + path.count("%29", cut, closes.end())
+        kept = unquote(text[start:cut])  # ends in no `_TRAILING` character: the run took every one
+        closes = _run_end(_ENCODED_CLOSES, text, cut, end)
+        tail_closes = text.count(")", cut, closes) + text.count("%29", cut, closes)
     else:
+        v = text[lo:hi]
         kept = v.rstrip(_TRAILING)
         tail = v[len(kept) :]
         tail_closes = len(tail) - len(tail.lstrip(")"))

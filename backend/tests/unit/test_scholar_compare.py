@@ -1059,13 +1059,19 @@ def test_doi_key_keeps_no_backtracking_state_on_a_hostile_value(hostile: str) ->
 def test_doi_key_reads_the_largest_compare_line_in_bounded_memory() -> None:
     """At /compare's largest line (`MAX_COMPARE_LINE`, 16 MB) a percent-encoded link path is never unquoted: it
     can't unquote to a DOI within `caps.MAX_DOI`. Unquoting it held ~329 MB, past a file's ~250 MB budget
-    (api/config.py); refused, the path's two copies (it, and it reversed) are the peak (TASK-273)."""
+    (api/config.py). Read by position, a value's one copy is its path reversed, labelled or padded alike: the
+    trim and the label's slice made up to four (67 MB) in TASK-273's first round
+    (docs/results/2026-10-24-doi-key-memory.md)."""
+    path = "%41" * (MAX_COMPARE_LINE // 3)
     for value in (
-        "https://doi.org/10.1/" + "%41" * (MAX_COMPARE_LINE // 3),
+        "https://doi.org/10.1/" + path,
         "https://doi.org/10.1/x(" + "%29" * (MAX_COMPARE_LINE // 3),
+        "doi: https://doi.org/10.1/" + path,
+        " doi: https://doi.org/10.1/" + path + " \n",
+        "DOI " + " " * 1_000 + "dx.doi.org/10.1/x" + "%2e" * (MAX_COMPARE_LINE // 3) + "\t" * 1_000,
     ):
         peak = peak_bytes(lambda v=value: doi_key(v))
-        assert peak < 3 * len(value), peak
+        assert peak < 1.1 * len(value), peak
 
 
 # --- frozen: `doi_key` before TASK-273, which unquoted a link's whole path ---------------------------------
@@ -1098,7 +1104,8 @@ _DOI_PIECE = st.sampled_from(
     [
         "https://doi.org/", "doi.org/", "dx.doi.org/", "doi:", "DOI ", "10.", "10.1/", "1", ".", "/", "a", "X", "(",
         ")", ",", ";", " ", "?", "#", "%", "%2", "%2e", "%2E", "%2c", "%2C", "%3b", "%3B", "%29", "%28", "%41",
-        "%20", "%00", "%c3", "%a9", "%C3%A9", "%e2%80%ae", "%f0%9f", "%98%80", "%ff", "é", "\u202e",
+        "%20", "%00", "%c3", "%a9", "%C3%A9", "%e2%80%ae", "%f0%9f", "%98%80", "%ff", "é", "\u202e", "\t", "\n",
+        "\u3000", "\x85",
         "A" * 499, "%41" * 499, "%2e" * 300, "." * 300, "%29" * 200,
     ]
 )  # fmt: skip
@@ -1107,6 +1114,10 @@ _DOI_PIECE = st.sampled_from(
 @settings(max_examples=3_000)
 @given(st.lists(_DOI_PIECE, max_size=12).map("".join))
 @example("https://doi.org/10.1/x(%29%29.")
+@example("")
+@example(" \t doi:\n")  # a label and nothing after it
+@example("\u3000doi:\u3000https://doi.org/10.1/x?q \x85")  # the trim's Unicode whitespace, around a label
+@example("doi: \n")
 @example("https://doi.org/10.1/x%c3%2e")  # an unfinished UTF-8 character before the run
 @example("https://doi.org/10.1/x%%2e")
 @example("https://doi.org/10.1/x%2.")

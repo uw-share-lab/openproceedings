@@ -87,10 +87,11 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   `urls.doi` (decision-053), so it could name no record; compared case-blind). A link's path is unquoted only up to
   that trailing run, which is read percent-encoded (`%2E`, `%29`) as well as raw, and not at all when the rest is
   longer than 12,000 characters (a character is at most four UTF-8 bytes of three characters each, so it can't
-  unquote within the cap): urllib's unquote holds about 20 bytes a character, ~329 MB on a link at
-  `MAX_COMPARE_LINE` (16 MB) against a file's ~250 MB budget, where the path's two copies (34 MB) are now the
-  peak (TASK-273; every value that keys to a DOI within the cap keys as before, held to a frozen copy of the old
-  function). A DOI so read names the index record whose `urls.doi` it is, **only when the record's year
+  unquote within the cap): urllib's unquote holds about 20 bytes a character, 329-363 MB on a link at
+  `MAX_COMPARE_LINE` (16 MB) against a file's ~250 MB budget. The value is read by position, never trimmed or
+  sliced whole, so its one copy is the path reversed: 16.8 MB on a 16 MB link, bare, labelled or padded alike
+  (TASK-273, measured in [results/2026-10-24-doi-key-memory.md](../results/2026-10-24-doi-key-memory.md); every
+  value that keys to a DOI within the cap keys as before, held to a frozen copy of the old function). A DOI so read names the index record whose `urls.doi` it is, **only when the record's year
   is the year the file states and its venue the venue the file states**, each where the file states one (a year;
   one of the three venues by Scholar mode's source names). A DOI that names a record in another venue or year is
   never a match: the record falls to the title rule, and its row names that record (`doi_elsewhere`, "its DOI
