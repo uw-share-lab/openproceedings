@@ -1,8 +1,8 @@
-# An HTTP/3 client for deploy/smoke-test.sh --compare only (TASK-257): curl with HTTP/3, which neither macOS's
-# curl nor the curl images (curlimages/curl, Alpine's) are built with; Debian trixie's is (nghttp3 over
-# OpenSSL's QUIC). Never part of the stack: the smoke test builds it under its own tag, runs it on the stack's
-# edge network against caddy:443 over UDP, and removes it on exit. The base is digest-pinned like every `FROM`
-# in deploy/ (TASK-149).
+# An HTTP/3 client for deploy/smoke-test.sh, in both modes (TASK-257; the HTTP/3 413 row runs on every smoke run):
+# curl with HTTP/3, which neither macOS's curl nor the curl images (curlimages/curl, Alpine's) are built with;
+# Debian trixie's is (nghttp3 over OpenSSL's QUIC). Never part of the stack: the smoke test builds it under its own
+# tag, runs it on the stack's edge network against caddy:443 over UDP, and removes it on exit. The base is
+# digest-pinned like every `FROM` in deploy/ (TASK-149).
 #
 # The packages are pinned too: apt reads the Debian archive as it was at the snapshot the base image was built
 # from (the image's own debian.sources names it), so curl and every library it pulls in are the same on each
