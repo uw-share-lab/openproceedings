@@ -338,8 +338,9 @@ def _title_ranks(snapshot: Path) -> dict[str, int]:
 def pooled(snapshot: Path, workers: int) -> bool:
     """Whether `normalized` spreads the snapshot over `workers` processes: more than one, and the manifest's
     `record_count` at least PARALLEL_FROM. A manifest that can't be read is refused by `iter_records` anyway; a
-    readable one whose `record_count` is missing or not a whole number counts as 0 (logged, once): the snapshot
-    builds serially. Either way it normalizes alike, so a wrong count costs time, never a different index."""
+    readable one whose `record_count` is missing or not a whole number counts as 0 (logged, once, with the
+    value's type, or `missing` when there is none, a manifest that is no JSON object included): the snapshot builds
+    serially. Either way it normalizes alike, so a wrong count costs time, never a different index."""
     if workers <= 1:
         return False
     try:

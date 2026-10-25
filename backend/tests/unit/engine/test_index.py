@@ -564,7 +564,7 @@ def test_the_build_and_the_parity_check_log_their_workers_and_whether_they_poole
         assert (line.workers, line.parallel) == (2, parallel), event  # type: ignore[attr-defined]
 
 
-@pytest.mark.parametrize("count", ['"80000"', None, "true", "80000.0"])
+@pytest.mark.parametrize("count", ['"80000"', None, "null", "true", "80000.0"])
 def test_an_unreadable_record_count_builds_serially_the_same_index_and_says_so(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

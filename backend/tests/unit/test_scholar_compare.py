@@ -1057,8 +1057,9 @@ def test_doi_key_keeps_no_backtracking_state_on_a_hostile_value(hostile: str) ->
 
 
 def test_doi_key_reads_the_largest_compare_line_in_bounded_memory() -> None:
-    """At /compare's largest line (`MAX_COMPARE_LINE`, 16 MiB, 16,777,216 characters) a percent-encoded link path is never unquoted: it
-    can't unquote to a DOI within `caps.MAX_DOI`. Unquoting it held ~329 MB, past a file's ~250 MB budget
+    """At about /compare's largest line (`MAX_COMPARE_LINE`, 16 MiB, 16,777,216 characters; some values here run a
+    few characters past it) a percent-encoded link path is never unquoted: it can't unquote to a DOI within
+    `caps.MAX_DOI`. Unquoting it held ~329 MB, past a file's ~250 MB budget
     (api/config.py). Read by position, a link's one copy is its path reversed, labelled or padded alike, and a
     value that is no link is never copied whole; trimming and slicing made up to four copies (67 MB) in TASK-273's
     first round and three of a value that is no link (50 MB) in its second
