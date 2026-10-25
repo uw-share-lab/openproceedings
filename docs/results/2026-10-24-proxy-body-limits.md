@@ -93,7 +93,7 @@ HTTP/3 was turned on in the compare-on block for these runs.
 | 20s | 1 stall | 20.05 s, 504 |
 | 20s | 1 trickle | 20.18 s, 504 (16,776,019 bytes read: the trickle kept the connection alive) |
 | 20s | 8 stalls, then 8 more once those were cut (caddy freshly started) | all 16 at 20.0 to 20.5 s, 504 |
-| 60s | 8 trickles in `smoke-test.sh --compare`, after its 8 HTTP/1.1 stalls were cut, then 8 more | 60.10 to 60.14 s, 504 (the logged runs: 2, 3, the follow-up and review round 1; run 1's times weren't kept) |
+| 60s | 8 trickles in `smoke-test.sh --compare`, after its 8 HTTP/1.1 stalls were cut, then 8 more | 60.10 to 60.14 s, 504 (runs 2 and 3 and the follow-up; run 1's times weren't kept) |
 
 So `read_body` reaches an HTTP/3 upload through the per-request read deadline Caddy sets since 2.11.6. At the
 shipped `read_body 60s`, an upload that stalls (sends nothing at all) is closed first by QUIC's 30 s idle

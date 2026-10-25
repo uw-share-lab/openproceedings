@@ -1080,8 +1080,8 @@ them:
   are invisible (`xargs_hides_args` flags `rm`, `mv` and `git push`/`add`/`commit`/`rm`/`mv` run that way;
   `require-review.sh` and `enforce-pr-workflow.sh` refuse them);
 - command names are compared by basename (`/usr/bin/git`), case-folded (`cmdparse.fold`: macOS's filesystem finds
-  `GIT`, `RM`, `SUDO` as git, rm, sudo, so every gate reads them so), except bash's builtins and keywords, which bash
-  matches only as spelled (`CD /tmp` moves nothing, `EXPORT D=x` sets nothing; `CASE_SENSITIVE_NAMES`, TASK-269
+  `GIT`, `RM`, `SUDO` as git, rm, sudo, so every gate reads them so), except the builtins that act on the shell itself
+  (`cd`, `export`, `set`, `eval`, `source`, …) and keywords, which bash matches only as spelled (`CD /tmp` moves nothing, `EXPORT D=x` sets nothing; `CASE_SENSITIVE_NAMES`, TASK-269
   review); and a `git-<sub>` program (`$(git --exec-path)/git-push`) is `git <sub>`;
 - `export VAR=…`, `VAR=…; export VAR` and `declare -x` reach every later command's assignments (`GIT_DIR`),
   and so does every assignment while `set -a` / `set -o allexport` is on;

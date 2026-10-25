@@ -192,8 +192,8 @@ def doi_key(text: str) -> str | None:
     for one longer than `caps.MAX_DOI` characters, the ingest cap on `urls.doi` (decision-053): it names no record.
     A link's path is unquoted only up to the trailing run, and not at all when longer than `_MAX_ENCODED_DOI`
     characters: unquote holds ~20 bytes per character (TASK-273). Read in place, by position: a long link's one
-    copy is its path reversed, and a value that is no link is never copied whole (a copy holds at most
-    `caps.MAX_DOI` characters of it, or `_MAX_ENCODED_DOI` of a link's path)."""
+    whole copy is its path reversed (its unquoted slice holds at most `_MAX_ENCODED_DOI` characters), and a value
+    that is no link is never copied whole (its one slice holds at most `caps.MAX_DOI` characters)."""
     lo = _run_end(_SPACES, text)  # `text.strip()`'s start; its end is found where each branch reads
     if label := _DOI_LABEL.match(text, lo):  # `DOI https://doi.org/…` too: the label, then the link
         lo = label.end()

@@ -30,7 +30,8 @@ matter to a gate:
     a ParseError;
     the argv comes back as an `Argv` that records the `VAR=val` words and whether xargs runs it;
   * command names compare by basename (`/usr/bin/git` is `git`), case-folded (`GIT`, `RM`: macOS's filesystem finds
-    them) except bash's builtins and keywords, which match only as spelled (`fold`);
+    them) except the builtins that act on the shell itself
+    (`CASE_SENSITIVE_NAMES`) and keywords (`RESERVED`), which match only as spelled (`fold`);
   * redirections leave argv as (operator, target) pairs (`walk` yields them);
   * `cd`, `pushd` and `popd` are tracked (targets through `expand_word`, `-P` physically; one it can't resolve,
     one that doesn't exist, a relative one under CDPATH, or `cd -` back to an unknown one marks the directory
@@ -1375,9 +1376,10 @@ def base(word: str) -> str:
     return os.path.basename(word) if "/" in word else word
 
 
-# Bash's builtins and keywords match only as spelled: `CD /tmp` is no `cd` (it runs an external `cd`, or nothing), so
-# folding them would move this parser's directory, or set variables, where bash doesn't (an allow; TASK-269 review).
-# `command` and `time` aren't here: macOS's /usr/bin/command and /usr/bin/time run what follows, as the builtins do.
+# The builtins that act on the shell itself match only as spelled: `CD /tmp` is no `cd` (it runs an external `cd`, or
+# nothing), so folding them would move this parser's directory, or set variables, where bash doesn't (an allow;
+# TASK-269 review). `command` and `time` aren't here: macOS's /usr/bin/command and /usr/bin/time run what follows, as
+# the builtins do.
 CASE_SENSITIVE_NAMES = {
     ".",
     ":",

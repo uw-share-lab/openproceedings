@@ -6,7 +6,8 @@ fragments and holds about 20 bytes per character. At `MAX_COMPARE_LINE` that wen
 (`api/config.py`). `MAX_COMPARE_LINE` is 1 << 24 = 16,777,216 characters (16 MiB), the largest line an operator can
 allow.
 
-Four versions were measured:
+Four versions were measured ("round N" here is the Nth version of the function; review round N produced
+version N+1):
 - **Old**: before TASK-273 (`e8539317^`). It is the same function as the test module's `_old_doi_key`.
 - **Round 1** (`e8539317`):
   - It never unquotes the trailing run.
@@ -30,7 +31,7 @@ Four versions were measured:
 - **Peak memory:** the tracemalloc peak of one call (`backend/tests/timing.py` `peak_bytes`).
 - **CPU time:** one call's `time.process_time()`.
 - **Machine:** an 8-core Apple Silicon Mac, Python 3.12.15, on 2026-10-24 (the last two columns on 2026-10-25).
-- **Code:** the "Now" column is `0872af28` plus the working tree.
+- **Code:** the "Now" column is `eba5022f`.
 - **Load:** the first pass ran at a 1-minute load average of 5-6. The pass with the "Round 2" column ran at a
   load of 16-56, so its CPU times are rough. Its peaks are not: they are counted in bytes.
 

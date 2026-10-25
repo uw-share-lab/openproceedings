@@ -378,7 +378,7 @@ included) and never reached the API: with uploads stalled in the proxy, a whole 
 measured. A cut upload gets `499` from Caddy 2.11.7 (2.11.4 wrote an empty `200`), and the API logged none
 of them: a client sees no comparison in it. Over HTTP/3 (TASK-257, 2026-10-24,
 [`docs/results/2026-10-24-proxy-body-limits.md`](../docs/results/2026-10-24-proxy-body-limits.md)) an upload
-that trickled a byte a second was cut at `read_body` too (60.10 to 60.14 s, 8 at once, in each logged run). One
+that trickled a byte a second was cut at `read_body` too (60.10 to 60.14 s, 8 at once, in the logged runs). One
 that stalls, sending nothing, is closed sooner at this `read_body` of 60 s, by QUIC's 30 s idle timeout
 (30.89 s); a stall was cut at `read_body` only when that was shorter (20.0 to 20.5 s with `read_body 20s`).
 Each gets 504. Unlike HTTP/1.1, the proxy then forwards what it read, and the API refuses it within half a
@@ -512,8 +512,8 @@ checked without `--compare` too, with `/meta` offering no comparisons; HTTP/3 is
 reads the caddy container's cgroup v2 memory files: `memory.peak` needs Linux 5.19 or later (before that it samples
 `memory.current` while the uploads are held, and skips the HTTP/3 peak check). It takes about three minutes
 longer: the runs after review round 1 (2026-10-25) took 333 s, against 156 s without it, on that Mac (299 and
-111 s on 2026-10-24, before its rows were added) (149 to 186 s and 87
-to 128 s on 2026-10-16, before the HTTP/3 batches); the stalled uploads wait out `read_body` three times.
+111 s on 2026-10-24, before review round 1's rows; 149 to 186 s and 87 to 128 s on 2026-10-16, before the HTTP/3
+batches); the stalled uploads wait out `read_body` three times.
 
 It removes everything it created on exit. It needs Docker and uv, and ports 80 and 443 on 127.0.0.1 (or
 `OP_HTTP_PORT`/`OP_HTTPS_PORT`, such as `127.0.0.1:18443`; it binds loopback only). Docker Desktop keeps a host
