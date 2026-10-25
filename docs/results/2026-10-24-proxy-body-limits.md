@@ -67,8 +67,8 @@ broken pipe`: the API refused from the header, closed, and the proxy was still w
 buffered. Most clients got neither the API's answer nor a 502 but Caddy's own empty 413 (the transport's next
 body read failing at the cap): three answers to one request. As built the proxy refuses a declared length over
 65,536 bytes before reading any of the body (`error 413` from an `expression` matcher), and `handle_errors 413`
-answers every proxy 413 on `/api/*` with the API's own envelope, `Content-Type`, `Cache-Control` and
-`Connection: close`. The smoke test compares that body with the API's own refusal, read from the API directly.
+answers every proxy 413 on `/api/*` with the API's own envelope, `Content-Type`, `Cache-Control` and, over
+HTTP/1.x only, `Connection: close` (see Review round 1 below). The smoke test compares that body with the API's own refusal, read from the API directly.
 
 ## TASK-268: other methods to `/api/v1/compare` with comparisons on
 
@@ -95,14 +95,16 @@ HTTP/3 was turned on in the compare-on block for these runs.
 | 20s | 8 stalls, then 8 more once those were cut (caddy freshly started) | all 16 at 20.0 to 20.5 s, 504 |
 | 60s | 8 trickles in `smoke-test.sh --compare`, after its 8 HTTP/1.1 stalls were cut, then 8 more | 60.07 to 60.14 s, 504 (three runs) |
 
-So `read_body` cuts an HTTP/3 upload, stalled or trickling, through the per-request read deadline Caddy sets
-since 2.11.6; a client that sends nothing at all is closed sooner, by QUIC's idle timeout.
+So `read_body` reaches an HTTP/3 upload through the per-request read deadline Caddy sets since 2.11.6. At the
+shipped `read_body 60s`, an upload that stalls (sends nothing at all) is closed first by QUIC's 30 s idle
+timeout, at 30.89 s; one that trickles is cut at `read_body`. A stall was cut at `read_body` only when that was
+shorter than the idle timeout (20 s). That is why `smoke-test.sh` sends trickles.
 
 Memory (caddy cgroup, MiB): the two batches of 8 stalls held 259 (current) with the peak going 28 → 278, then
 308 with the peak 278 → 321: the second batch raised the peak by 43 MiB, under 8 × 25 = 200. In the smoke
 test's third run the first batch of 8 trickles raised the peak from 430 (after the HTTP/1.1 batch) to 696 MiB,
 and the second by nothing (696 → 696). An HTTP/3 upload held about 31 MiB in the proxy (259 MiB for 8, less
-14 idle), against about 50 for HTTP/1.1, but on top of what Go kept from the HTTP/1.1 batch.
+the 14 MiB `memory.current` of the freshly started container before the first batch; its peak was already 28), against about 50 for HTTP/1.1, but on top of what Go kept from the HTTP/1.1 batch.
 
 One difference from HTTP/1.1: a cut HTTP/3 upload is forwarded. An HTTP/1.1 upload cut at read_body ends as
 499 (the request's context is cancelled) and the API never sees it. Over HTTP/3 the deadline's error leaves
@@ -207,3 +209,21 @@ GET / with web stopped -> 502; 1 HSTS, 0 Server header(s)
 
 The `--compare` run's HTTP/3 batches: 16 cut at 60.10 to 60.11 s (504), the API answering 2 × 408 and 10 × 429,
 and the memory peak 620 MiB after the first batch and 620 MiB after the second.
+
+## Review round 1 (2026-10-25)
+
+**The proxy's 413 over HTTP/3.** `handle_errors 413` set `Connection: close` on every protocol. A new smoke row
+sends 64 KiB + 1 byte to `/api/v1/records` from the HTTP/3 client with `--http3-only`. With the header on every
+protocol, curl failed: `(95) HTTP/3 stream 0 was closed cleanly, but before getting all response header fields,
+treated as error`. So an HTTP/3 client got no 413 at all. RFC 9114 §4.2 makes a connection-specific header a
+malformed response. With the header limited to HTTP/1.x (`not protocol http/2+`), the same row gets `3 413`, the
+API's own words and no `Connection` header, and HTTP/1.1 still gets `Connection: close` (also checked now).
+
+**The zero-count rows.** The two rows that count connections held by a stalled body now check, at each sample,
+that the stalled curl is still running (`kill -0`). Afterwards they check how each request ended:
+- the 64 KiB HTTP/2 body, once its producer ends it at 10 s, gets 422, and the API's line for it shows 422 in
+  2.3 ms: the API got it whole and never waited for it;
+- the stalled `POST /search` gets 200.
+
+Both runs passed after these changes: `deploy/smoke-test.sh --compare` in 333 s, then `deploy/smoke-test.sh` in
+156 s. (The only later change to `smoke-test.sh` is a line in its header comment.)

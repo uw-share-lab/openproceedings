@@ -325,8 +325,9 @@ dc up -d --build   # caddy's image holds the Caddyfile: rebuild it if yours pred
   the other four getting 413); a length that isn't 1 to 18 plain digits gets 400 (over HTTP/2 Go passes it on to
   Caddy, whose arithmetic on it would fail into a 500); browsers
   declare a file's length (Chromium over HTTP/2 did). The server keeps speaking HTTP/3: `read_body` reaches a
-  QUIC stream through the per-request read deadline Caddy sets since 2.11.6, and an HTTP/3 upload that stalled,
-  or trickled a byte a second, was cut at `read_body` (TASK-257, below). Any
+  QUIC stream through the per-request read deadline Caddy sets since 2.11.6: an HTTP/3 upload that trickled a
+  byte a second was cut at `read_body`, and one that stalls, sending nothing, is closed sooner by QUIC's 30 s
+  idle timeout (TASK-257, below). Any
   value of `OP_COMPARE` but `on` or `off` names a snippet (or file) that doesn't exist, and Caddy refuses to
   start.
 - **`caddy`** also gets `OP_READ_BODY` (default `60s`: a 16 MiB file then needs more than 2.24 Mbit/s), a
@@ -364,8 +365,10 @@ uploads held at once reached its edge (peaks of 890 to 998 MiB) and 32 did not f
 address or many, and Caddy as built here limits
 neither connections nor uploads per client. That bound is not built here yet. The owner decided on 2026-10-17
 (TASK-256) where it goes: a per-source connection limit in front of Caddy at the host, for example nftables
-`connlimit` on 443, set once TASK-064 chooses the host. There will be no custom Caddy build. That caps what one
-address can hold; many addresses together can still reach the memory limit, which then restarts the proxy as now.
+`connlimit`, on TCP and UDP 443 (QUIC: HTTP/3 is on, TASK-257), set once TASK-064 chooses the host. There will be
+no custom Caddy build. That caps the connections one address can hold, not its uploads: HTTP/2 and HTTP/3 carry
+many uploads on one connection. Many addresses together can still reach the memory limit, which then restarts
+the proxy as now.
 Until it is set, size `OP_CADDY_MEM_LIMIT` as above and expect a restart past it.
 
 A stalled upload was cut by the proxy when `read_body` ran out (60 s after its request started, sending
@@ -374,9 +377,10 @@ included) and never reached the API: with uploads stalled in the proxy, a whole 
 measured. A cut upload gets `499` from Caddy 2.11.7 (2.11.4 wrote an empty `200`), and the API logged none
 of them: a client sees no comparison in it. Over HTTP/3 (TASK-257, 2026-10-24,
 [`docs/results/2026-10-24-proxy-body-limits.md`](../docs/results/2026-10-24-proxy-body-limits.md)) an upload
-that trickled a byte a second was cut at `read_body` too (60.07 to 60.09 s for 8 at once; a stall at 20.0 to
-20.5 s with `read_body 20s`), and one that sends nothing at all is closed sooner, by QUIC's 30 s idle timeout;
-each gets 504. Unlike HTTP/1.1, the proxy then forwards what it read, and the API refuses it within half a
+that trickled a byte a second was cut at `read_body` too (60.07 to 60.14 s, 8 at once, over three runs). One
+that stalls, sending nothing, is closed sooner at this `read_body` of 60 s, by QUIC's 30 s idle timeout
+(30.89 s); a stall was cut at `read_body` only when that was shorter (20.0 to 20.5 s with `read_body 20s`).
+Each gets 504. Unlike HTTP/1.1, the proxy then forwards what it read, and the API refuses it within half a
 second (408 `API_UPLOAD_TIMEOUT`, or 429 while another comparison runs or once the client's bucket is
 empty, debited to it; never a comparison), so a cut QUIC upload holds the API's slot for that half second, not for `read_body`. A second
 batch of 8 HTTP/3 stalls, once the first was cut, raised the proxy's memory peak by 43 MiB.
@@ -410,9 +414,11 @@ or without `compare.yml`, and the proxy refuses what is over it before the API h
   an API connection until `read_body`, a `GET`'s too (the API reads any body before routing): about 256 of
   them could have held every connection the API takes (`limit_concurrency`), searches included.
 
-Every 413 the proxy sends on `/api/*` is the API's own JSON error (`API_BODY_TOO_LARGE`, the same message,
-`Connection: close`; the `Caddyfile`'s `handle_errors 413`), so a client gets one answer whichever of the two
-refuses. `smoke-test.sh` checks each of these, with comparisons on and off.
+Every 413 the proxy sends on `/api/*` from the 64 KiB cap is the API's own JSON error (`API_BODY_TOO_LARGE`,
+the same message, and `Connection: close` over HTTP/1.x only; the `Caddyfile`'s `handle_errors 413`), so a client
+gets one answer whichever of the two refuses. Over HTTP/3 the `Connection` header made the answer malformed (curl:
+"stream 0 was closed cleanly, but before getting all response header fields"; RFC 9114 §4.2 forbids it), so it
+is sent only where it is valid. `smoke-test.sh` checks each of these, with comparisons on and off.
 
 The web app's paths share the 64 KiB cap and the 413 for a declared length over it (a chunked body over the
 cap there is 413 too), and need nothing more (2026-10-24, measured): the web app takes no request body (no
@@ -486,10 +492,11 @@ It checks what this runbook claims:
   unpinned one, with the record store still the API's and a backup that opens;
 - a withheld abstract next to a served one, with `takedown-check` passing;
 - the 64 KiB cap on the other routes (§The body cap on the other routes): the proxy's 413, in the API's own
-  words (compared with the API's), 20 times over HTTP/1.1 and over HTTP/2; 411 for a chunked body, a `PUT` to
+  words (compared with the API's), 20 times over HTTP/1.1 and over HTTP/2, once over HTTP/3 with no `Connection`
+  header, and `Connection: close` over HTTP/1.1; 411 for a chunked body, a `PUT` to
   `/api/v1/compare` included, and the API's own 405 for a `PUT` with a length; 413 for an unsized HTTP/2 body
-  over the cap, and no API connection held by one that stops at it; no web connection held by a stalled body
-  to `/search`; HSTS and no `Server` header on the proxy's own 413 on `/` and its 502 while `web` is stopped
+  over the cap, and no API connection held by one that stops at it (still in flight when counted, then a quick
+  422 once whole); no web connection held by a stalled body to `/search` (in flight when counted, then 200); HSTS and no `Server` header on the proxy's own 413 on `/` and its 502 while `web` is stopped
   (it stops `web` and starts it again);
 - no query text in any log.
 
@@ -502,9 +509,9 @@ less than 25 MiB an upload, the proxy's own 413 (by its text) one byte over 16 M
 HTTP/2 `Content-Length: abc`, and the 64 KiB cap on every other request (in the proxy's adapted config, and
 checked without `--compare` too, with `/meta` offering no comparisons; HTTP/3 is advertised either way). It
 reads the caddy container's cgroup v2 memory files: `memory.peak` needs Linux 5.19 or later (before that it samples
-`memory.current` while the uploads are held, and skips the HTTP/3 peak check). It takes about two minutes
-longer (292 s, against 165 s without it, on that Mac on 2026-10-24; 149 to 186 s and 87 to 128 s on 2026-10-16,
-before the HTTP/3 batches): the stalled uploads wait out `read_body` three times.
+`memory.current` while the uploads are held, and skips the HTTP/3 peak check). It takes about three minutes
+longer: the as-built runs of 2026-10-24 took 299 s, against 111 s without it, on that Mac (149 to 186 s and 87
+to 128 s on 2026-10-16, before the HTTP/3 batches); the stalled uploads wait out `read_body` three times.
 
 It removes everything it created on exit. It needs Docker and uv, and ports 80 and 443 on 127.0.0.1 (or
 `OP_HTTP_PORT`/`OP_HTTPS_PORT`, such as `127.0.0.1:18443`; it binds loopback only). Docker Desktop keeps a host

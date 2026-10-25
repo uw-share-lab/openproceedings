@@ -21,7 +21,8 @@
 #      batch raising it by less than 25 MiB an upload; a file one byte over 16 MiB is 413, and one sent without
 #      a length (chunked, or HTTP/2 unsized) 411. Either way, every other request keeps the 64 KiB cap, refused by the
 #      proxy before the API holds a connection for it: a declared length one byte over is the proxy's 413 in
-#      the API's own words, 20 times over HTTP/1.1 and HTTP/2 (TASK-259); a chunked body is 411, a PUT to
+#      the API's own words, 20 times over HTTP/1.1 and HTTP/2 and once over HTTP/3 with no Connection header
+#      (TASK-259); a chunked body is 411, a PUT to
 #      /api/v1/compare included (TASK-268), which with a length gets the API's own 405; an unsized HTTP/2 body
 #      over the cap is 413, and one that stops at the cap holds no API connection (TASK-255); a chunked body
 #      to the web app that stalls holds no connection to it; the proxy's own 413 on a web path and its 502
@@ -130,6 +131,9 @@ echo "takedown list: $listed (unlisted neighbour: $neighbour)"
 
 step "build the images ($OP_IMAGE_TAG)"
 "${dc[@]}" build --quiet
+# and the HTTP/3 client the checks below run on the stack's edge network (deploy/smoke-h3.Dockerfile; TASK-257)
+h3_image="openproceedings-smoke-h3:$OP_IMAGE_TAG"
+docker build --quiet -t "$h3_image" - <deploy/smoke-h3.Dockerfile >/dev/null || fail "building the HTTP/3 client"
 
 step "host setup: the record store and index permissions (as root, as an operator would with sudo)"
 # index-permissions.sh must refuse to run without an explicit gid (no default that may be another account's)
@@ -302,8 +306,8 @@ print("proxy: protocols", srv.get("protocols"), "| body caps", caps, "| /api/* b
 ok = (srv.get("protocols") == ["h1", "h2", "h3"] and api == [65537] and refusals == want_refusals and envelope
       and ((inner == want_inner and caps == [([{"not": post}], 65536)]) if on else (caps == [(None, 65536)] and not compare)))
 sys.exit(0 if ok else 1)' "$compare" || fail "the proxy's adapted body caps, refusals or protocols are not what compare=$compare needs"
-# HTTP/3 is advertised (Alt-Svc) with comparisons on or off: a stalled upload over QUIC is cut at read_body
-# (TASK-257; the --compare run checks it below)
+# HTTP/3 is advertised (Alt-Svc) with comparisons on or off: a QUIC upload that trickles is cut at read_body,
+# and one that stalls is closed sooner by QUIC's 30 s idle timeout (TASK-257; the --compare run checks the first)
 headers=$("${curl_tls[@]}" -D - -o /dev/null "$base/api/v1/healthz") || fail "GET /api/v1/healthz headers"
 h3=$(grep -ci '^alt-svc: h3' <<<"$headers" || true)
 echo "Alt-Svc h3 headers: $h3"
@@ -382,8 +386,6 @@ sys.exit(0 if abs(cut["cut_min_s"] - limit) <= 2 and abs(cut["cut_max_s"] - limi
   # or 429 while another comparison runs or the client's bucket is empty), so none may get a comparison; and
   # the second batch, sent once the first is cut, must raise the proxy's memory peak by less than 25 MiB an
   # upload (memory.current is no evidence: Go keeps what it freed)
-  h3_image="openproceedings-smoke-h3:$OP_IMAGE_TAG"
-  docker build --quiet -t "$h3_image" - <deploy/smoke-h3.Dockerfile >/dev/null || fail "building the HTTP/3 client"
   h3_batch() {
     # shellcheck disable=SC2016 # "$1"…"$3" expand inside the container's bash, on purpose
     docker run --rm --network "${project}_edge" -v "$cert:/ca.crt:ro" "$h3_image" bash -c '
@@ -475,6 +477,22 @@ for proto in --http1.1 --http2; do
   done
 done
 echo "64 KiB + 1 byte to /api/v1/records, 20 times over HTTP/1.1 and over HTTP/2 -> 413: $api_413"
+# over HTTP/1.1 it also closes the connection, as the API's own 413 does
+status_of --http1.1 -D "$work/headers" -H 'content-type: application/json' --data-binary "@$work/over64k.json" \
+  "$base/api/v1/records" >/dev/null
+grep -qi '^connection: close' "$work/headers" || fail "the proxy's HTTP/1.1 413 doesn't say Connection: close"
+# and over HTTP/3, where a connection-specific header (`Connection: close`) would make the answer malformed
+# (RFC 9114 §4.2): the same 413 and words, and no Connection header
+# shellcheck disable=SC2016 # "$1" expands inside the container's sh, on purpose
+docker run --rm --network "${project}_edge" -v "$cert:/ca.crt:ro" -v "$work/over64k.json:/body:ro" "$h3_image" sh -c '
+curl -sS --http3-only --cacert /ca.crt --connect-to localhost:443:caddy:443 -H "content-type: application/json" \
+  --data-binary @/body -D /tmp/headers -o /tmp/body -w "%{http_version} %{http_code}\n" "https://localhost$1" \
+  && cat /tmp/headers /tmp/body' sh /api/v1/records >"$work/h3-413" 2>&1 || true
+h3_answer=$(tail -n 1 "$work/h3-413")
+echo "64 KiB + 1 byte to /api/v1/records over HTTP/3 -> $(head -n 1 "$work/h3-413"); Connection headers: $(grep -ci '^connection:' "$work/h3-413" || true)"
+if [ "$(head -n 1 "$work/h3-413")" != "3 413" ] || [ "$h3_answer" != "$api_413" ] || grep -qi '^connection:' "$work/h3-413"; then
+  fail "64 KiB + 1 byte over HTTP/3 didn't get the API's 413 without a Connection header: $(cat "$work/h3-413")"
+fi
 # a chunked body must declare its length instead (411, any method; TASK-255), a PUT to /api/v1/compare included:
 # with comparisons on, only a POST there is a file (TASK-268), and a PUT with a length gets the API's own 405
 status=$(status_of --http1.1 -H 'Transfer-Encoding: chunked' -H 'content-type: application/json' \
@@ -513,11 +531,14 @@ print(sum(1 for r in rows if r[1].endswith(port) and r[2].startswith(peer + ":")
 # the client is still sending and the proxy passes web bodies on unbuffered. So a body that stalls there holds
 # nothing for read_body (measured; a route that read bodies would, and this would see it at 9 s)
 sleep 6 # until the proxy's idle connections to the API and the web app are closed (each keeps one 5 s)
+# each stalled request must still be in flight when its count is read, or a zero shows nothing; afterwards,
+# the 64 KiB one (its body ends at 10 s, within the cap) reaches the API whole, which answers it at once
+# (422: x's aren't JSON), and the web one gets its page
 {
   cat "$work/cap64k.json"
   sleep 10
 } | curl -sS --http2 -X POST -T - --cacert "$cert" -H 'content-type: application/json' -o /dev/null \
-  "$base/api/v1/records" 2>/dev/null &
+  -w '%{http_code}' "$base/api/v1/records" >"$work/api-stall" 2>/dev/null &
 open_pid=$!
 {
   printf 'q=learning'
@@ -526,15 +547,24 @@ open_pid=$!
   -w '%{http_code}' "$base/search?q=$query" >"$work/web-stall" 2>/dev/null &
 web_pid=$!
 sleep 5
+kill -0 "$open_pid" 2>/dev/null || fail "the stalled 64 KiB upload had already ended at 5 s: $(cat "$work/api-stall")"
 held=$(proxied api 8000) || fail "reading the API's connections"
 sleep 4
+kill -0 "$web_pid" 2>/dev/null || fail "the stalled body to /search had already ended at 9 s: $(cat "$work/web-stall")"
 web_held=$(proxied web 3000) || fail "reading the web app's connections"
 wait "$open_pid" || true
 wait "$web_pid" || true
-echo "an unsized HTTP/2 body that stops at 64 KiB and stays open: API connections from the proxy after 5 s: $held"
+api_ms=$("${dc[@]}" logs --no-color api | grep '"route": "/api/v1/records"' | tail -n 1 \
+  | sed -n 's/.*"status": \([0-9]*\), "ms": \([0-9.]*\).*/\1 \2/p')
+echo "an unsized HTTP/2 body that stops at 64 KiB and stays open: API connections from the proxy after 5 s: $held;" \
+  "then $(cat "$work/api-stall") once its body ended (the API's line: status and ms $api_ms)"
 [ "$held" = 0 ] || fail "an unsized body that stopped at the 64 KiB cap held $held API connection(s)"
-echo "a chunked POST to /search that stalls: $(cat "$work/web-stall"); web connections from the proxy after 9 s: $web_held"
+[ "$(cat "$work/api-stall")" = 422 ] || fail "the 64 KiB upload, once whole, answered $(cat "$work/api-stall"), not 422"
+python3 -c 'import sys; f = sys.argv[1].split(); sys.exit(0 if len(f) == 2 and f[0] == "422" and float(f[1]) < 1000 else 1)' "$api_ms" \
+  || fail "the API's line for the 64 KiB upload isn't a quick 422 (it waited for the body?): $api_ms"
+echo "a chunked POST to /search that stalls: web connections from the proxy after 9 s: $web_held; then $(cat "$work/web-stall")"
 [ "$web_held" = 0 ] || fail "a stalled body to the web app held $web_held connection(s) to it"
+[ "$(cat "$work/web-stall")" = 200 ] || fail "the stalled POST to /search answered $(cat "$work/web-stall"), not 200"
 # an error the proxy answers itself carries the site's headers too: HSTS, and no Server header. Its 413 on a
 # web path, and its 502 while the web app is stopped
 check_error_headers() { # <what> <expected status> <curl args…>

@@ -34,8 +34,9 @@
 			# no `write` timeout: an export of the whole matched set streams for as long as it takes; Caddy's
 			# stall-only `write_idle` (default 1m since 2.11.6) still cuts a client that stops reading for a minute
 			# (`read_body_idle`, also 1m, doesn't fire first while `read_body` is at most 1m; leave it non-zero: it is
-			# what sets the per-request read deadline, the only one an HTTP/3 stream gets. A stalled or trickling
-			# HTTP/3 upload was measured cut at read_body; an idle QUIC connection closes after 30 s first; TASK-257)
+			# what sets the per-request read deadline, the only one an HTTP/3 stream gets. A trickling HTTP/3 upload
+			# was measured cut at read_body; one that stalls, sending nothing, is closed sooner by QUIC's 30 s idle
+			# timeout; TASK-257)
 		}
 		max_header_size 64KiB # the API's own request-head limit (a 2,000-code-point q fits)
 		protocols h1 h2 h3 # with comparisons on too (TASK-257)
@@ -152,8 +153,13 @@
 		header @api {
 			Content-Type application/json
 			Cache-Control no-store
-			Connection close
 		}
+		# as the API does, over HTTP/1.x only: HTTP/2 and HTTP/3 forbid connection-specific headers (RFC 9114 §4.2)
+		@api_h1 {
+			path /api/*
+			not protocol http/2+
+		}
+		header @api_h1 Connection close
 		respond @api `{"error":{"code":"API_BODY_TOO_LARGE","message":"The request body is over 65,536 bytes; a query fits in far less."}}` 413
 	}
 	log {

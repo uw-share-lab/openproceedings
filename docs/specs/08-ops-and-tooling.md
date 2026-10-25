@@ -547,7 +547,7 @@ openproceedings.example {
 	handle_errors {            # an error the proxy answers itself (502, 504, a web path's 413): HSTS, no Server
 		…
 	}
-	handle_errors 413 {        # the same, and on /api/* the API's own envelope and headers
+	handle_errors 413 {        # the same, and on /api/* the API's own envelope and headers (Connection: close on HTTP/1.x only)
 		…
 	}
 	log {
@@ -576,7 +576,7 @@ streamed on and held an API connection until `read_body`, for any method: the AP
 `GET`'s body too); a chunked HTTP/1.1 request gets 411 (one over the cap that then stalled held an API
 connection until `read_body`, since Go's server reads on from a body being closed); and a declared length over
 the cap gets the proxy's 413 before any of it is read (forwarded, the API's refusal from the header raced the
-proxy's sending and reached the client as a 502 in 9 of 300 tries under load). Every proxy 413 on `/api/*` is
+proxy's sending and reached the client as a 502 in 9 of 300 tries under load). Every proxy 413 from the 64 KiB cap is
 the API's own `API_BODY_TOO_LARGE` envelope (`handle_errors 413`), so the client gets one answer. The web
 app's paths share the cap and the 413 and need no more (measured 2026-10-24): it takes no request body (no
 server actions or route handlers), answers without reading one, and drops a connection whose client is still
@@ -615,8 +615,9 @@ that went over the cap and stalled held the API's slot until its upload timeout)
 isn't 1 to 18 plain digits and a 413 for one over 16 MiB, before any of the file is read (forwarded, the API's
 refusal raced the proxy's sending and reached the client as a 502 in one smoke run of five), each plain text,
 not the API's error envelope; HTTP/3 kept on (TASK-257: Caddy's HTTP/3 server gets `read_body` through the
-per-request read deadline it sets since 2.11.6, and an HTTP/3 upload that stalled or trickled was cut at
-`read_body`; one that sends nothing is closed first by QUIC's 30 s idle timeout; unlike HTTP/1.1, the proxy then
+per-request read deadline it sets since 2.11.6: at `read_body` 60s an HTTP/3 upload that stalls, sending
+nothing, is closed by QUIC's 30 s idle timeout (measured: 30.89 s, 504), and one that trickles is cut at
+`read_body` (60.07 to 60.14 s; a stall was cut at `read_body` only with `read_body 20s`); unlike HTTP/1.1, the proxy then
 forwards what it read, which the API refuses within half a second, 408 or 429, never comparing it); a longer `read_body` (`OP_READ_BODY`, 60s there), which is the server's timeout for every request (Caddy has no per-path one); and
 a memory limit on the `caddy` container (`OP_CADDY_MEM_LIMIT`, 1g, with `GOMEMLIMIT` 800MiB). With the proxy
 buffering the file, a slow upload holds a proxy goroutine and about 50 MiB of its memory (measured: Caddy's
@@ -626,8 +627,9 @@ the proxy, which past it is killed and restarted, dropping every connection it h
 few seconds (24 uploads held at once reached the edge of 1 GiB, peaks 890 to 998 MiB, and 32 did not fit;
 Caddy as built limits neither connections nor uploads per client. The owner decided on 2026-10-17 (TASK-256, option
 (c)) that the cap will be a per-source connection limit in front of Caddy at the host, for example nftables
-`connlimit` on 443, set once TASK-064 chooses the host; there is no custom Caddy build. It caps what one address
-can hold; many addresses together can still reach the memory limit, which then restarts the proxy as now. Until
+`connlimit`, on TCP and UDP 443 (QUIC: HTTP/3 is on, TASK-257), set once TASK-064 chooses the host; there is no
+custom Caddy build. It caps the connections one address holds, not its uploads (HTTP/2 and HTTP/3 carry many
+on one connection); many addresses together can still reach the memory limit, which then restarts the proxy as now. Until
 it is set it is not built, and TASK-256 stays open for it).
 `deploy/smoke-test.sh --compare` checks all of this, and decision-035 makes passing it on the host a
 condition of any public instance enabling comparisons; it passed on Docker Desktop on 2026-10-16
