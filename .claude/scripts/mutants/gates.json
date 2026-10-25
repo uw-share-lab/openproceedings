@@ -164,8 +164,8 @@
  {
   "label": "absolute path not basenamed",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    name = base(rest[0]) if rest else \"\"",
-  "new": "    name = rest[0] if rest else \"\""
+  "old": "    name = base(word)\n",
+  "new": "    name = word\n"
  },
  {
   "label": "comments not stripped",
@@ -428,8 +428,8 @@
  {
   "label": "PR gate: git not basenamed",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "        prog = _base(w)",
-  "new": "        prog = w"
+  "old": "        prog = _fold(w)  # `GIT-push` too: macOS finds it case-blind\n",
+  "new": "        prog = w.lower()\n"
  },
  {
   "label": "record: on_base check removed",
@@ -7449,8 +7449,8 @@
  {
   "label": "TASK-269: sudoedit not a wrapper",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "base(a) in GETOPT_WRAPPERS or base(a) == \"sudoedit\"",
-  "new": "base(a) in GETOPT_WRAPPERS"
+  "old": "fold(a) in GETOPT_WRAPPERS or fold(a) == \"sudoedit\"",
+  "new": "fold(a) in GETOPT_WRAPPERS"
  },
  {
   "label": "TASK-269: sudoedit not an edit",
@@ -7591,15 +7591,45 @@
   "new": "if re.search(r\"\\b(gh|git)\\b\", text) and"
  },
  {
-  "label": "TASK-266 review: command names not case-folded in the walk",
-  "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "        if argv and argv[0] != argv[0].lower():\n",
-  "new": "        if False:\n"
+  "label": "cmdparse fold: command names not case-folded (TASK-269 review)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    return name if name.lower() in CASE_SENSITIVE_NAMES else name.lower()\n",
+  "new": "    return name\n"
  },
  {
-  "label": "TASK-266 review: GIT-<sub> not read as git <sub>",
-  "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "[\"git\", low[4:], *argv[1:]] if low.startswith(\"git-\") and len(low) > 4 else ",
+  "label": "cmdparse fold: builtins folded too (CD moves the directory; TASK-269 review)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    return name if name.lower() in CASE_SENSITIVE_NAMES else name.lower()\n",
+  "new": "    return name.lower()\n"
+ },
+ {
+  "label": "cmdparse fold: export folded (EXPORT sets a variable bash never sets; TASK-269 review)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"export\",\n",
   "new": ""
+ },
+ {
+  "label": "cmdparse fold: getopt wrappers matched as spelled (SUDO; TASK-269 review)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            fold(a) in GETOPT_WRAPPERS or fold(a) == \"sudoedit\"\n        ):  # env -i, nice -n 5, sudo -nu x, timeout -s KILL, flock -nw5 (TASK-253)\n            name = fold(a)",
+  "new": "            base(a) in GETOPT_WRAPPERS or base(a) == \"sudoedit\"\n        ):  # env -i, nice -n 5, sudo -nu x, timeout -s KILL, flock -nw5 (TASK-253)\n            name = base(a)"
+ },
+ {
+  "label": "cmdparse fold: other wrappers matched as spelled (XARGS, NOHUP; TASK-269 review)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif fold(a) in WRAPPERS:\n            name = fold(a)",
+  "new": "        elif base(a) in WRAPPERS:\n            name = base(a)"
+ },
+ {
+  "label": "cmdparse fold: the command's name matched as spelled (TASK-269 review)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    name = fold(rest[0]) if rest else \"\"\n",
+  "new": "    name = base(rest[0]) if rest else \"\"\n"
+ },
+ {
+  "label": "enforce-pr: a git word inside another command matched as spelled (TASK-269 review)",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        prog = _fold(w)  # `GIT-push` too: macOS finds it case-blind\n",
+  "new": "        prog = _base(w)\n"
  }
 ]

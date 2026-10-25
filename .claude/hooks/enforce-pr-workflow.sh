@@ -109,9 +109,9 @@ import json, os, re, shlex, subprocess, sys
 # openproceedings: the command is read by the shared cmdparse walk, as the other gates read it (review gate round
 # 3): separators with or without spaces, redirects apart from the words (`git checkout main 2>/dev/null`),
 # `cd`/`pushd`/`popd` (a target it can't resolve leaves the directory unknown), `$` words, exports and the
-# assignments before `bash -c`, `bash -c`/`eval`, git aliases, and command names by basename (`/usr/bin/git`).
+# assignments before `bash -c`, `bash -c`/`eval`, git aliases, and command names by basename (`/usr/bin/git`), case-folded but for builtins (`GIT`: cmdparse.fold).
 sys.path.insert(0, sys.argv[1])
-from cmdparse import (Argv, FailClosed, ParseError, base as _base, expand_git_alias, expand_word, git as _git,
+from cmdparse import (Argv, FailClosed, ParseError, base as _base, fold as _fold, expand_git_alias, expand_word, git as _git,
                       git_anchored, git_config, git_config_opaque, git_dir, git_subcommand, payload, push_config,
                       push_config_risk, walk, xargs_hides_args)
 
@@ -510,7 +510,7 @@ def git_calls(argv, directory):
     if argv[0] == "git":
         return [(argv, directory)]
     for k, w in enumerate(argv[1:], start=1):
-        prog = _base(w)
+        prog = _fold(w)  # `GIT-push` too: macOS finds it case-blind
         if prog == "git" or (prog.startswith("git-") and len(prog) > 4):
             inner = Argv(["git", *([prog[4:]] if prog != "git" else []), *argv[k + 1 :]], argv.via_xargs,
                          argv.assigns)

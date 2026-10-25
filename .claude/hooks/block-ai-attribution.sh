@@ -323,12 +323,7 @@ def main():
             unparsed_writer()
         sys.exit(0)
 
-    for argv, _, _ in walked:
-        # `GIT commit`, `Gh pr create`, `CAT f` run git, gh and cat on a case-blind filesystem (macOS): the command
-        # names are read case-folded, which only adds refusals (TASK-266 review)
-        if argv and argv[0] != argv[0].lower():
-            low = argv[0].lower()
-            argv[:] = ["git", low[4:], *argv[1:]] if low.startswith("git-") and len(low) > 4 else [low, *argv[1:]]
+    # command names come case-folded from the walk (`GIT commit`, `Gh pr create`: cmdparse.fold, TASK-269 review)
     commands = [(argv, d) for argv, d, _ in walked if argv]
     # (file word, argv, directory): files the command reads into a message, read whole once it is relevant (`file_text`)
     sent, writers = [], set()

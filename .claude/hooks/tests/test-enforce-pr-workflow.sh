@@ -375,6 +375,15 @@ check feature/x block 'caffeinate -i /usr/libexec/git-core/git-push origin HEAD:
 check feature/x block 'unknown-wrapper -i /usr/libexec/git-core/git-push origin HEAD:dev'   # basenamed, git-<sub> kept as its subcommand
 check main      block 'unknown-wrapper git-commit -m x'
 check feature/x allow 'unknown-wrapper git-push origin feat'          # positive control
+# command names case-folded (macOS finds GIT); builtins match only as spelled (TASK-269 review)
+check main      block 'GIT commit -m x'
+check main      block 'Sudo -u me GIT commit -m x'
+check feature/x block 'unknown-wrapper GIT-push origin HEAD:dev'
+check main      allow 'GIT status'
+check feature/x block 'GIT push origin HEAD:dev'
+check feature/x block 'ENV GIT push origin HEAD:dev'
+check feature/x block 'NICE -n 5 git push origin HEAD:dev'
+check feature/x allow 'ENV GIT push origin feat'
 
 echo "an unparseable command with a git write word is refused (TASK-067 final review gate):"
 check main      block 'git cherry-pick x "'
@@ -722,6 +731,7 @@ check_cwd main "$REPO" allow "env -C \"$WT\" git commit -m x"               # th
 check_cwd main "$REPO" allow "sudo -nD \"$WT\" git commit -m x"             # a group ending in -D: the next word
 check_cwd main "$REPO" allow "env --ch=\"$WT\" git commit -m x"             # a unique prefix of --chdir
 check_cwd main "$WT"   block 'env -C "$OP_UNSET_253" git commit -m x'      # a directory it can't resolve
+check_cwd main "$REPO" block "CD \"$WT\"; git commit -m x"                # CD is no cd: the commit runs here, on main
 check_cwd main "$WT"   allow 'env -C . git commit -m x'                    # resolved from the call's cwd, not the hook's
 check feature/x block 'env -C /tmp true >> .git/config; git p origin HEAD:main'  # the shell writes ./.git/config
 

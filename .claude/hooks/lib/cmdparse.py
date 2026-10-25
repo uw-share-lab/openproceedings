@@ -29,7 +29,8 @@ matter to a gate:
     `flock N` alone is a descriptor), its `-c`/`--command '…'` is a `sh -c`, and another option after the lock file
     a ParseError;
     the argv comes back as an `Argv` that records the `VAR=val` words and whether xargs runs it;
-  * command names compare by basename (`/usr/bin/git` is `git`);
+  * command names compare by basename (`/usr/bin/git` is `git`), case-folded (`GIT`, `RM`: macOS's filesystem finds
+    them) except bash's builtins and keywords, which match only as spelled (`fold`);
   * redirections leave argv as (operator, target) pairs (`walk` yields them);
   * `cd`, `pushd` and `popd` are tracked (targets through `expand_word`, `-P` physically; one it can't resolve,
     one that doesn't exist, a relative one under CDPATH, or `cd -` back to an unknown one marks the directory
@@ -1374,6 +1375,72 @@ def base(word: str) -> str:
     return os.path.basename(word) if "/" in word else word
 
 
+# Bash's builtins and keywords match only as spelled: `CD /tmp` is no `cd` (it runs an external `cd`, or nothing), so
+# folding them would move this parser's directory, or set variables, where bash doesn't (an allow; TASK-269 review).
+# `command` and `time` aren't here: macOS's /usr/bin/command and /usr/bin/time run what follows, as the builtins do.
+CASE_SENSITIVE_NAMES = {
+    ".",
+    ":",
+    "alias",
+    "bg",
+    "bind",
+    "break",
+    "builtin",
+    "caller",
+    "cd",
+    "compgen",
+    "complete",
+    "compopt",
+    "continue",
+    "declare",
+    "dirs",
+    "disown",
+    "enable",
+    "eval",
+    "exec",
+    "exit",
+    "export",
+    "fc",
+    "fg",
+    "getopts",
+    "hash",
+    "history",
+    "jobs",
+    "let",
+    "local",
+    "logout",
+    "mapfile",
+    "popd",
+    "pushd",
+    "read",
+    "readarray",
+    "readonly",
+    "return",
+    "set",
+    "shift",
+    "shopt",
+    "source",
+    "suspend",
+    "times",
+    "trap",
+    "type",
+    "typeset",
+    "ulimit",
+    "umask",
+    "unalias",
+    "unset",
+    "wait",
+}
+
+
+def fold(word: str) -> str:
+    """A command's name as the system runs it: its basename, case-folded, since macOS's filesystem finds `GIT`, `RM`
+    or `/usr/bin/Env` as git, rm and env; a builtin's or keyword's spelling (CASE_SENSITIVE_NAMES) is kept, since
+    bash matches those exactly (TASK-269 review). Folding only makes an unknown program a known one."""
+    name = base(word)
+    return name if name.lower() in CASE_SENSITIVE_NAMES else name.lower()
+
+
 def strip_prefixes(argv: list[str], state: dict | None = None) -> Argv:
     """Drop leading reserved words, `VAR=val` and wrappers (with their option values). `env -S 'cmd'`
     splits its string into the command; `env -C dir` / `sudo -D dir` set `Argv.chdir`, the command's own directory.
@@ -1463,9 +1530,9 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                 out.assigns[name] = value
             i += 1
         elif (
-            base(a) in GETOPT_WRAPPERS or base(a) == "sudoedit"
+            fold(a) in GETOPT_WRAPPERS or fold(a) == "sudoedit"
         ):  # env -i, nice -n 5, sudo -nu x, timeout -s KILL, flock -nw5 (TASK-253)
-            name = base(a)
+            name = fold(a)
             # sudoedit is `sudo -e`, with sudo's options (TASK-269)
             edit = name == "sudoedit"
             name = "sudo" if edit else name
@@ -1510,8 +1577,8 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                     if argv[i] not in ("-c", "--command") or i + 1 >= len(argv):
                         raise ParseError(f"flock: {argv[i]} after the lock file")
                     argv = [*argv[:i], "sh", "-c", *argv[i + 1 :]]
-        elif base(a) in WRAPPERS:
-            name = base(a)
+        elif fold(a) in WRAPPERS:
+            name = fold(a)
             out.via_xargs = out.via_xargs or name == "xargs"
             i += 1
             while i < len(argv) and argv[i].startswith("-"):  # xargs -n 1, stdbuf -o L, watch -n 2
@@ -1529,7 +1596,7 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
             break
     rest = argv[i:]
     out.head_word = rest[0] if rest else ""
-    name = base(rest[0]) if rest else ""
+    name = fold(rest[0]) if rest else ""
     if name.startswith("git-") and len(name) > 4:  # `$(git --exec-path)/git-push` is `git push` (TASK-067)
         out[:] = ["git", name[4:], *rest[1:]]
     else:
