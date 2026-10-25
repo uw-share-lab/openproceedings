@@ -195,7 +195,7 @@ def record_of(stored: bytes) -> dict[str, Any]:
 
 PROGRESS_EVERY = 10_000  # documents between index_build_progress lines
 # a corpus of fewer records (the snapshot manifest's `record_count`, read before the first chunk) is normalized in
-# this process. Starting 8 spawn workers costs ~2 s CPU and ~0.3 s wall, repaid from ~1,500 records of 120-250-word
+# this process. Starting 8 spawn workers costs ~1.7 s CPU and ~0.3 s wall, repaid from ~1,500 records of 120-250-word
 # abstracts but only ~10,000 of the 5k fixture's 8-60 words: below this, a pool saves under 2 s at most and costs
 # its CPU every time (TASK-284, docs/results/2026-10-24-parallel-normalize-crossover.md). Chunks no longer decide it
 PARALLEL_FROM = 10_000
@@ -335,27 +335,39 @@ def _title_ranks(snapshot: Path) -> dict[str, int]:
     return {rid: rank for rank, (_, rid) in enumerate(sorted(keys))}
 
 
-def _record_count(snapshot: Path) -> int:
-    """The manifest's `record_count`, or 0 when it can't be read (`iter_records` then refuses the snapshot). It only
-    picks one process or several, which normalize alike, so a wrong count costs time, never a different index."""
+def pooled(snapshot: Path, workers: int) -> bool:
+    """Whether `normalized` spreads the snapshot over `workers` processes: more than one, and the manifest's
+    `record_count` at least PARALLEL_FROM. A manifest that can't be read is refused by `iter_records` anyway; a
+    readable one whose `record_count` is missing or not a whole number counts as 0 (logged, once): the snapshot
+    builds serially. Either way it normalizes alike, so a wrong count costs time, never a different index."""
+    if workers <= 1:
+        return False
     try:
-        count = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))["record_count"]
-    except (OSError, ValueError, KeyError, TypeError):
-        return 0
-    return count if isinstance(count, int) else 0
+        manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    count = manifest.get("record_count") if isinstance(manifest, dict) else None
+    if not isinstance(count, int) or isinstance(count, bool):
+        log.warning(
+            "snapshot_record_count_unreadable",
+            extra={"snapshot": snapshot.name, "error": type(count).__name__},
+        )
+        return False
+    return count >= PARALLEL_FROM
 
 
 def normalized(
-    snapshot: Path, workers: int, tokenizer: str = TOKENIZER_VERSION
+    snapshot: Path, workers: int, tokenizer: str = TOKENIZER_VERSION, parallel: bool | None = None
 ) -> Generator[tuple[PaperRecord, dict[str, list[str]]]]:
     """The snapshot's records (in id order, verified), each with its `normalize()`d title and abstract (a
     missing abstract is ""; by tokenizer version `tokenizer`), a chunk at a time, across `workers` processes
-    when the corpus holds at least PARALLEL_FROM records (enough to repay starting them). Shared by the build
-    and the parity check, so both normalize alike. Both close it (`contextlib.closing`), so a loop that stops early shuts the pool down at
-    once, never only when the generator is collected (TASK-284)."""
+    when `parallel` (by default `pooled`: enough records to repay starting them). Shared by the build and the
+    parity check, so both normalize alike; each logs `parallel` and `workers`. Both close it
+    (`contextlib.closing`), so a loop that stops early shuts the pool down at once, never only when the
+    generator is collected (TASK-284)."""
     pool = None
     each = partial(_normalize_pair, tokenizer=tokenizer)
-    parallel = workers > 1 and _record_count(snapshot) >= PARALLEL_FROM
+    parallel = pooled(snapshot, workers) if parallel is None else parallel
     try:
         for chunk in _chunks(iter_records(snapshot)):
             pairs = [(r.title, r.abstract or "") for r in chunk]
@@ -383,13 +395,14 @@ def _add_all(
     form: SchemaForm,
     commit_every: int | None = None,
     tokenizer: str = TOKENIZER_VERSION,
+    parallel: bool | None = None,
 ) -> int:
     """Stream the snapshot's records through normalize() into the writer, as documents of schema `form`."""
     ranks = _title_ranks(snapshot)
     added = 0
     started = time.perf_counter()
     # closed when the loop stops, a refusal included: its worker pool shuts down then, not when collected
-    with closing(normalized(snapshot, workers, tokenizer)) as rows:
+    with closing(normalized(snapshot, workers, tokenizer, parallel)) as rows:
         for r, fields in rows:
             if not form.abstract_kind and r.abstract_kind == "openalex":
                 # a schema-3 index could neither filter nor label it, and its display derives the kind from the
@@ -466,7 +479,13 @@ def build_index(
             _seal(target)  # a crash between placing and sealing left it writable
             log.info("index_exists", extra={"index_version": version_id})
             return IndexBuildResult(target, version_id, created=False)
-        log.info("index_build_started", extra={"index_version": version_id, "snapshot_hash": snapshot_hash})
+        workers = workers if workers is not None else _cpus()
+        parallel = pooled(snapshot, workers)
+        log.info(
+            "index_build_started",
+            extra={"index_version": version_id, "snapshot_hash": snapshot_hash, "workers": workers,
+                   "parallel": parallel},
+        )  # fmt: skip
         tmp = Path(tempfile.mkdtemp(dir=indexes, prefix=storage.TMP))
         index: tantivy.Index | None = None
         writer: Any = None
@@ -481,11 +500,12 @@ def build_index(
                     snapshot,
                     writer,
                     exact,
-                    workers if workers is not None else _cpus(),
+                    workers,
                     ids,
                     SERVED_SCHEMAS[schema_version],
                     commit_every,
                     tokenizer,
+                    parallel,
                 )
             writer.commit()
             writer.wait_merging_threads()

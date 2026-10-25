@@ -3,7 +3,9 @@ index-versioning skills). Built from synthetic records only (decision-004)."""
 
 from __future__ import annotations
 
+import ast
 import json
+import logging
 import stat
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,8 +28,9 @@ from openproceedings.engine.index import (
 from openproceedings.ingest.dedup import DedupResult
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import SnapshotError, render
-from openproceedings.query.normalize import TOKENIZER_VERSION
+from openproceedings.query.normalize import SERVED_TOKENIZERS, TOKENIZER_VERSION
 
+from tests.golden.test_tantivy_200 import as_paper
 from tests.unit.ingest.test_dedup import H, paper
 
 BUILT = datetime(2026, 9, 26, 12, 0, tzinfo=UTC)
@@ -416,19 +419,35 @@ def recorded(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return Recorded.events
 
 
-def test_the_test_session_builds_and_checks_a_corpus_at_the_product_threshold_in_one_process(
+def test_the_conftest_override_keeps_default_builds_and_checks_in_one_process(
     tmp_path: Path, recorded: list[str]
 ) -> None:
-    """TASK-284: a build or parity check at its default workers starts no pool in the test session (conftest),
-    even at the product's PARALLEL_FROM (10,000 records). At 2,000, each of about 60 builds of the 5k fixture
-    started a spawn pool of `os.cpu_count()` workers inside every xdist worker, costing 4 times a serial build's
-    CPU."""
+    """TASK-284: in the test session (conftest's `_serial_index_builds`), a build or parity check at its default
+    workers starts no pool, even for a corpus at the product's PARALLEL_FROM (10,000 records). This checks the
+    override, not the product's boundary (the 40/41 rows below do that at a patched threshold). At the old 2,000,
+    each of about 60 builds of the 5k fixture started a spawn pool of `os.cpu_count()` workers inside every xdist
+    worker: at 5,000 fixture records, 0.45 s wall against 0.33 s serial and 2.17 s CPU against 0.33 s
+    (docs/results/2026-10-24-parallel-normalize-crossover.md)."""
     from openproceedings.engine.parity import check_parity
 
     snap = snapshot_of(many(10_000), tmp_path / "snap")
     built = build_index(snap, tmp_path / "indexes", BUILT)
     assert check_parity(built.path, snap).records == 10_000
     assert recorded == []
+
+
+def test_the_products_threshold_is_the_measured_one() -> None:
+    """`PARALLEL_FROM` as the module source sets it (conftest overrides the attribute): the crossover note's
+    10,000. Changing it needs a new measurement in that note."""
+    tree = ast.parse(Path(idx.__file__).read_text(encoding="utf-8"))
+    (value,) = (
+        node.value.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and [getattr(t, "id", None) for t in node.targets] == ["PARALLEL_FROM"]
+        and isinstance(node.value, ast.Constant)
+    )
+    assert value == 10_000
 
 
 @pytest.mark.parametrize(("records", "pools"), [(40, []), (41, ["start 2", "shutdown"])])
@@ -445,6 +464,44 @@ def test_the_record_count_not_the_first_chunk_decides_on_a_pool(
     assert recorded == pools
 
 
+@pytest.mark.parametrize("tokenizer", sorted(SERVED_TOKENIZERS))
+def test_a_pool_normalizes_by_the_builds_tokenizer_as_the_serial_path_does(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recorded: list[str], tokenizer: str
+) -> None:
+    """Guarantee 4 on the pool path, at every served tokenizer: text the tokenizers read differently (an NFD
+    accent after a backslash, a full-width dollar: FORMS_CORPUS) gives the pool build the serial build's documents
+    and index_version. The test session builds serially (conftest), so this row is what keeps a pinned older
+    tokenizer's pool build covered (TASK-284 review)."""
+    from tests.contract.test_records import FORMS_CORPUS
+
+    snap = snapshot_of(
+        sorted([*many(40), *(as_paper(r) for r in FORMS_CORPUS)], key=lambda p: p.id), tmp_path / "snap"
+    )
+    serial = build_index(snap, tmp_path / "one", BUILT, workers=1, tokenizer_version=tokenizer)
+    monkeypatch.setattr(idx, "PARALLEL_FROM", 1)
+    monkeypatch.setattr(idx, "CHUNK", 16)
+    pool = build_index(snap, tmp_path / "two", BUILT, workers=2, tokenizer_version=tokenizer)
+    assert recorded == ["start 2", "shutdown"]
+    assert pool.index_version == serial.index_version
+    assert stored(pool.path) == stored(serial.path)
+
+
+def test_a_pool_builds_the_5k_fixture_as_the_serial_path_does(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recorded: list[str]
+) -> None:
+    """The synthetic 5k corpus (its LaTeX and Unicode), once through a pool and once serially: the same
+    documents (guarantee 4), the coverage its pool builds gave before tests built serially (TASK-284)."""
+    from tests.fixtures.corpus.synthetic_5k import records
+
+    snap = snapshot_of(sorted((as_paper(r) for r in records()), key=lambda p: p.id), tmp_path / "snap")
+    serial = build_index(snap, tmp_path / "one", BUILT, workers=1)
+    monkeypatch.setattr(idx, "PARALLEL_FROM", 1)
+    pool = build_index(snap, tmp_path / "two", BUILT, workers=2)
+    assert recorded == ["start 2", "shutdown"]
+    assert pool.index_version == serial.index_version
+    assert stored(pool.path) == stored(serial.path) and len(stored(pool.path)) == 5_000
+
+
 def test_a_build_that_fails_part_way_has_shut_its_pool_when_the_error_arrives(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recorded: list[str]
 ) -> None:
@@ -457,6 +514,83 @@ def test_a_build_that_fails_part_way_has_shut_its_pool_when_the_error_arrives(
     with pytest.raises(IndexBuildError, match="over 65530 bytes") as failed:
         build_index(snap, tmp_path / "indexes", BUILT, workers=2)
     assert failed.traceback and recorded == ["start 2", "shutdown"]
+
+
+def test_a_parity_check_that_fails_part_way_has_shut_its_pool_when_the_error_arrives(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recorded: list[str]
+) -> None:
+    """`check_parity`'s twin of the row above: the index loses its 41st document (in the third chunk of 16), so
+    ParityError is raised after two chunks were yielded, and the pool is already shut down when it arrives."""
+    from openproceedings.engine import parity
+
+    snap = snapshot_of(many(48), tmp_path / "snap")
+    built = build_index(snap, tmp_path / "indexes", BUILT, workers=1)
+    real = parity._stored
+
+    def losing_one(*a: Any, **kw: Any) -> Any:
+        for n, item in enumerate(real(*a, **kw)):
+            if n != 40:
+                yield item
+
+    monkeypatch.setattr(parity, "_stored", losing_one)
+    monkeypatch.setattr(idx, "PARALLEL_FROM", 1)
+    monkeypatch.setattr(idx, "CHUNK", 16)
+    with pytest.raises(parity.ParityError, match="Id000040: in the snapshot, not in the index") as failed:
+        parity.check_parity(built.path, snap, workers=2)
+    assert failed.traceback and recorded == ["start 2", "shutdown"]
+
+
+def logged(caplog: pytest.LogCaptureFixture, event: str) -> list[logging.LogRecord]:
+    return [r for r in caplog.records if r.getMessage() == event]
+
+
+@pytest.mark.parametrize(("records", "parallel"), [(40, False), (41, True)])
+def test_the_build_and_the_parity_check_log_their_workers_and_whether_they_pooled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    records: int,
+    parallel: bool,
+) -> None:
+    from openproceedings.engine.parity import check_parity
+
+    monkeypatch.setattr(idx, "PARALLEL_FROM", 41)
+    snap = snapshot_of(many(records), tmp_path / "snap")
+    with caplog.at_level(logging.INFO, logger="openproceedings"):
+        built = build_index(snap, tmp_path / "indexes", BUILT, workers=2)
+        check_parity(built.path, snap, workers=2)
+    for event in ("index_build_started", "index_parity_ok"):
+        (line,) = logged(caplog, event)
+        assert (line.workers, line.parallel) == (2, parallel), event  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("count", ['"80000"', None, "true", "80000.0"])
+def test_an_unreadable_record_count_builds_serially_the_same_index_and_says_so(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    recorded: list[str],
+    count: str | None,
+) -> None:
+    """A readable manifest whose `record_count` is missing or not a whole number: `iter_records` doesn't check it,
+    so the build goes on serially, gives the serial index, and logs one WARNING naming the snapshot directory and
+    the value's type (never the value)."""
+    snap = snapshot_of(many(41), tmp_path / "snap")
+    serial = stored(build_index(snap, tmp_path / "one", BUILT, workers=1).path)
+    manifest = json.loads((snap / "manifest.json").read_text())
+    if count is None:
+        del manifest["record_count"]
+    else:
+        manifest["record_count"] = json.loads(count)
+    (snap / "manifest.json").chmod(0o644)
+    (snap / "manifest.json").write_text(json.dumps(manifest))
+    monkeypatch.setattr(idx, "PARALLEL_FROM", 1)
+    with caplog.at_level(logging.INFO, logger="openproceedings"):
+        assert stored(build_index(snap, tmp_path / "two", BUILT, workers=2).path) == serial
+    assert recorded == []
+    (warning,) = logged(caplog, "snapshot_record_count_unreadable")
+    assert warning.levelno == logging.WARNING and warning.snapshot == "snap"  # type: ignore[attr-defined]
+    assert warning.error == type(manifest.get("record_count")).__name__  # type: ignore[attr-defined]
 
 
 def test_ranking_numbers_are_canonical() -> None:

@@ -214,7 +214,10 @@ whose message quotes corpus tokens), WARNING for any other refusal (a snapshot, 
 exception nothing anticipated is one `cli_failed` ERROR line with the traceback; a traceback's last line is
 the exception's message, which can quote input, so the API (task-034) logs frames and type, not the
 message. Long jobs say they're alive: `index_build_started`, `index_build_progress` every 10k documents,
-`index_built`; `index_parity_ok` when a parity check passes. A failed build whose `.tmp-*` staging directory
+`index_built`; `index_parity_ok` when a parity check passes. `index_build_started` and `index_parity_ok` carry
+`workers` and `parallel` (whether normalizing used a process pool), and a snapshot whose readable manifest has no
+whole-number `record_count` logs one `snapshot_record_count_unreadable` WARNING (`snapshot`, the directory's
+name; `error`, the value's type), since it then normalizes on one process (TASK-284). A failed build whose `.tmp-*` staging directory
 survives its removal logs `index_build_tmp_left` (WARNING, the directory's name only). `op index retire`
 logs one line with `index_version`, `pinned` and the outcome: `index_retired` (INFO; WARNING with
 `tmp_left: true` when its `.tmp-` directory survived), `index_retire_checked` (`--dry-run`) or

@@ -32,7 +32,8 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
 - **Index builds in tests run in one process.** `conftest.py` sets `engine.index.PARALLEL_FROM` past any
   corpus, so a build or parity check never starts the spawn pool the product starts from 10,000 records.
   When that was 2,000, about 60 builds of the 5k fixture a run each started `os.cpu_count()` interpreters inside
-  every xdist worker: twice a serial build's wall time, 4 times its CPU (TASK-284). A test of the parallel path
+  every xdist worker: at 5,000 fixture records a pool takes 0.45 s against 0.33 s serial, and 2.17 s of CPU
+  against 0.33 s (`docs/results/2026-10-24-parallel-normalize-crossover.md`, TASK-284). A test of the parallel path
   sets `PARALLEL_FROM` itself (`test_index.py`'s parallel rows compare it with the serial one: guarantee 4);
   `test_index.py` fails if a default build of 10,000 records starts a pool.
 - **A test still running after 20 minutes dumps every thread's stack** (`faulthandler_timeout = 1200` in

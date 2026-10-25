@@ -40,6 +40,7 @@ from openproceedings.engine.index import (
     analyzer,
     normalized,
     open_index,
+    pooled,
     verify_index,
 )
 from openproceedings.logs import elapsed_ms
@@ -91,7 +92,8 @@ def check_parity(
     # a tampered snapshot may stop this loop with ParityError before iter_records reaches its own hash check
     # by the tokenizer the index was built with (an older served one, for an index a record pins)
     workers = workers if workers is not None else _cpus()
-    rows = normalized(snapshot, workers, manifest["tokenizer_version"])
+    parallel = pooled(snapshot, workers)
+    rows = normalized(snapshot, workers, manifest["tokenizer_version"], parallel)
     with closing(rows):  # a refusal shuts its worker pool down at once, never only when collected
         for record, fields in rows:
             n += 1
@@ -129,7 +131,7 @@ def check_parity(
     log.info(
         "index_parity_ok",
         extra={"index_version": manifest["index_version"], "records": n, "terms": report.terms,
-               "phrases": phrases, "ms": elapsed_ms(started)},
+               "phrases": phrases, "workers": workers, "parallel": parallel, "ms": elapsed_ms(started)},
     )  # fmt: skip
     return report
 
