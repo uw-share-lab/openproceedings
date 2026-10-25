@@ -1159,7 +1159,10 @@ and the file is read too when it exists (the write may append, not run, or run a
 (`--body-file <(…)`, which the walk drops) is refused, and so is a command it can't parse that names gh or git and a
 message-file option or a reader (`cat`, `$(< f)`), rather than let that file through unread; and so is any command it
 can't parse that may be a writer (git and a message verb, gh `pr`/`issue`/`release` and a write verb, any `gh api`),
-whose options (a file option held in a variable) can't be read (TASK-266). When a gh writer reads
+whose options (a file option held in a variable) can't be read (TASK-266). Both checks read the text as written, with
+its quotes and the `$` of `$'…'`/`$"…"` gone (`g$''it`), and as tokenize's words when it tokenizes (`$'\x67'it`), and
+match the names case-blind; the parsed walk case-folds command names too (`GIT commit` runs git on macOS's
+case-blind filesystem). When a gh writer reads
 its text from a pipe (`--body-file -`, `--input -`, `-F body=@-`, with no `<`, `<<` or `<<<` of its own), any other
 program in the call but gh run on a file is refused too (`jq -Rs '{body: .}' msg.md | gh api … --input -`, `git diff
 --no-index /dev/null msg.md | gh …`). Known limitations, left to CI's attribution check: inline interpreter code that

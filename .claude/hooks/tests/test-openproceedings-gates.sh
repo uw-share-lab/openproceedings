@@ -2442,6 +2442,23 @@ check $A allow "unparseable api word without gh"                 "$(payload_bash
 check $A allow "unparseable cat, no gh or git"                   "$(payload_bash "cat notes 'x")"
 check $A allow "unparseable gh label create (no writer group)"   "$(payload_bash "gh label create bug --description 'x")"
 check $A allow "unparseable git log --grep tagged (a whole word)" "$(payload_bash "git log --grep tagged 'x")"
+# ANSI-C quoting hides the name from a quotes-stripped reading; tokenize's words decode it (review round 1)
+check $A block "env --op-bogus; g\$'i't commit -m \$X"            "$(payload_bash "env --op-bogus-266 true; g\$'i't commit -m \"\$OP_X_266\"")"
+check $A block "env --op-bogus; g\$'i't commit -F file"           "$(payload_bash "env --op-bogus-266 true; g\$'i't commit -F '$TMP/clean.md'")"
+check $A block "env --op-bogus; g\$''h pr create"                 "$(payload_bash "env --op-bogus-266 true; g\$''h pr create --title t")"
+check $A block "env --op-bogus; \$'\\x67'it commit -m x"          "$(payload_bash "env --op-bogus-266 true; \$'\\x67'it commit -m x")"
+check $A block "unclosed: g\$''it commit -m (no tokenize)"        "$(payload_bash "g\$''it commit -m 'x")"
+# `GIT` runs git on a case-blind filesystem (macOS)
+check $A block "unparseable GIT commit -m"                        "$(payload_bash "GIT commit -m 'x")"
+check $A block "unparseable Gh pr create"                         "$(payload_bash "Gh pr create --title 'x")"
+check $A block "unparseable GIT log -F file (no writer, case-blind)" "$(payload_bash "GIT log -F '$TMP/clean.md' 'x")"
+check $A block "GIT commit -F file with a trailer"                "$(payload_bash "GIT commit -F '$TMP/msg.txt'")"
+check $A block "Gh pr comment --body-file with a trailer"         "$(payload_bash "Gh pr comment 1 --body-file '$TMP/msg.txt'")"
+check $A block "GIT-commit -F file with a trailer"                "$(payload_bash "GIT-commit -F '$TMP/msg.txt'")"
+check $A allow "GIT commit -F clean notes"                        "$(payload_bash "GIT commit -F '$TMP/notes.md'")"
+# a ParseError that tokenizes, no writer: only tokenize's words decode the trailer (the git-commit rows above now
+# block as writers first)
+check $A block "env --op-bogus; echo \$'…\\x43laude…' (no writer)" "$(payload_bash "env --op-bogus-266 true; echo \$'Co-Authored-By: \\x43laude <x@y>'")"
 # the older unparseable-text checks still refuse a command that is no writer, so each keeps a row the writer check
 # can't block first
 check $A block "unparseable echo, a 'Cl''aude' trailer (no writer)" "$(payload_bash "echo 'Co-Authored-By: Cl''aude Opus' \"unclosed")"

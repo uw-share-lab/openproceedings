@@ -20,7 +20,8 @@
 # exists (the write may append, not run, or run alongside); anything else (`cp`, `jq … > f`, `… | tee f`, a group's
 # `{ …; } > f`) or a write target it can't resolve is refused. So is a writer file option with no value after it (`--body-file <(…)`),
 # and a command it can't parse that names gh or git and a message-file option or a reader (the file can't be read), or
-# that may be a writer at all: git and a message verb, gh pr/issue/release and a write verb, or gh api (TASK-266). When a
+# that may be a writer at all: git and a message verb, gh pr/issue/release and a write verb, or gh api (TASK-266),
+# read as written, without quotes or `$'`, and as tokenize's words, names case-blind (`GIT` runs git on macOS). When a
 # gh writer reads its text from a pipe (`--body-file -`, `--input -`, `-F body=@-`, with no `<`, `<<` or `<<<` of its
 # own), any other program in the call but gh run on a file is refused, as in a `$(…)`. gh's -R/--repo is skipped
 # between group and verb too (`gh pr --repo o/r comment`). Known limitations (TASK-243; CI's attribution check on
@@ -251,8 +252,8 @@ def unreadable(word):
     sys.exit(2)
 
 def named(names, text):
-    """Is one of `names` a word of `text`?"""
-    return re.search(r"\b(" + "|".join(map(re.escape, sorted(names))) + r")\b", text) is not None
+    """Is one of `names` a word of `text`, in any case (`GIT` runs git on a case-blind filesystem)?"""
+    return re.search(r"\b(" + "|".join(map(re.escape, sorted(names))) + r")\b", text, re.IGNORECASE) is not None
 
 def may_write(text):
     """Text the walk couldn't parse, so couldn't split into commands: does it name, anywhere, a writer main() checks?
@@ -305,14 +306,29 @@ def main():
         # the file scan (TASK-243) can't run on a command it can't parse: one that may send a message file is
         # refused before this early exit, rather than let that file through unread
         raw = join_continuations(cmd)
-        if re.search(r"\b(gh|git)\b", raw) and re.search(r"--body-file|--notes-file|--input|--file|--field|=@|(^|\s)-[A-Za-z]*F|\b(cat|head|tail|sed)\b|\$\(\s*<", raw):
-            unreadable("a message file in a command this gate can't parse")
+        # read three ways: as written, with its quotes, backslashes and the `$` of `$'…'`/`$"…"` gone (`g''it`,
+        # `g$''it`), and as the words tokenize makes when it can (`$'\x67'it` is `git`) (TASK-266 review)
+        readings = [raw, re.sub(r"\$?[\"'\\]", "", raw)]
+        try:
+            readings.append(" ".join(tokenize(cmd)))
+        except ParseError:
+            pass
+        for text in readings:
+            # `GIT` runs git on a case-blind filesystem (macOS): the names are read case-blind (TASK-266 review)
+            if re.search(r"\b(gh|git)\b", text, re.IGNORECASE) and re.search(r"--body-file|--notes-file|--input|--file|--field|=@|(^|\s)-[A-Za-z]*F|\b(cat|head|tail|sed)\b|\$\(\s*<", text):
+                unreadable("a message file in a command this gate can't parse")
         # nor can a writer's options be read (a file option held in a variable, say): one that may be a gh or git
         # writer is refused, with or without a file option the text shows (TASK-266)
-        if may_write(re.sub(r"[\"'\\]", "", raw)):
+        if any(may_write(text) for text in readings[1:]):
             unparsed_writer()
         sys.exit(0)
 
+    for argv, _, _ in walked:
+        # `GIT commit`, `Gh pr create`, `CAT f` run git, gh and cat on a case-blind filesystem (macOS): the command
+        # names are read case-folded, which only adds refusals (TASK-266 review)
+        if argv and argv[0] != argv[0].lower():
+            low = argv[0].lower()
+            argv[:] = ["git", low[4:], *argv[1:]] if low.startswith("git-") and len(low) > 4 else [low, *argv[1:]]
     commands = [(argv, d) for argv, d, _ in walked if argv]
     # (file word, argv, directory): files the command reads into a message, read whole once it is relevant (`file_text`)
     sent, writers = [], set()

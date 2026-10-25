@@ -6716,8 +6716,8 @@
  {
   "label": "TASK-243: an unparseable call with no file option refused",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "if re.search(r\"\\b(gh|git)\\b\", raw) and re.search(",
-  "new": "if re.search(r\"\\b(gh|git)\\b\", raw) or re.search("
+  "old": "if re.search(r\"\\b(gh|git)\\b\", text, re.IGNORECASE) and re.search(",
+  "new": "if re.search(r\"\\b(gh|git)\\b\", text, re.IGNORECASE) or re.search("
  },
  {
   "label": "TASK-243: an inline-written file's current text not read",
@@ -7377,8 +7377,8 @@
  {
   "label": "TASK-266: the unparseable-writer check keeps the quotes (g''it)",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "        if may_write(re.sub(r\"[\\\"'\\\\]\", \"\", raw)):",
-  "new": "        if may_write(raw):"
+  "old": "        readings = [raw, re.sub(r\"\\$?[\\\"'\\\\]\", \"\", raw)]\n",
+  "new": "        readings = [raw, raw]\n"
  },
  {
   "label": "TASK-266: git's message verbs not read",
@@ -7443,8 +7443,8 @@
  {
   "label": "TASK-266: names matched inside words",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "    return re.search(r\"\\b(\" + \"|\".join(map(re.escape, sorted(names))) + r\")\\b\", text) is not None",
-  "new": "    return re.search(r\"(\" + \"|\".join(map(re.escape, sorted(names))) + r\")\", text) is not None"
+  "old": "    return re.search(r\"\\b(\" + \"|\".join(map(re.escape, sorted(names))) + r\")\\b\", text, re.IGNORECASE) is not None",
+  "new": "    return re.search(r\"(\" + \"|\".join(map(re.escape, sorted(names))) + r\")\", text, re.IGNORECASE) is not None"
  },
  {
   "label": "TASK-269: sudoedit not a wrapper",
@@ -7559,5 +7559,47 @@
   "file": ".claude/scripts/check_old_bash.py",
   "old": "        print(f\"check_old_bash: skipped ({args.bash} not found)\")\n        return 0\n",
   "new": "        print(f\"check_old_bash: skipped ({args.bash} not found)\")\n        return 1\n"
+ },
+ {
+  "label": "TASK-266 review: `$'`/`$\"` left in the stripped reading (g$''it)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        readings = [raw, re.sub(r\"\\$?[\\\"'\\\\]\", \"\", raw)]\n",
+  "new": "        readings = [raw, re.sub(r\"[\\\"'\\\\]\", \"\", raw)]\n"
+ },
+ {
+  "label": "TASK-266 review: tokenize's words not read for a writer",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            readings.append(\" \".join(tokenize(cmd)))\n",
+  "new": "            pass\n"
+ },
+ {
+  "label": "TASK-266 review: the writer check reads only the raw text",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if any(may_write(text) for text in readings[1:]):",
+  "new": "        if any(may_write(text) for text in readings[:1]):"
+ },
+ {
+  "label": "TASK-266 review: unparseable writer names read case-sensitively",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "+ r\")\\b\", text, re.IGNORECASE) is not None",
+  "new": "+ r\")\\b\", text) is not None"
+ },
+ {
+  "label": "TASK-266 review: unparseable gh/git read case-sensitively by the file-option check",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "if re.search(r\"\\b(gh|git)\\b\", text, re.IGNORECASE) and",
+  "new": "if re.search(r\"\\b(gh|git)\\b\", text) and"
+ },
+ {
+  "label": "TASK-266 review: command names not case-folded in the walk",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if argv and argv[0] != argv[0].lower():\n",
+  "new": "        if False:\n"
+ },
+ {
+  "label": "TASK-266 review: GIT-<sub> not read as git <sub>",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "[\"git\", low[4:], *argv[1:]] if low.startswith(\"git-\") and len(low) > 4 else ",
+  "new": ""
  }
 ]
