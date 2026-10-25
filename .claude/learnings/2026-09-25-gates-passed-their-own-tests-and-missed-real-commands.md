@@ -195,3 +195,28 @@ on `dev`. The README now explicitly clones `dev` and distinguishes that moving p
 a future fixed release tag. Verify the documented clone against the remote instead of assuming that a
 local clean checkout proves a new reader receives the same version. This is a documentation-only
 follow-up; it does not promote `dev` to `main` or perform a release.
+
+## Addendum — 2026-10-24 (TASK-266, TASK-269, TASK-267: an unparseable writer, sudoedit, bash 3.2 heredocs)
+- **A gate that can't parse a command can't read its options, so no option regex can be complete: refuse a
+  possible writer instead.** On `ParseError`, `block-ai-attribution.sh` scanned the raw text and refused only a
+  gh/git command whose text matched its file-option regex, then allowed. A file option held in a variable
+  (`gh pr comment 1 $OPT file --title 'unclosed`) was let through unread. It now refuses any unparseable command
+  that may be a writer (git and a message verb, gh `pr`/`issue`/`release` and a write verb, any `gh api`), and the
+  old allow row `an unparseable call sending no file` became a block row (evidence: the TASK-266 rows in
+  `.claude/hooks/tests/test-openproceedings-gates.sh`; commit 54e98459). Cost: a writer with an unclosed quote is
+  refused even when it sends nothing, which an author fixes by closing the quote. This is the 2026-09-25
+  "fail closed on a parse error" rule applied to a gate that had kept a text-scan fallback.
+- **A wrapper that edits files is a writer even though it runs no command.** cmdparse read `sudo -e <file>`,
+  `sudo --edit` and `sudoedit` as running nothing, so protect-data-dir and enforce-backlog-cli never saw the edit.
+  They now parse with sudo's getopt and yield each file as a `>>` redirect of its own, as flock's lock file already
+  was (`cmdparse.py` `_strip_prefixes`; rows under `data/indexes` and `backlog/`). Lesson: when listing a wrapper's
+  options, ask for each one whether it turns the wrapper itself into a writer.
+- **Stock macOS bash 3.2 also misparses a quoted heredoc with `(` inside `$(…)`.** Besides the case-pattern `)`
+  (2026-10-02 addendum), `/bin/bash -n` on the table failed at line 413 (`syntax error near unexpected token '('`,
+  in a Python list comprehension of a `$(python3 - <<'PY' …)`); re-checked on `dev`'s copy for this entry, and
+  the branch's copy parses. The fix reads the program into a variable first
+  (`IFS= read -r -d '' PROG <<'PY' || true`) and runs `$(python3 -c "$PROG" …)`. Check every shell script with
+  `/bin/bash -n` on a Mac; CI and `make tooling` run a newer bash that parses the broken form (task-267's description).
+- Propagated to: `.claude/skills/no-ai-attribution/SKILL.md` (the unparseable-writer refusal),
+  `.claude/skills/testing-standards/SKILL.md` (the heredoc-in-`$(…)` rule and `/bin/bash -n`), `CLAUDE.md`
+  §Enforced gates and spec 08 (both hooks' rows), and mutants in `.claude/scripts/mutants/gates.json`.
