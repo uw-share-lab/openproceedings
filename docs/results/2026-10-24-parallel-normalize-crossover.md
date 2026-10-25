@@ -75,7 +75,7 @@ At the threshold row (10,000) the pool's wall time is 40% higher loaded than in 
 crossover is only as good as pass 1's load allows.
 
 Pass 3's wall times (load 186-224) are dominated by waiting for a CPU. They are kept only for their CPU columns:
-- 8-60 words: serial 0.07, 0.15, 0.36, 0.74 and 1.51 s at 1,000-20,000 records, within 0.06 s of pass 1. The pool's
+- 8-60 words: serial 0.07, 0.15, 0.36, 0.74 and 1.51 s at 1,000-20,000 records, within 0.09 s of pass 1. The pool's
   workers took 3.34-4.48 s against pass 1's 1.74-2.70 s: start-up costs more CPU under contention.
 - 120-250 words: serial 0.36, 0.74, 1.77 and 3.59 s at 1,000-10,000 records, against pass 1's 0.31-3.20 s.
 

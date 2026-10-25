@@ -93,7 +93,7 @@ HTTP/3 was turned on in the compare-on block for these runs.
 | 20s | 1 stall | 20.05 s, 504 |
 | 20s | 1 trickle | 20.18 s, 504 (16,776,019 bytes read: the trickle kept the connection alive) |
 | 20s | 8 stalls, then 8 more once those were cut (caddy freshly started) | all 16 at 20.0 to 20.5 s, 504 |
-| 60s | 8 trickles in `smoke-test.sh --compare`, after its 8 HTTP/1.1 stalls were cut, then 8 more | 60.07 to 60.14 s, 504 (three runs) |
+| 60s | 8 trickles in `smoke-test.sh --compare`, after its 8 HTTP/1.1 stalls were cut, then 8 more | 60.10 to 60.14 s, 504 (the logged runs: 2, 3, the follow-up and review round 1; run 1's times weren't kept) |
 
 So `read_body` reaches an HTTP/3 upload through the per-request read deadline Caddy sets since 2.11.6. At the
 shipped `read_body 60s`, an upload that stalls (sends nothing at all) is closed first by QUIC's 30 s idle
@@ -103,8 +103,10 @@ shorter than the idle timeout (20 s). That is why `smoke-test.sh` sends trickles
 Memory (caddy cgroup, MiB): the two batches of 8 stalls held 259 (current) with the peak going 28 → 278, then
 308 with the peak 278 → 321: the second batch raised the peak by 43 MiB, under 8 × 25 = 200. In the smoke
 test's third run the first batch of 8 trickles raised the peak from 430 (after the HTTP/1.1 batch) to 696 MiB,
-and the second by nothing (696 → 696). An HTTP/3 upload held about 31 MiB in the proxy (259 MiB for 8, less
-the 14 MiB `memory.current` of the freshly started container before the first batch; its peak was already 28), against about 50 for HTTP/1.1, but on top of what Go kept from the HTTP/1.1 batch.
+and the second by nothing (696 → 696). An HTTP/3 upload held about 31 MiB in a fresh proxy (259 MiB for 8, less
+the 14 MiB `memory.current` of the freshly started container before the first batch; its peak was already 28), and
+about 33 MiB on top of an HTTP/1.1 batch (smoke run 3, 430 → 696), against about 50 for HTTP/1.1 (`deploy/README.md`'s
+2026-10-16 table).
 
 One difference from HTTP/1.1: a cut HTTP/3 upload is forwarded. An HTTP/1.1 upload cut at read_body ends as
 499 (the request's context is cancelled) and the API never sees it. Over HTTP/3 the deadline's error leaves

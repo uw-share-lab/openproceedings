@@ -378,13 +378,13 @@ included) and never reached the API: with uploads stalled in the proxy, a whole 
 measured. A cut upload gets `499` from Caddy 2.11.7 (2.11.4 wrote an empty `200`), and the API logged none
 of them: a client sees no comparison in it. Over HTTP/3 (TASK-257, 2026-10-24,
 [`docs/results/2026-10-24-proxy-body-limits.md`](../docs/results/2026-10-24-proxy-body-limits.md)) an upload
-that trickled a byte a second was cut at `read_body` too (60.07 to 60.14 s, 8 at once, over three runs). One
+that trickled a byte a second was cut at `read_body` too (60.10 to 60.14 s, 8 at once, in each logged run). One
 that stalls, sending nothing, is closed sooner at this `read_body` of 60 s, by QUIC's 30 s idle timeout
 (30.89 s); a stall was cut at `read_body` only when that was shorter (20.0 to 20.5 s with `read_body 20s`).
 Each gets 504. Unlike HTTP/1.1, the proxy then forwards what it read, and the API refuses it within half a
 second (408 `API_UPLOAD_TIMEOUT`, or 429 while another comparison runs or once the client's bucket is
 empty, debited to it; never a comparison), so a cut QUIC upload holds the API's slot for that half second, not for `read_body`. A second
-batch of 8 HTTP/3 stalls, once the first was cut, raised the proxy's memory peak by 43 MiB.
+batch of 8 HTTP/3 stalls, once the first was cut, raised the proxy's memory peak by 43 MiB (with `read_body 20s`).
 
 A file one byte over 16 MiB gets 413, one with no length 411 and one with a length that isn't 1 to 18 plain
 digits 400, all from the proxy, as plain text rather than the API's JSON error (the smoke test checks the 413's

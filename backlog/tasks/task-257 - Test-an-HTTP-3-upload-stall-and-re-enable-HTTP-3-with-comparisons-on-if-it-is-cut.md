@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-16 23:07'
-updated_date: '2026-10-25 15:16'
+updated_date: '2026-10-25 15:17'
 labels:
   - ops
 dependencies: []
@@ -31,5 +31,5 @@ TASK-183 (PR #156) turns HTTP/3 off in the compare-on block because a stalled up
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-24: cut. Client: Debian trixie curl 8.14.1 with HTTP/3 (deploy/smoke-h3.Dockerfile, packages pinned via the base image's snapshot). read_body 20s: stall cut 20.05 s, trickle 20.18 s; 2 batches of 8 x 16 MiB-1 stalls all cut 20.0-20.5 s, second batch +43 MiB memory.peak (< 200). Smoke --compare: 16 cuts at read_body +-2 s, peak 620 -> 620 MiB. HTTP/3 re-enabled in compare-on; a cut HTTP/3 upload is forwarded truncated and refused by the API (408/429) within 0.5 s, never compared (documented). An idle QUIC connection closes at 30 s first.
 
-2026-10-25 (review round 1): AC #1's 'within OP_READ_BODY ± 2 s' was shown for a silent stall only at read_body 20s; at the shipped 60s a silent stall is closed first by QUIC's 30 s idle timeout (30.89 s, 504), and a trickle is cut at read_body (60.07-60.14 s). Both end well within the bound's intent (no upload outlives read_body); smoke-test.sh --compare sends trickles for that reason.
+2026-10-25 (review round 1): AC #1's 'within OP_READ_BODY ± 2 s' was shown for a silent stall only at read_body 20s; at the shipped 60s a silent stall is closed first by QUIC's 30 s idle timeout (30.89 s, 504), and a trickle is cut at read_body (60.10-60.14 s). Both end well within the bound's intent (no upload outlives read_body); smoke-test.sh --compare sends trickles for that reason.
 <!-- SECTION:NOTES:END -->

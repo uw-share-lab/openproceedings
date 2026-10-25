@@ -617,7 +617,7 @@ refusal raced the proxy's sending and reached the client as a 502 in one smoke r
 not the API's error envelope; HTTP/3 kept on (TASK-257: Caddy's HTTP/3 server gets `read_body` through the
 per-request read deadline it sets since 2.11.6: at `read_body` 60s an HTTP/3 upload that stalls, sending
 nothing, is closed by QUIC's 30 s idle timeout (measured: 30.89 s, 504), and one that trickles is cut at
-`read_body` (60.07 to 60.14 s; a stall was cut at `read_body` only with `read_body 20s`); unlike HTTP/1.1, the proxy then
+`read_body` (60.10 to 60.14 s; a stall was cut at `read_body` only with `read_body 20s`); unlike HTTP/1.1, the proxy then
 forwards what it read, which the API refuses within half a second, 408 or 429, never comparing it); a longer `read_body` (`OP_READ_BODY`, 60s there), which is the server's timeout for every request (Caddy has no per-path one); and
 a memory limit on the `caddy` container (`OP_CADDY_MEM_LIMIT`, 1g, with `GOMEMLIMIT` 800MiB). With the proxy
 buffering the file, a slow upload holds a proxy goroutine and about 50 MiB of its memory (measured: Caddy's
