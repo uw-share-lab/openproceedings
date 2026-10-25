@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-23 17:57'
-updated_date: '2026-10-24 07:06'
+updated_date: '2026-10-25 02:50'
 labels:
   - test
   - engine
@@ -24,6 +24,12 @@ Seen twice on 2026-10-23 in TASK-275's branch (4f47fe8f, 92295b74), both times p
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Identify which test spawns the pools and why (faulthandler_timeout dump of a stalled run, or a reproduction with a fixed Hypothesis seed)
-- [ ] #2 The full suite no longer stalls: pools are closed deterministically and/or tests stay under PARALLEL_FROM, with a test that fails on a leaked pool
+- [x] #1 Identify which test spawns the pools and why (faulthandler_timeout dump of a stalled run, or a reproduction with a fixed Hypothesis seed)
+- [x] #2 The full suite no longer stalls: pools are closed deterministically and/or tests stay under PARALLEL_FROM, with a test that fails on a leaked pool
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-24: identified by a census plugin (no stall dump existed): 63 pools/run, all shut down, none inside Hypothesis examples; each from a 5k test build at 8 spawn workers (~500 interpreters/run inside xdist workers). Fix: the test session builds serially (conftest), callers close normalized() (closing()); regression test fails on dev. Follow-ups done in-branch: PARALLEL_FROM=10,000 decided from the manifest's record count (crossover note docs/results/2026-10-24-parallel-normalize-crossover.md); faulthandler_timeout=1200 (off in the 50k nightly steps). Full make test: 9630 passed in 6:08, no stall.
+<!-- SECTION:NOTES:END -->

@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-20 15:03'
-updated_date: '2026-10-24 07:06'
+updated_date: '2026-10-25 02:50'
 labels:
   - eval
   - security
@@ -23,5 +23,11 @@ Found in TASK-272's review (qa+security, 2026-10-20): urllib's unquote builds a 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 doi_key's memory on a percent-encoded link is bounded at the largest line /compare accepts (capped unquoting or a lower MAX_COMPARE_LINE, with a peak_bytes test), or the bound is documented in spec 07 with the owner's decision
+- [x] #1 doi_key's memory on a percent-encoded link is bounded at the largest line /compare accepts (capped unquoting or a lower MAX_COMPARE_LINE, with a peak_bytes test), or the bound is documented in spec 07 with the owner's decision
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-24: owner chose capped unquoting. The trailing run is read raw or encoded and never unquoted; a path longer than 12*MAX_DOI returns None unread; a key past caps.MAX_DOI names no record. 16 MB line: 329 MB -> 33.6 MB peak; frozen-copy equality property (3,000 examples) + peak_bytes test at 16 MB; 12 hand mutants caught. Spec 07 updated.
+<!-- SECTION:NOTES:END -->

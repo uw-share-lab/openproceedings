@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-19 11:49'
-updated_date: '2026-10-24 07:06'
+updated_date: '2026-10-25 02:50'
 labels:
   - hooks
   - tooling
@@ -22,6 +22,12 @@ ordinal: 174000
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The table parses and passes under bash 3.2 (or the Makefile and docs say it needs bash 4+, and make tooling refuses an older one with that message)
-- [ ] #2 make tooling green
+- [x] #1 The table parses and passes under bash 3.2 (or the Makefile and docs say it needs bash 4+, and make tooling refuses an older one with that message)
+- [x] #2 make tooling green
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-24: bash 3.2 misparses a quoted heredoc containing ( inside $(...); the program is read into SAME_PATTERN first. Table under /bin/bash 3.2: 1738 passed. Follow-up done in-branch: check_old_bash.py runs bash -n with /bin/bash 3.x in make tooling (30 files; skips elsewhere).
+<!-- SECTION:NOTES:END -->

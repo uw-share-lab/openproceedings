@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-19 11:49'
-updated_date: '2026-10-24 07:06'
+updated_date: '2026-10-25 02:51'
 labels:
   - deploy
   - security
@@ -22,7 +22,13 @@ deploy/Caddyfile's compare-on matchers check only POST, so a PUT (or other metho
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 compare-on answers any method but POST with 405 before the length checks
-- [ ] #2 deploy/smoke-test.sh --compare has a case for a chunked PUT
-- [ ] #3 deploy/README.md and spec 08 say so
+- [x] #1 deploy/smoke-test.sh --compare has a case for a chunked PUT
+- [x] #2 deploy/README.md and spec 08 say so
+- [x] #3 Only a POST enters compare-on's 16 MiB handle: any other method to /api/v1/compare is an ordinary API request under the 64 KiB cap, a chunked one refused by the proxy (411) and a sized one answered 405 with Allow: POST by the API (revised 2026-10-24 from 'the proxy answers 405': the API's own answer keeps its envelope and lets a CORS preflight through)
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-24: built as AC #3 (the AC was revised: a proxy 405 would break a CORS preflight and differ from the API's envelope). Smoke --compare: chunked PUT /compare -> 411, sized PUT -> 405 with Allow: POST.
+<!-- SECTION:NOTES:END -->
