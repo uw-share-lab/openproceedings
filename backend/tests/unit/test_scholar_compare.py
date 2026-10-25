@@ -1057,10 +1057,11 @@ def test_doi_key_keeps_no_backtracking_state_on_a_hostile_value(hostile: str) ->
 
 
 def test_doi_key_reads_the_largest_compare_line_in_bounded_memory() -> None:
-    """At /compare's largest line (`MAX_COMPARE_LINE`, 16 MB) a percent-encoded link path is never unquoted: it
+    """At /compare's largest line (`MAX_COMPARE_LINE`, 16 MiB, 16,777,216 characters) a percent-encoded link path is never unquoted: it
     can't unquote to a DOI within `caps.MAX_DOI`. Unquoting it held ~329 MB, past a file's ~250 MB budget
-    (api/config.py). Read by position, a value's one copy is its path reversed, labelled or padded alike: the
-    trim and the label's slice made up to four (67 MB) in TASK-273's first round
+    (api/config.py). Read by position, a link's one copy is its path reversed, labelled or padded alike, and a
+    value that is no link is never copied whole; trimming and slicing made up to four copies (67 MB) in TASK-273's
+    first round and three of a value that is no link (50 MB) in its second
     (docs/results/2026-10-24-doi-key-memory.md)."""
     path = "%41" * (MAX_COMPARE_LINE // 3)
     for value in (
@@ -1072,6 +1073,21 @@ def test_doi_key_reads_the_largest_compare_line_in_bounded_memory() -> None:
     ):
         peak = peak_bytes(lambda v=value: doi_key(v))
         assert peak < 1.1 * len(value), peak
+    long = "A" * MAX_COMPARE_LINE
+    for value in (
+        "10.1/" + long,
+        " 10.1/" + long + " \n",
+        "doi: 10.1/" + long,
+        "10.1/" + long + ".",
+        " 10.1/(" + long + ")) ",
+        "10.1/x" + "." * MAX_COMPARE_LINE + " " * 1_000,
+        # review-methodologist's shapes (TASK-273 round 2): 16.8 MB, 33.6 MB and 16.8 MB before
+        "10.1/" + "x" * MAX_COMPARE_LINE + ".",
+        "doi: 10.1/" + "x" * MAX_COMPARE_LINE + ".)",
+        " 10.1/" + "x" * MAX_COMPARE_LINE + " \n",
+    ):
+        peak = peak_bytes(lambda v=value: doi_key(v))
+        assert peak < 0.1 * len(value), peak
 
 
 # --- frozen: `doi_key` before TASK-273, which unquoted a link's whole path ---------------------------------
@@ -1106,7 +1122,7 @@ _DOI_PIECE = st.sampled_from(
         ")", ",", ";", " ", "?", "#", "%", "%2", "%2e", "%2E", "%2c", "%2C", "%3b", "%3B", "%29", "%28", "%41",
         "%20", "%00", "%c3", "%a9", "%C3%A9", "%e2%80%ae", "%f0%9f", "%98%80", "%ff", "é", "\u202e", "\t", "\n",
         "\u3000", "\x85",
-        "A" * 499, "%41" * 499, "%2e" * 300, "." * 300, "%29" * 200,
+        "A" * 499, "%41" * 499, "%2e" * 300, "." * 300, "%29" * 200, ")" * 300, " " * 300,
     ]
 )  # fmt: skip
 
@@ -1126,6 +1142,13 @@ _DOI_PIECE = st.sampled_from(
 @example("https://doi.org/10.1/" + "%41" * (MAX_DOI - 5) + "%2e" * 5_000)
 @example("https://doi.org/10.1/" + "%f0%9f%98%80" * (MAX_DOI - 5))  # the cap in four-byte characters
 @example("10.1/" + "a" * (MAX_DOI - 5) + ")" * 3)
+@example("10.1/" + "a" * (MAX_DOI - 5) + "." * 3 + " " * 3)  # the trailing run and whitespace past the cap
+@example("10.1/" + "a" * (MAX_DOI - 6) + " " * 3)  # trailing whitespace across the cap
+@example("10.1/" + "a" * (MAX_DOI - 10) + " " * 20 + ".")  # whitespace inside, across the cap
+@example("10.1/" + "a" * (MAX_DOI - 10) + " " * 5 + ".")  # whitespace inside, the run just past the cap
+@example(" doi: 10.1/(" + "a" * (MAX_DOI - 7) + ")" * 4 + " \n")
+@example("https://doi.org/10.1/x \t")  # whitespace after a link's path, which the trim takes
+@example("https://doi.org/10.1/x ?q")  # and before its query, which it doesn't
 @example("10.1/(" + "a" * (MAX_DOI - 6) + ")" * 3)
 def test_doi_key_is_the_frozen_function_up_to_the_doi_cap(text: str) -> None:
     """Every value that keys to a DOI within `caps.MAX_DOI` keys as it did, every other value as before or to

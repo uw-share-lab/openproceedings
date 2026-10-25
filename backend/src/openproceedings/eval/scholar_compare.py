@@ -140,6 +140,8 @@ _SPACES = re.compile(r"\s*+")  # what `str.strip()` strips: `\s` is `str.isspace
 # the `_TRAILING` run at the end of a link's path, percent-encoded or not, matched on the path reversed (one pass
 # from the end; a `%HH` is always an escape, since `%` is no hex digit) so that the run is never unquoted
 _ENCODED_RUN = re.compile(r"(?:[.,;)]|[eEcC]2%|92%|[bB]3%)*+")
+_RUN = re.compile(r"[.,;)]*+")  # the `_TRAILING` run, read forward in place
+_CLOSES = re.compile(r"\)*+")  # its leading `)`s
 _ENCODED_CLOSES = re.compile(r"(?:\)|%29)*+")  # the run's leading `)`s, read forward
 # the longest link path that can unquote to `caps.MAX_DOI` characters: a character is at most four UTF-8 bytes
 # (an invalid run at most three, one U+FFFD), each byte at most three characters (`%HH`)
@@ -189,29 +191,37 @@ def doi_key(text: str) -> str | None:
     (`10.<registrant>/<suffix>`, no whitespace, control or bidi format character in the suffix, once unquoted), and
     for one longer than `caps.MAX_DOI` characters, the ingest cap on `urls.doi` (decision-053): it names no record.
     A link's path is unquoted only up to the trailing run, and not at all when longer than `_MAX_ENCODED_DOI`
-    characters: unquote holds ~20 bytes per character (TASK-273). Read in place, by position: the one copy of a
-    long value is the link's path reversed (or the value, trimmed, when it is no link)."""
-    # `text.strip()`'s bounds; `rstrip`'s copy, made only when there is trailing whitespace, is freed at once
-    hi = len(text.rstrip()) if text[-1:].isspace() else len(text)
-    lo = _run_end(_SPACES, text, 0, hi)
-    if label := _DOI_LABEL.match(text, lo, hi):  # `DOI https://doi.org/…` too: the label, then the link
+    characters: unquote holds ~20 bytes per character (TASK-273). Read in place, by position: a long link's one
+    copy is its path reversed, and a value that is no link is never copied whole (a copy holds at most
+    `caps.MAX_DOI` characters of it, or `_MAX_ENCODED_DOI` of a link's path)."""
+    lo = _run_end(_SPACES, text)  # `text.strip()`'s start; its end is found where each branch reads
+    if label := _DOI_LABEL.match(text, lo):  # `DOI https://doi.org/…` too: the label, then the link
         lo = label.end()
     # one pass each, never a character at a time (a hostile file must not defeat /compare's time cap): strip the
     # trailing run, then give back the run's leading `)`s that close a `(` the DOI opened
-    if link := _DOI_LINK.match(text, lo, hi):
+    if link := _DOI_LINK.match(text, lo):
         start = link.end()  # at least `doi.org/`'s 8 characters in, so `start - 1` is no negative index
-        end = q.start() if (q := _LINK_END.search(text, start, hi)) else hi
-        cut = end - _run_end(_ENCODED_RUN, text[end - 1 : start - 1 : -1])
+        query = _LINK_END.search(text, start)
+        end = query.start() if query else len(text)
+        back = text[end - 1 : start - 1 : -1]
+        spaces = 0 if query else _run_end(_SPACES, back)  # whitespace before a query is the path's
+        cut = end - _run_end(_ENCODED_RUN, back, spaces)
         if cut - start > _MAX_ENCODED_DOI:
             return None
         kept = unquote(text[start:cut])  # ends in no `_TRAILING` character: the run took every one
-        closes = _run_end(_ENCODED_CLOSES, text, cut, end)
+        closes = _run_end(_ENCODED_CLOSES, text, cut, end - spaces)
         tail_closes = text.count(")", cut, closes) + text.count("%29", cut, closes)
     else:
-        v = text[lo:hi]
-        kept = v.rstrip(_TRAILING)
-        tail = v[len(kept) :]
-        tail_closes = len(tail) - len(tail.lstrip(")"))
+        # past `caps.MAX_DOI` characters only the trailing run and whitespace may follow, or the key is too long:
+        # read the rest in place, and trim the bounded head
+        head = min(len(text), lo + caps.MAX_DOI)
+        run = _run_end(_RUN, text, head)
+        if _run_end(_SPACES, text, run) < len(text):
+            return None
+        hi = run if run > head else lo + len(text[lo:head].rstrip())  # where the trimmed value ends
+        kept = text[lo : min(hi, head)].rstrip(_TRAILING)
+        start = lo + len(kept)
+        tail_closes = _run_end(_CLOSES, text, start, hi) - start
     v = kept + ")" * min(tail_closes, max(kept.count("(") - kept.count(")"), 0))
     return v.lower() if len(v) <= caps.MAX_DOI and _DOI.fullmatch(v) else None
 

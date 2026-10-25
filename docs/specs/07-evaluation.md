@@ -88,8 +88,10 @@ too (TASK-177: one implementation); `eval/scholar_report.py` picks the review ro
   that trailing run, which is read percent-encoded (`%2E`, `%29`) as well as raw, and not at all when the rest is
   longer than 12,000 characters (a character is at most four UTF-8 bytes of three characters each, so it can't
   unquote within the cap): urllib's unquote holds about 20 bytes a character, 329-363 MB on a link at
-  `MAX_COMPARE_LINE` (16 MB) against a file's ~250 MB budget. The value is read by position, never trimmed or
-  sliced whole, so its one copy is the path reversed: 16.8 MB on a 16 MB link, bare, labelled or padded alike
+  `MAX_COMPARE_LINE` (16 MiB, 16,777,216 characters) against a file's ~250 MB budget. The value is read by position, never trimmed or
+  sliced whole: a link's one copy is its path reversed, 16.8 MB on a link of that length, bare, labelled or padded alike,
+  and a value that is no link is never copied whole (past `caps.MAX_DOI` characters only the trailing run and whitespace
+  may follow, read in place; under 0.1 MB on a value of that length, where trimming it made up to three copies)
   (TASK-273, measured in [results/2026-10-24-doi-key-memory.md](../results/2026-10-24-doi-key-memory.md); every
   value that keys to a DOI within the cap keys as before, held to a frozen copy of the old function). A DOI so read names the index record whose `urls.doi` it is, **only when the record's year
   is the year the file states and its venue the venue the file states**, each where the file states one (a year;
