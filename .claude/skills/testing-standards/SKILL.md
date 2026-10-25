@@ -160,7 +160,7 @@ Case tables must also parse on the developer platform's Bash. Stock macOS Bash 3
 case-pattern `)` inside command substitution; compute the case result in a variable outside `$(...)`
 and keep the same assertion. It also misparses a heredoc inside `$(...)` whose body has a `(`: read the
 program into a variable first (`IFS= read -r -d '' PROG <<'PY' || true`), then run `$(python3 -c "$PROG" …)`
-(TASK-267). Check every script with `/bin/bash -n` on a Mac. Run the table with stock Bash as well as the CI
+(TASK-267). `make tooling` checks every script with `/bin/bash -n` when /bin/bash is 3.x (`check_old_bash.py`). Run the table with stock Bash as well as the CI
 version when available.
 Capture controlled runner output on the line before a `check` call and pass the variable as data;
 `lint_probes.py` forbids command substitutions inside assertion arguments even for tooling tables.

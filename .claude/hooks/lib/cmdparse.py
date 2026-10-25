@@ -22,7 +22,7 @@ matter to a gate:
     short groups (`sudo -nu root`), attached values (`flock -w5`) and unique long prefixes (`--wai`) read as getopt
     reads them, and an option this parser can't place a ParseError (TASK-253);
     `sudo -e`/`--edit` and `sudoedit` run no command and edit each file after their options, a `>>` redirect of its
-    own (TASK-269);
+    own, and with `-R`/`--chroot` are a ParseError, since the files are inside the chroot (TASK-269);
     `env -S '…'` is split, `env -C`/`sudo -D` move the directory of the command they run (`Argv.chdir`) and no
     later one, with its redirects still opened where the shell is; `arch -e NAME=value`/`-d NAME` set and unset as
     env does; flock's lock file is a `>>` redirect of its own, in the directory flock runs in (flock creates it;
@@ -1470,8 +1470,10 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
             edit = name == "sudoedit"
             name = "sudo" if edit else name
             opts, i = _getopt(name, argv, i + 1)
+            chroot = False
             for opt, value, after in opts:
                 edit = edit or (name == "sudo" and opt == "-e")
+                chroot = chroot or (name == "sudo" and opt == "-R")
                 if name == "env" and opt == "-S" and value is not None:
                     # env reads the split words as its own: options first, then the command (GNU env)
                     return _strip_prefixes(["env", *tokenize(value), *argv[after:]], state, out)
@@ -1486,6 +1488,9 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                     unknown = bool(re.search(r"[$`~]", value))
                     out.chdir = here if unknown else _resolve(value, here)
                     out.chdir_unknown = out.chdir_unknown or unknown
+            if edit and chroot:
+                # `-R`/`--chroot` opens each file inside that root: which file it edits isn't told here
+                raise ParseError("sudo -e with -R: the files are read inside a chroot")
             if edit:
                 # `sudo -e`/`sudoedit` runs no command: every word after its options is a file it edits, written as
                 # a `>>` writes one (TASK-269); with `-D` each is read from both directories, since which one sudo

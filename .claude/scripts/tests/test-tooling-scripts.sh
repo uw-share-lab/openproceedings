@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016  # commands under test are single-quoted on purpose: $(…), $(( )) and backticks must reach the hooks unexpanded
-# Case table for the CI tooling scripts: learnings_index.py, check_backlog.py, check_digest_pins.py, check_file_modes.py, check_uv_pin.py, npm_specs.py,
+# Case table for the CI tooling scripts: learnings_index.py, check_backlog.py, check_digest_pins.py, check_file_modes.py, check_uv_pin.py, check_old_bash.py, npm_specs.py,
 # lint_tooling.py and roster_index.py. Each case copies the real .claude/ (and CLAUDE.md / CONTRIBUTING.md) into a throwaway
 # tree, confirms the script passes on it, then breaks exactly one thing and confirms the script fails —
 # so a regression in a check can't hide behind the repo's own content being clean (review round 2).
@@ -524,6 +524,18 @@ expect_mode_err "pushd is refused"                                    'scripts/s
 modes 'popd
 chmod +x a/x.sh' a/x.sh:+x
 expect_mode_err "popd is refused"                                     'scripts/setup-dev\.sh:1: popd other than'
+
+echo "== check_old_bash.py (every shell script parses with bash 3.x when /bin/bash is one, TASK-267)"
+# fake bashes: each reports a major version for `-c`, and runs this machine's bash for `-n`
+RB=$(command -v bash)
+for v in 3 5 x; do printf '#!/bin/sh\nif [ "$1" = -c ]; then echo %s; exit 0; fi\nexec "%s" "$@"\n' "$v" "$RB" > "$TMP/bash$v"; chmod +x "$TMP/bash$v"; done
+printf '#!/usr/bin/env bash\necho ok\n' > "$TMP/good.sh"
+printf '#!/usr/bin/env bash\nif then fi\n' > "$TMP/bad.sh"
+fresh; expect ok  "bash 3, every file parses"                           check_old_bash.py --bash "$TMP/bash3" "$TMP/good.sh"
+fresh; expect err "bash 3, one file doesn't parse"                      check_old_bash.py --bash "$TMP/bash3" "$TMP/good.sh" "$TMP/bad.sh"
+fresh; expect ok  "bash 5: skipped, whatever the files"                 check_old_bash.py --bash "$TMP/bash5" "$TMP/bad.sh"
+fresh; expect err "a version it can't read is a failure"               check_old_bash.py --bash "$TMP/bashx" "$TMP/good.sh"
+fresh; expect ok  "no such bash: skipped"                               check_old_bash.py --bash "$TMP/no-bash" "$TMP/bad.sh"
 
 echo "== check_uv_pin.py (every CI setup-uv installs the api image's uv, TASK-252)"
 # uvpin — a copy with the repo's own .github/ and deploy/api.Dockerfile; uvwf <text> writes one more workflow,

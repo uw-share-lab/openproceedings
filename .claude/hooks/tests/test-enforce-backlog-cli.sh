@@ -13,6 +13,10 @@ set -u
 #   2. The hook FAILS CLOSED, but only for payloads that mention a backlog path. It runs on every Write/Edit
 #      in the repo, so a python3 outage must not block unrelated edits.
 #
+# The hook sees file tools only (Write/Edit/MultiEdit/NotebookEdit): it is not registered for Bash and doesn't
+# use cmdparse. Shell edits under backlog/ (rm, mv, a redirect, sed -i, sudo -e, a git pathspec …) are
+# protect-data-dir.sh's, and their rows are in test-openproceedings-gates.sh.
+#
 # Run after touching the hook, then re-sync the mirrors: scripts/sync-codex-mirror.sh
 #
 # Resolve beside this test so each mirror exercises its own hook implementation.

@@ -2466,6 +2466,12 @@ check $P block "sudo --edit backlog/tasks/x.md"                  "$(payload_bl '
 check $P block "sudoedit backlog/tasks/x.md"                     "$(payload_bl 'sudoedit backlog/tasks/x.md')"
 check $P block "sudo -nu root -e backlog/tasks/x.md" "$(payload_bl 'sudo -nu root -e backlog/tasks/x.md')"
 check $P allow "sudoedit src/notes.md"                           "$(payload_bl 'sudoedit src/notes.md')"
+# -R/--chroot opens each file inside the chroot, so which file it edits can't be told: a ParseError, refused
+check $P block "data-only: sudo -R /x -e /tmp/op-269.txt (inside a chroot)" "$(payload_do 'sudo -R /x -e /tmp/op-269.txt')"
+check $P block "data-only: sudoedit --chroot=/x /tmp/op-269.txt" "$(payload_do 'sudoedit --chroot=/x /tmp/op-269.txt')"
+check $P block "data-only: sudo -e -R /x /tmp/op-269.txt (-R after -e)" "$(payload_do 'sudo -e -R /x /tmp/op-269.txt')"
+check $P allow "data-only: sudo -R /x cat data/indexes/i1/x (a chroot, no edit)" "$(payload_do 'sudo -R /x cat data/indexes/i1/x')"
+check $P allow "data-only: sudo -r role -e /tmp/op-269.txt (-r is a role)" "$(payload_do 'sudo -r role -e /tmp/op-269.txt')"
 check $P allow "data-only: flock -e <lock> cat data/snapshots/s1/f (flock's -e is exclusive)" "$(payload_do 'flock -e /tmp/op.lock cat data/snapshots/s1/f')"
 check $R allow "sudo -e git push origin other2 (files so named: no push runs)" "$(payload_bash 'sudo -e git push origin other2')"
 check $R block "sudoedit .git/op-reviews/<sha>"                  "$(payload_bash 'sudoedit .git/op-reviews/0123abc')"

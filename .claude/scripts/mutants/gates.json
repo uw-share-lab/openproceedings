@@ -7511,5 +7511,53 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "                here = state[\"dir\"] if state is not None else \"\"\n                for d in",
   "new": "                here = \"\"\n                for d in"
+ },
+ {
+  "label": "TASK-269: sudo -e with -R not refused",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                raise ParseError(\"sudo -e with -R: the files are read inside a chroot\")\n",
+  "new": "                pass\n"
+ },
+ {
+  "label": "TASK-269: -R refused without -e",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if edit and chroot:\n",
+  "new": "            if chroot:\n"
+ },
+ {
+  "label": "TASK-269: sudo -r (a role) read as the chroot",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "chroot = chroot or (name == \"sudo\" and opt == \"-R\")",
+  "new": "chroot = chroot or (name == \"sudo\" and opt in (\"-R\", \"-r\"))"
+ },
+ {
+  "label": "TASK-269: -R before -e forgotten (chroot reset per option)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                chroot = chroot or (name == \"sudo\" and opt == \"-R\")\n",
+  "new": "                chroot = name == \"sudo\" and opt == \"-R\"\n"
+ },
+ {
+  "label": "check_old_bash: a failing file not reported",
+  "file": ".claude/scripts/check_old_bash.py",
+  "old": "        if r.returncode != 0:\n            bad.append(",
+  "new": "        if False:\n            bad.append("
+ },
+ {
+  "label": "check_old_bash: every version checked as 3.x",
+  "file": ".claude/scripts/check_old_bash.py",
+  "old": "    if version != \"3\":\n",
+  "new": "    if False:\n"
+ },
+ {
+  "label": "check_old_bash: an unreadable version skipped",
+  "file": ".claude/scripts/check_old_bash.py",
+  "old": "        return 1\n    if version != \"3\":",
+  "new": "        return 0\n    if version != \"3\":"
+ },
+ {
+  "label": "check_old_bash: a missing bash fails",
+  "file": ".claude/scripts/check_old_bash.py",
+  "old": "        print(f\"check_old_bash: skipped ({args.bash} not found)\")\n        return 0\n",
+  "new": "        print(f\"check_old_bash: skipped ({args.bash} not found)\")\n        return 1\n"
  }
 ]
