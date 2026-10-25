@@ -1,9 +1,11 @@
 ---
 id: TASK-269
 title: 'cmdparse: sudo -e / sudoedit read as a non-write'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@jeevanparmar'
 created_date: '2026-10-19 11:49'
+updated_date: '2026-10-24 07:06'
 labels:
   - hooks
   - security

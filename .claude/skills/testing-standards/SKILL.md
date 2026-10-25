@@ -29,6 +29,15 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
   Real-corpus checks (tokenizer parity, task-029) run locally against the maintainer's snapshot, never in
   CI: the real corpus is never committed (decision-004). Decision-018 (00 open question 1, closed) lets a
   public instance serve abstracts; it does not put real abstracts in git or in CI fixtures.
+- **Index builds in tests run in one process.** `conftest.py` sets `engine.index.PARALLEL_FROM` past any
+  corpus, so a build or parity check never starts the spawn pool the product starts from 10,000 records.
+  When that was 2,000, about 60 builds of the 5k fixture a run each started `os.cpu_count()` interpreters inside
+  every xdist worker: twice a serial build's wall time, 4 times its CPU (TASK-284). A test of the parallel path
+  sets `PARALLEL_FROM` itself (`test_index.py`'s parallel rows compare it with the serial one: guarantee 4);
+  `test_index.py` fails if a default build of 10,000 records starts a pool.
+- **A test still running after 20 minutes dumps every thread's stack** (`faulthandler_timeout = 1200` in
+  `pyproject.toml`), once, and carries on, so a stall leaves a trace. The 50,000-example nightly steps turn it
+  off (`-o faulthandler_timeout=0`).
 - Recorded HTTP fixtures (VCR-style) for each crawler source and year schema (01 §Testing), scrubbed of
   real text (decision-004). Tests never
   hit the network, and it is **enforced**: `backend/tests/conftest.py` makes every non-loopback socket
@@ -149,7 +158,10 @@ assuming the row still kills it.
 
 Case tables must also parse on the developer platform's Bash. Stock macOS Bash 3.2 can misparse a
 case-pattern `)` inside command substitution; compute the case result in a variable outside `$(...)`
-and keep the same assertion. Run the table with stock Bash as well as the CI version when available.
+and keep the same assertion. It also misparses a heredoc inside `$(...)` whose body has a `(`: read the
+program into a variable first (`IFS= read -r -d '' PROG <<'PY' || true`), then run `$(python3 -c "$PROG" …)`
+(TASK-267). Check every script with `/bin/bash -n` on a Mac. Run the table with stock Bash as well as the CI
+version when available.
 Capture controlled runner output on the line before a `check` call and pass the variable as data;
 `lint_probes.py` forbids command substitutions inside assertion arguments even for tooling tables.
 

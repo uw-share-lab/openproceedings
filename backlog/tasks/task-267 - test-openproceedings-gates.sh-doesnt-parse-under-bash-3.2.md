@@ -1,9 +1,11 @@
 ---
 id: TASK-267
 title: test-openproceedings-gates.sh doesn't parse under bash 3.2
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@jeevanparmar'
 created_date: '2026-10-19 11:49'
+updated_date: '2026-10-24 07:06'
 labels:
   - hooks
   - tooling

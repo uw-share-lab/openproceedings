@@ -21,6 +21,8 @@ matter to a gate:
     the getopt ones (`env`, `sudo`, `nice`, `timeout`, `doas`, `caffeinate`, `flock`) with every option they take:
     short groups (`sudo -nu root`), attached values (`flock -w5`) and unique long prefixes (`--wai`) read as getopt
     reads them, and an option this parser can't place a ParseError (TASK-253);
+    `sudo -e`/`--edit` and `sudoedit` run no command and edit each file after their options, a `>>` redirect of its
+    own (TASK-269);
     `env -S '…'` is split, `env -C`/`sudo -D` move the directory of the command they run (`Argv.chdir`) and no
     later one, with its redirects still opened where the shell is; `arch -e NAME=value`/`-d NAME` set and unset as
     env does; flock's lock file is a `>>` redirect of its own, in the directory flock runs in (flock creates it;
@@ -502,8 +504,8 @@ class Argv(list):
     in_subst: bool = False
     # `cd_stayed`: the directory is where it is because a `cd ~/…` failed in the HOME '' reading (`_change_dir`)
     cd_stayed: bool = False
-    # `creates`: (directory, file) for each file a stripped wrapper itself creates (flock's lock file), in the
-    # directory the wrapper ran in; the walk yields each as a `>>` redirect
+    # `creates`: (directory, file) for each file a stripped wrapper itself creates or edits (flock's lock file, each
+    # file `sudo -e`/`sudoedit` edits), in the directory the wrapper ran in; the walk yields each as a `>>` redirect
     creates: list[tuple[str, str]]
     # `chdir`: the directory `env -C` / `sudo -D` run it in, for it alone (TASK-253); None: where the shell is.
     # `chdir_unknown`: one this parser can't resolve (`env -C "$X"`): `chdir` stays where it was, marked unknown
@@ -1461,11 +1463,15 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                 out.assigns[name] = value
             i += 1
         elif (
-            base(a) in GETOPT_WRAPPERS
+            base(a) in GETOPT_WRAPPERS or base(a) == "sudoedit"
         ):  # env -i, nice -n 5, sudo -nu x, timeout -s KILL, flock -nw5 (TASK-253)
             name = base(a)
+            # sudoedit is `sudo -e`, with sudo's options (TASK-269)
+            edit = name == "sudoedit"
+            name = "sudo" if edit else name
             opts, i = _getopt(name, argv, i + 1)
             for opt, value, after in opts:
+                edit = edit or (name == "sudo" and opt == "-e")
                 if name == "env" and opt == "-S" and value is not None:
                     # env reads the split words as its own: options first, then the command (GNU env)
                     return _strip_prefixes(["env", *tokenize(value), *argv[after:]], state, out)
@@ -1480,6 +1486,14 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                     unknown = bool(re.search(r"[$`~]", value))
                     out.chdir = here if unknown else _resolve(value, here)
                     out.chdir_unknown = out.chdir_unknown or unknown
+            if edit:
+                # `sudo -e`/`sudoedit` runs no command: every word after its options is a file it edits, written as
+                # a `>>` writes one (TASK-269); with `-D` each is read from both directories, since which one sudo
+                # opens a relative file from isn't told here
+                here = state["dir"] if state is not None else ""
+                for d in dict.fromkeys([here, out.chdir or here]):
+                    out.creates += [(d, f) for f in argv[i:]]
+                i = len(argv)
             if name == "timeout" and i < len(argv):  # the duration
                 i += 1
             if name == "flock" and i < len(argv):  # the lock file, which flock creates where it runs

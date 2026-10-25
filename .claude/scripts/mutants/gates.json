@@ -7367,5 +7367,149 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "                if writes_git_config(Argv([]), redirects, state):\n                    state[\"config_written\"] = True\n                yield _context",
   "new": "                yield _context"
+ },
+ {
+  "label": "TASK-266: an unparseable writer allowed",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            unparsed_writer()\n",
+  "new": "            pass\n"
+ },
+ {
+  "label": "TASK-266: the unparseable-writer check keeps the quotes (g''it)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if may_write(re.sub(r\"[\\\"'\\\\]\", \"\", raw)):",
+  "new": "        if may_write(raw):"
+ },
+ {
+  "label": "TASK-266: git's message verbs not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    if named({\"git\"}, text) and named(GIT_MSG, text):",
+  "new": "    if False:"
+ },
+ {
+  "label": "TASK-266: a message verb alone read as git",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    if named({\"git\"}, text) and named(GIT_MSG, text):",
+  "new": "    if named({\"git\"}, text) or named(GIT_MSG, text):"
+ },
+ {
+  "label": "TASK-266: gh writers read without gh",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    if not named({\"gh\"}, text):\n        return False\n",
+  "new": ""
+ },
+ {
+  "label": "TASK-266: gh api not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    return (named({\"api\"}, text) or named(",
+  "new": "    return (named("
+ },
+ {
+  "label": "TASK-266: gh pr/issue read without a write verb",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": " named({\"pr\", \"issue\"}, text) and named(GH_PR_WRITE | GH_ISSUE_WRITE | {\"new\"}, text)",
+  "new": " named({\"pr\", \"issue\"}, text)"
+ },
+ {
+  "label": "TASK-266: a write verb read without pr/issue",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": " named({\"pr\", \"issue\"}, text) and named(GH_PR_WRITE | GH_ISSUE_WRITE | {\"new\"}, text)",
+  "new": " named(GH_PR_WRITE | GH_ISSUE_WRITE | {\"new\"}, text)"
+ },
+ {
+  "label": "TASK-266: gh pr new not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "GH_PR_WRITE | GH_ISSUE_WRITE | {\"new\"}",
+  "new": "GH_PR_WRITE | GH_ISSUE_WRITE"
+ },
+ {
+  "label": "TASK-266: gh release writers not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "\n            or named({\"release\"}, text) and named(GH_RELEASE_WRITE, text))",
+  "new": ")"
+ },
+ {
+  "label": "TASK-266: gh release read without a write verb",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "or named({\"release\"}, text) and named(GH_RELEASE_WRITE, text))",
+  "new": "or named({\"release\"}, text))"
+ },
+ {
+  "label": "TASK-266: a release verb read without release",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "or named({\"release\"}, text) and named(GH_RELEASE_WRITE, text))",
+  "new": "or named(GH_RELEASE_WRITE, text))"
+ },
+ {
+  "label": "TASK-266: names matched inside words",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    return re.search(r\"\\b(\" + \"|\".join(map(re.escape, sorted(names))) + r\")\\b\", text) is not None",
+  "new": "    return re.search(r\"(\" + \"|\".join(map(re.escape, sorted(names))) + r\")\", text) is not None"
+ },
+ {
+  "label": "TASK-269: sudoedit not a wrapper",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "base(a) in GETOPT_WRAPPERS or base(a) == \"sudoedit\"",
+  "new": "base(a) in GETOPT_WRAPPERS"
+ },
+ {
+  "label": "TASK-269: sudoedit not an edit",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            edit = name == \"sudoedit\"\n",
+  "new": "            edit = False\n"
+ },
+ {
+  "label": "TASK-269: sudoedit's options not read as sudo's",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            name = \"sudo\" if edit else name\n",
+  "new": ""
+ },
+ {
+  "label": "TASK-269: sudo -e not an edit",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                edit = edit or (name == \"sudo\" and opt == \"-e\")\n",
+  "new": "                edit = edit\n"
+ },
+ {
+  "label": "TASK-269: sudo -E read as the edit",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(name == \"sudo\" and opt == \"-e\")",
+  "new": "(name == \"sudo\" and opt == \"-E\")"
+ },
+ {
+  "label": "TASK-269: any wrapper's -e read as an edit (flock -e is exclusive)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(name == \"sudo\" and opt == \"-e\")",
+  "new": "(opt == \"-e\")"
+ },
+ {
+  "label": "TASK-269: the edited files also read as a command",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    out.creates += [(d, f) for f in argv[i:]]\n                i = len(argv)\n",
+  "new": "                    out.creates += [(d, f) for f in argv[i:]]\n"
+ },
+ {
+  "label": "TASK-269: the first edited file skipped",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "out.creates += [(d, f) for f in argv[i:]]",
+  "new": "out.creates += [(d, f) for f in argv[i + 1 :]]"
+ },
+ {
+  "label": "TASK-269: sudo -D -e read only from -D's directory",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "for d in dict.fromkeys([here, out.chdir or here]):",
+  "new": "for d in dict.fromkeys([out.chdir or here]):"
+ },
+ {
+  "label": "TASK-269: sudo -D -e read only from the shell's directory",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "for d in dict.fromkeys([here, out.chdir or here]):",
+  "new": "for d in dict.fromkeys([here]):"
+ },
+ {
+  "label": "TASK-269: the shell's directory not known to sudo -e",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                here = state[\"dir\"] if state is not None else \"\"\n                for d in",
+  "new": "                here = \"\"\n                for d in"
  }
 ]
