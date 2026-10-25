@@ -574,7 +574,7 @@ def test_an_unreadable_record_count_builds_serially_the_same_index_and_says_so(
 ) -> None:
     """A readable manifest whose `record_count` is missing or not a whole number: `iter_records` doesn't check it,
     so the build goes on serially, gives the serial index, and logs one WARNING naming the snapshot directory and
-    the value's type (never the value)."""
+    the value's type, or `missing` (never the value)."""
     snap = snapshot_of(many(41), tmp_path / "snap")
     serial = stored(build_index(snap, tmp_path / "one", BUILT, workers=1).path)
     manifest = json.loads((snap / "manifest.json").read_text())
@@ -590,7 +590,8 @@ def test_an_unreadable_record_count_builds_serially_the_same_index_and_says_so(
     assert recorded == []
     (warning,) = logged(caplog, "snapshot_record_count_unreadable")
     assert warning.levelno == logging.WARNING and warning.snapshot == "snap"  # type: ignore[attr-defined]
-    assert warning.error == type(manifest.get("record_count")).__name__  # type: ignore[attr-defined]
+    expected = "missing" if count is None else type(manifest["record_count"]).__name__
+    assert warning.error == expected  # type: ignore[attr-defined]
 
 
 def test_ranking_numbers_are_canonical() -> None:

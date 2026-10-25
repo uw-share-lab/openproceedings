@@ -346,11 +346,12 @@ def pooled(snapshot: Path, workers: int) -> bool:
         manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return False
-    count = manifest.get("record_count") if isinstance(manifest, dict) else None
+    held = isinstance(manifest, dict) and "record_count" in manifest
+    count = manifest["record_count"] if held else None
     if not isinstance(count, int) or isinstance(count, bool):
         log.warning(
             "snapshot_record_count_unreadable",
-            extra={"snapshot": snapshot.name, "error": type(count).__name__},
+            extra={"snapshot": snapshot.name, "error": type(count).__name__ if held else "missing"},
         )
         return False
     return count >= PARALLEL_FROM

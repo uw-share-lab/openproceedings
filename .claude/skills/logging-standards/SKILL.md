@@ -217,7 +217,7 @@ message. Long jobs say they're alive: `index_build_started`, `index_build_progre
 `index_built`; `index_parity_ok` when a parity check passes. `index_build_started` and `index_parity_ok` carry
 `workers` and `parallel` (whether normalizing used a process pool), and a snapshot whose readable manifest has no
 whole-number `record_count` logs one `snapshot_record_count_unreadable` WARNING (`snapshot`, the directory's
-name; `error`, the value's type), since it then normalizes on one process (TASK-284). A failed build whose `.tmp-*` staging directory
+name; `error`, the value's type, or `missing` when there is no key), since it then normalizes on one process (TASK-284). A failed build whose `.tmp-*` staging directory
 survives its removal logs `index_build_tmp_left` (WARNING, the directory's name only). `op index retire`
 logs one line with `index_version`, `pinned` and the outcome: `index_retired` (INFO; WARNING with
 `tmp_left: true` when its `.tmp-` directory survived), `index_retire_checked` (`--dry-run`) or
