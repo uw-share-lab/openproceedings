@@ -1088,7 +1088,7 @@ def test_doi_key_reads_the_largest_compare_line_in_bounded_memory() -> None:
         " 10.1/" + "x" * MAX_COMPARE_LINE + " \n",
     ):
         peak = peak_bytes(lambda v=value: doi_key(v))
-        assert peak < 0.1 * len(value), peak
+        assert peak < 100_000, peak  # the 0.1 MB the docs state, not a share of the line
 
 
 # --- frozen: `doi_key` before TASK-273, which unquoted a link's whole path ---------------------------------

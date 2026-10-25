@@ -80,7 +80,7 @@ with the snippet below on 2026-10-25):
 
 `test_doi_key_reads_the_largest_compare_line_in_bounded_memory` checks these bounds:
 - **Under 1.1 times the line's length:** the bare, labelled, padded, `%29`-run and `%2e`-run links.
-- **Under 0.1 times:** bare, padded and labelled values with no link, one with a trailing `.`, one with an
+- **Under 0.1 MB (100,000 bytes):** bare, padded and labelled values with no link, one with a trailing `.`, one with an
   unbalanced `(…))`, a run of dots followed by whitespace, and the three review-methodologist shapes in the
   no-link table.
 
