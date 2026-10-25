@@ -67,7 +67,7 @@ broken pipe`: the API refused from the header, closed, and the proxy was still w
 buffered. Most clients got neither the API's answer nor a 502 but Caddy's own empty 413 (the transport's next
 body read failing at the cap): three answers to one request. As built the proxy refuses a declared length over
 65,536 bytes before reading any of the body (`error 413` from an `expression` matcher), and `handle_errors 413`
-answers every proxy 413 on `/api/*` with the API's own envelope, `Content-Type`, `Cache-Control` and, over
+answers every proxy 413 from the 64 KiB cap with the API's own envelope, `Content-Type`, `Cache-Control` and, over
 HTTP/1.x only, `Connection: close` (see Review round 1 below). The smoke test compares that body with the API's own refusal, read from the API directly.
 
 ## TASK-268: other methods to `/api/v1/compare` with comparisons on

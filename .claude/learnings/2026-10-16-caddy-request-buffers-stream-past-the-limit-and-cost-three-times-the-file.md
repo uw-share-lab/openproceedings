@@ -85,8 +85,9 @@ the as-built config in `deploy/Caddyfile`, `deploy/README.md` §Comparisons and 
   With 8 busy-loop containers, 150 requests of 65,537 bytes per protocol gave three different answers: Caddy's
   empty 413 (most), the API's JSON 413, and 9 × 502 (`write: broken pipe`: the API refused from the header and
   closed while the proxy was still sending its buffer). Refusing a declared over-cap length before reading the
-  body (`error 413` from an `expression` matcher) and answering every proxy 413 on `/api/*` in the API's exact
-  envelope, `Content-Type`, `Cache-Control` and `Connection: close` (`handle_errors 413`) gave 150 × the API's 413
+  body (`error 413` from an `expression` matcher) and answering every proxy 413 from the 64 KiB cap in the API's
+  exact envelope, `Content-Type`, `Cache-Control`, and `Connection: close` over HTTP/1.x only (`handle_errors 413`;
+  on HTTP/3 the header made the 413 malformed, RFC 9114 §4.2: review round 1) gave 150 × the API's 413
   on each protocol. Lesson: when a race is fixed on one route, apply it to every route behind the same cap; and
   make the proxy's refusal indistinguishable from the upstream's, so a client gets one answer.
 - **Caddy's `handle_errors` skips the site's `header` directive.** A 502 with `web` stopped carried `server: Caddy`
@@ -106,10 +107,10 @@ the as-built config in `deploy/Caddyfile`, `deploy/README.md` §Comparisons and 
   checks were `POST`-only, so a chunked `PUT` reached the 16 MiB buffer. Only a `POST` enters it now (`PUT` → the
   API's 405). Lesson: scope a matcher's checks to exactly what enters the handle, or a method the checks skip
   inherits the handle's looser limits.
-- **HTTP/3 back on: `read_body` cuts a stalled or trickling QUIC upload, but the cut upload is forwarded.** With a
+- **HTTP/3 back on: `read_body` cuts a trickling QUIC upload, but the cut upload is forwarded.** With a
   Debian curl 8.14.1 built with HTTP/3 (`deploy/smoke-h3.Dockerfile`; macOS's curl, `curlimages/curl` and Alpine's
-  have none), 16 stalls and 16 trickles were cut at `read_body` (504); a client that sends nothing is closed sooner,
-  by QUIC's 30 s idle timeout. Unlike HTTP/1.1 (499, context cancelled, the API never sees it), the HTTP/3 deadline
+  have none), 16 trickles were cut at `read_body` 60s (504); a stall was cut there only at `read_body 20s` (16 at
+  20.0-20.5 s). At 60 s a client that sends nothing is closed first by QUIC's 30 s idle timeout (30.89 s). Unlike HTTP/1.1 (499, context cancelled, the API never sees it), the HTTP/3 deadline
   leaves the context alive and `bufferedBody` forwards what it read: 10 of 16 reached the API, which refused each
   within half a second (408/429), never comparing it. Accepted and documented; a memory check of HTTP/3 after an
   HTTP/1.1 batch measures the two protocols' buffers, so the smoke test compares a second HTTP/3 batch with a first.

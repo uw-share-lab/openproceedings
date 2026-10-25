@@ -107,7 +107,8 @@ one IPv6 /48, held the slot 100% of the time.
   closed sooner by QUIC's 30 s idle timeout,
   `docs/results/2026-10-24-proxy-body-limits.md`), and the precondition is that `deploy/smoke-test.sh --compare` passes on
   the host. It passed on Docker Desktop on 2026-10-16, on Caddy 2.11.4 and again on 2.11.7 (the Linux-only
-  ownership checks skipped there). A
+  ownership checks skipped there), and the current test again on 2026-10-24 and 2026-10-25
+  (`docs/results/2026-10-24-proxy-body-limits.md`). A
   further stated limit it measured: every upload in flight costs the proxy about 50 MiB, and the stack bounds
   how many by the memory limit alone, past which the proxy is OOM-killed and restarted, dropping every
   connection, searches included (24 at once reached the edge of 1 GiB, peaks 890 to 998 MiB, and 32 did not

@@ -37,8 +37,8 @@ cores, one xdist worker starting a fresh spawn `ProcessPoolExecutor` about every
 - Suspecting the branch the stall was seen on (it touched `logs.py` and two openreview_v1 regexes, neither on the
   index path) or a slow regex (a native sample showed `_sre` and tantivy rayon frames): the tell was the worker
   starting a fresh spawn pool every second, so look first at what starts processes (task-284's description).
-- Reading timings under a 1-minute load of 50-272: use minimum wall and CPU time, which held within ~10% of a
-  quieter pass (crossover note §Method).
+- Reading timings under a 1-minute load of 50-272: use minimum wall and CPU time. CPU held close to the
+  quieter pass, but the pool's wall time at 10,000 records was 40% higher loaded (crossover note §The loaded passes).
 
 ## Decisions (and what would change them)
 - `PARALLEL_FROM = 10_000` by record count → the fixture stays serial everywhere it is built (tests, the e2e

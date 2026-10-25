@@ -66,7 +66,8 @@
 # a chunked PUT skipped its length checks and was buffered up to 16MiB (TASK-268). 16MiB, not 16MB (16,000,000
 # bytes): the API's limits.compare.max_body_bytes is 16,777,216. The whole file is buffered here before the API
 # is asked, so a slow upload holds a proxy goroutine and about 50 MiB of this process's memory (measured;
-# compare.yml limits it), never the API's one comparison slot; read_body cuts one that stalls
+# compare.yml limits it), never the API's one comparison slot; read_body cuts one that stalls (over HTTP/3,
+# QUIC's 30 s idle timeout may close it first; see the servers block)
 (compare-on) {
 	@rest not {
 		path /api/v1/compare

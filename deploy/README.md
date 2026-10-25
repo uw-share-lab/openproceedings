@@ -263,7 +263,8 @@ was listed keeps it withheld until a rebuild without the id is promoted.
 are off on this stack: `op serve` behind a proxy doesn't offer them unless told to. Turning them on is your
 decision as the operator (decision-035), with `deploy/compare.yml` (below), and not before
 `deploy/smoke-test.sh --compare` has passed on your host (decision-035; it passed on Docker Desktop on
-2026-10-16, TASK-183). What it means:
+2026-10-16, TASK-183, and the current test again on 2026-10-24 and 2026-10-25,
+`docs/results/2026-10-24-proxy-body-limits.md`). What it means:
 
 - anyone can upload a RIS file of up to 16 MiB and 5,000 records. It is read in memory for that one request
   and dropped: never written to disk, never logged (the access line has counts only), never added to the
@@ -510,7 +511,8 @@ HTTP/2 `Content-Length: abc`, and the 64 KiB cap on every other request (in the 
 checked without `--compare` too, with `/meta` offering no comparisons; HTTP/3 is advertised either way). It
 reads the caddy container's cgroup v2 memory files: `memory.peak` needs Linux 5.19 or later (before that it samples
 `memory.current` while the uploads are held, and skips the HTTP/3 peak check). It takes about three minutes
-longer: the as-built runs of 2026-10-24 took 299 s, against 111 s without it, on that Mac (149 to 186 s and 87
+longer: the runs after review round 1 (2026-10-25) took 333 s, against 156 s without it, on that Mac (299 and
+111 s on 2026-10-24, before its rows were added) (149 to 186 s and 87
 to 128 s on 2026-10-16, before the HTTP/3 batches); the stalled uploads wait out `read_body` three times.
 
 It removes everything it created on exit. It needs Docker and uv, and ports 80 and 443 on 127.0.0.1 (or
