@@ -18,7 +18,7 @@ Close every Must and Should in the TASK-266/269 review rounds on fix/hardening-b
 - Treating every reviewer bypass as a Must or Should under the fix-all rule. A shell parser has no natural end to that list. An agent set on evasion can use `python3 -c 'import shutil; …'`, which no hook parses.
 
 ## Decisions (and what would change them)
-- The owner stopped round-4 hardening at 2e74966b and reverted N2 (7bacedb0), with no follow-up task. This would change if the hooks ever had to contain a hostile agent; that needs a sandbox, not a better parser.
+- The owner stopped round-4 hardening at 2e74966b and reverted N2 (7bacedb0), with no follow-up task for round 4's forms (task-285 is a separate, accident-scope review). This would change if the hooks ever had to contain a hostile agent; that needs a sandbox, not a better parser.
 
 ## Follow-ups
 - None for round 4. The diff was not kept in the repo, and the owner declined a task for it.
