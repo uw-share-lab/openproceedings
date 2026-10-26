@@ -1082,7 +1082,14 @@ them:
 - command names are compared by basename (`/usr/bin/git`), case-folded (`cmdparse.fold`: macOS's filesystem finds
   `GIT`, `RM`, `SUDO` as git, rm, sudo, so every gate reads them so), except the builtins that act on the shell itself
   (`cd`, `export`, `set`, `eval`, `source`, …) and keywords, which bash matches only as spelled (`CD /tmp` moves nothing, `EXPORT D=x` sets nothing; `CASE_SENSITIVE_NAMES`, TASK-269
-  review); and a `git-<sub>` program (`$(git --exec-path)/git-push`) is `git <sub>`;
+  review); a command after any wrapper but `command`, `builtin` or `time` spelled exactly, or named by a path or in
+  another case, runs as a program of its own in a child process (`Argv.external`), so a `cd`/`pushd`/`popd`,
+  assignment, `export` or `unset` there (`env cd /tmp`, `COMMAND cd`, `/usr/bin/cd`, `env D=x`) moves no directory and
+  sets no variable (review round 3); a command name made by an expansion is resolved with the variables the walk
+  knows (`X=git; $X push`), and one it can't resolve to a plain name (`g$()it`, `` r`x`m ``, `$UNSET commit`, an
+  environment variable such as `$EDITOR`) raises `UnresolvedName`, a ParseError every gate refuses where it refuses an
+  unparseable command (block-ai-attribution and enforce-pr-workflow then refuse on a writer verb alone); zsh's
+  precommand modifiers `noglob`, `nocorrect` and `-` are wrappers (review round 3); and a `git-<sub>` program (`$(git --exec-path)/git-push`) is `git <sub>`;
 - `export VAR=…`, `VAR=…; export VAR` and `declare -x` reach every later command's assignments (`GIT_DIR`),
   and so does every assignment while `set -a` / `set -o allexport` is on;
 - one pass over the whole text carries quote state across lines, so a multi-line quoted message

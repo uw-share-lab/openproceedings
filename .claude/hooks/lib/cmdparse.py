@@ -111,6 +111,10 @@ WRAPPER_VALUE_OPTS: dict[str, set[str]] = {
     "xcrun": {"-sdk", "--sdk", "-toolchain", "--toolchain"},
     "arch": {"-arch", "-d", "-e"},
     "unbuffer": set(),
+    # zsh's precommand modifiers (the Bash tool's shell may be zsh): each runs what follows (review round 3)
+    "noglob": set(),
+    "nocorrect": set(),
+    "-": set(),
 }
 # Getopt wrappers, with every option each takes (GNU's and BSD's), so a short group (`sudo -nu root`, `flock -nw5`)
 # and a long option's unique prefix (`flock --wai 5`) are read as the wrapper reads them (TASK-253). Short options
@@ -478,6 +482,12 @@ class ParseError(ValueError):
     pass
 
 
+class UnresolvedName(ParseError):
+    """A command name made by an expansion this parser can't resolve (`g$()it`, `$UNSET commit`): it may be any
+    program, git included, so a gate that refuses by the program's name reads it as one that may be its own
+    (review round 3, N2)."""
+
+
 class FailClosed(ParseError):
     """A git command that parses but can't be classified: an ambiguous abbreviated option (`git push --a`),
     or a subcommand that may be an alias defined where this parser can't read it (`--config-env`, `-c
@@ -513,6 +523,11 @@ class Argv(list):
     # `chdir_unknown`: one this parser can't resolve (`env -C "$X"`): `chdir` stays where it was, marked unknown
     chdir: str | None = None
     chdir_unknown: bool = False
+    # `external`: it runs as a program of its own, in a child process, so a `cd`/`pushd`/`popd` or an assignment,
+    # `export` or `unset` it names leaves the shell as it was: after any wrapper but `command`, `builtin` or `time`
+    # spelled exactly (`env cd`, `COMMAND cd`, `nohup export`), or named by a path or another case (`/usr/bin/cd`)
+    # (TASK-269 review round 3)
+    external: bool = False
 
     def __init__(self, words: list[str], via_xargs: bool = False, assigns: dict[str, str] | None = None):
         super().__init__(words)
@@ -1378,8 +1393,9 @@ def base(word: str) -> str:
 
 # The builtins that act on the shell itself match only as spelled: `CD /tmp` is no `cd` (it runs an external `cd`, or
 # nothing), so folding them would move this parser's directory, or set variables, where bash doesn't (an allow;
-# TASK-269 review). `command` and `time` aren't here: macOS's /usr/bin/command and /usr/bin/time run what follows, as
-# the builtins do.
+# TASK-269 review). `command` and `time` aren't here: `COMMAND git push` and `TIME rm` run git and rm (macOS's
+# /usr/bin/command and /usr/bin/time), but in a child process, so a builtin after them (`COMMAND cd`) changes nothing:
+# the walk reads that from `Argv.external`.
 CASE_SENSITIVE_NAMES = {
     ".",
     ":",
@@ -1438,8 +1454,12 @@ CASE_SENSITIVE_NAMES = {
 def fold(word: str) -> str:
     """A command's name as the system runs it: its basename, case-folded, since macOS's filesystem finds `GIT`, `RM`
     or `/usr/bin/Env` as git, rm and env; a builtin's or keyword's spelling (CASE_SENSITIVE_NAMES) is kept, since
-    bash matches those exactly (TASK-269 review). Folding only makes an unknown program a known one."""
+    bash matches those exactly (TASK-269 review). A wrapper it makes known runs what follows as a program of its
+    own, never as a builtin (`COMMAND cd /tmp` moves nothing): `_strip_prefixes` marks that `Argv.external`."""
     name = base(word)
+    # an unresolved `$X` stays as written: `$x` would be another variable (round 3)
+    if re.search(r"[$`]", name):
+        return name
     return name if name.lower() in CASE_SENSITIVE_NAMES else name.lower()
 
 
@@ -1535,6 +1555,7 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
             fold(a) in GETOPT_WRAPPERS or fold(a) == "sudoedit"
         ):  # env -i, nice -n 5, sudo -nu x, timeout -s KILL, flock -nw5 (TASK-253)
             name = fold(a)
+            out.external = True  # each runs what follows as a program of its own (round 3)
             # sudoedit is `sudo -e`, with sudo's options (TASK-269)
             edit = name == "sudoedit"
             name = "sudo" if edit else name
@@ -1581,6 +1602,8 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                     argv = [*argv[:i], "sh", "-c", *argv[i + 1 :]]
         elif fold(a) in WRAPPERS:
             name = fold(a)
+            # only `command`, `builtin` and `time` spelled exactly run a builtin in this shell (round 3)
+            out.external = out.external or a not in ("command", "builtin", "time")
             out.via_xargs = out.via_xargs or name == "xargs"
             i += 1
             while i < len(argv) and argv[i].startswith("-"):  # xargs -n 1, stdbuf -o L, watch -n 2
@@ -1597,8 +1620,19 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
         else:
             break
     rest = argv[i:]
+    if rest and re.search(r"[$`]", base(rest[0])):
+        # a command name made by an expansion: `X=git; $X push` runs git, `g$()it` and `$UNSET git` hide it. One
+        # this parser can't resolve to a plain name is a ParseError, which every gate refuses where it matters
+        # (review round 3, N2)
+        st = state or {}
+        value = expand_word(rest[0], st.get("dir"), st.get("vars", {}), env_empty=st.get("env_empty", False))
+        if not value or re.search(r"[$`]", base(value)):
+            raise UnresolvedName(f"a command name this parser can't resolve: {rest[0]!r}")
+        rest = [value, *rest[1:]]
     out.head_word = rest[0] if rest else ""
     name = fold(rest[0]) if rest else ""
+    # `/usr/bin/cd` and `Cd` are programs, never the builtin (round 3)
+    out.external = out.external or (bool(rest) and ("/" in rest[0] or base(rest[0]) != name))
     if name.startswith("git-") and len(name) > 4:  # `$(git --exec-path)/git-push` is `git push` (TASK-067)
         out[:] = ["git", name[4:], *rest[1:]]
     else:
@@ -1615,6 +1649,8 @@ def note_exports(argv: Argv, state: dict) -> bool:
     never falls back to this hook's environment for it (review gate round 3). True when `argv` was one of
     these, or `set`, which run nothing a gate checks."""
     exports, shell = state.setdefault("exports", {}), state.setdefault("vars", {})
+    if argv.external:  # `env D=x`, `COMMAND export D=x`: set in a child process, not here (round 3)
+        return False
     if not argv:
         for name, value in argv.assigns.items():
             shell[name] = value
@@ -2261,7 +2297,8 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
                     state["upstream_written"] = state.get("upstream_written") or creates_with_upstream(*g)
                 yield _context(expanded, state), d, redirects
             continue
-        if head in ("cd", "pushd", "popd"):
+        # `env cd /tmp` moves only a child (round 3)
+        if head in ("cd", "pushd", "popd") and not argv.external:
             _change_dir(head, argv[1:], state, getattr(argv, "assigns", {}))
             continue
         if head in SHELLS:

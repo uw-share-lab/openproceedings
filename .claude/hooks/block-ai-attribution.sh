@@ -47,8 +47,8 @@ HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 IFS= read -r -d '' PROG <<'PY' || true
 import glob, os, re, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
-from cmdparse import (ParseError, expand_known, expand_word, gh_subcommand, git_subcommand, join_continuations,
-                      heredoc_quoting, opt_values, read_payload, tokenize, walk)
+from cmdparse import (ParseError, UnresolvedName, _ansi_c, expand_known, expand_word, gh_subcommand, git_subcommand,
+                      join_continuations, heredoc_quoting, opt_values, read_payload, strip_prefixes, tokenize, walk)
 
 PATTERN = re.compile(
     r"co-authored-by[:=].*(claude|anthropic)|generated[ -](with|by):? +[`*_[]*((an?|the) +)?((github|microsoft|google) +)?(claude|(anthropic|openai|(chat)?gpt(-?[0-9][0-9a-z.]*)?|copilot|gemini|bard|codex|llm|ai)([^a-zA-Z0-9]|$))|🤖 generated|noreply@anthropic\.com",
@@ -251,17 +251,52 @@ def unreadable(word):
           "for AI attribution. Write the file in an earlier call, then send it.", file=sys.stderr)
     sys.exit(2)
 
+def decode_ansi_c(text):
+    """`text` with each `$'…'` span decoded as bash does (cmdparse._ansi_c), line by line: an unclosed one runs to
+    the end of its line."""
+    lines = []
+    for line in text.split("\n"):
+        parts, i = [], 0
+        while (k := line.find("$'", i)) != -1:
+            value, end, _ = _ansi_c(line, k + 2)
+            parts += [line[i:k], value]
+            i = end
+        lines.append("".join(parts) + line[i:])
+    return "\n".join(lines)
+
+FIND_EXEC = {"-exec", "-execdir", "-ok", "-okdir"}
+
+def find_commands(argv):
+    """The commands a `find` runs on what it finds (`-exec git commit -F msg.txt ;`), each read as a command of its
+    own, with the walk's context (review round 3)."""
+    out, k = [], 1
+    while k < len(argv):
+        if argv[k] in FIND_EXEC:
+            j = k + 1
+            while j < len(argv) and argv[j] not in (";", "+"):
+                j += 1
+            inner = strip_prefixes(argv[k + 1 : j])
+            if inner:
+                for attr in ("shell_vars", "olddir", "dir_unknown", "env_empty", "in_subst", "cd_stayed"):
+                    setattr(inner, attr, getattr(argv, attr))
+                inner.assigns = {**argv.assigns, **inner.assigns}
+                out.append(inner)
+            k = j
+        k += 1
+    return out
+
 def named(names, text):
     """Is one of `names` a word of `text`, in any case (`GIT` runs git on a case-blind filesystem)?"""
     return re.search(r"\b(" + "|".join(map(re.escape, sorted(names))) + r")\b", text, re.IGNORECASE) is not None
 
-def may_write(text):
+def may_write(text, hidden=False):
     """Text the walk couldn't parse, so couldn't split into commands: does it name, anywhere, a writer main() checks?
     git with a message verb, gh pr or issue with a write verb (`new` too), gh release create/edit, or any gh api (its
-    method and fields can't be read, so a read isn't told from a write) (TASK-266)."""
-    if named({"git"}, text) and named(GIT_MSG, text):
+    method and fields can't be read, so a read isn't told from a write) (TASK-266). With `hidden` (a command name it
+    can't resolve) the name may be git or gh, so a verb alone counts (round 3)."""
+    if (hidden or named({"git"}, text)) and named(GIT_MSG, text):
         return True
-    if not named({"gh"}, text):
+    if not (hidden or named({"gh"}, text)):
         return False
     return (named({"api"}, text) or named({"pr", "issue"}, text) and named(GH_PR_WRITE | GH_ISSUE_WRITE | {"new"}, text)
             or named({"release"}, text) and named(GH_RELEASE_WRITE, text))
@@ -281,18 +316,29 @@ def blocked():
 
 CMD = [""]  # the raw command, for inline_stdin
 
+def with_find(walked):
+    """The walk with each command a `find -exec` runs placed right after the find, in the find's directory."""
+    out = []
+    for argv, d, redirects in walked:
+        out.append((argv, d, redirects))
+        if argv and argv[0] == "find":
+            out += [(inner, d, []) for inner in find_commands(argv)]
+    return out
+
 def main():
     cmd, cwd = read_payload()
     CMD[0] = cmd
     if not cmd:  # no raw-text prefilter: `gi\<newline>t push` only becomes `git` after parsing (review round 6)
         sys.exit(0)
     try:
-        walked = list(walk(cmd, cwd))
+        walked = with_find(walk(cmd, cwd))
         first = len(walked)  # the walks are compared each on its own: the second starts here
         if "~" in cmd or "$" in cmd:
             # and with HOME/TMPDIR/USER read as '', which the agent's shell may have: `cd ~` then stays put (TASK-156)
-            walked += walk(cmd, cwd, env_empty=True)
-    except ParseError:
+            walked += with_find(walk(cmd, cwd, env_empty=True))
+    except ParseError as exc:
+        # a command name it can't resolve (`g$()it`, `$UNSET commit`) may be git or gh: the name isn't needed (round 3)
+        hidden = isinstance(exc, UnresolvedName)
         # unbalanced quotes: bash won't run it, but don't let it look approved; read with its line continuations
         # joined (every one, when it can't be scanned: TASK-164), then its quotes and backslashes gone, which keeps
         # every raw match and joins `'Cl''aude'` (TASK-156 review)
@@ -309,17 +355,20 @@ def main():
         # read three ways: as written, with its quotes, backslashes and the `$` of `$'…'`/`$"…"` gone (`g''it`,
         # `g$''it`), and as the words tokenize makes when it can (`$'\x67'it` is `git`) (TASK-266 review)
         readings = [raw, re.sub(r"\$?[\"'\\]", "", raw)]
+        # and with each `$'…'` decoded first, for text tokenize can't read either (`$'\x67'it commit` on a line bash
+        # runs before an unclosed quote on a later one: review round 3)
+        readings.append(re.sub(r"\$?[\"'\\]", "", decode_ansi_c(raw)))
         try:
             readings.append(" ".join(tokenize(cmd)))
         except ParseError:
             pass
         for text in readings:
             # `GIT` runs git on a case-blind filesystem (macOS): the names are read case-blind (TASK-266 review)
-            if re.search(r"\b(gh|git)\b", text, re.IGNORECASE) and re.search(r"--body-file|--notes-file|--input|--file|--field|=@|(^|\s)-[A-Za-z]*F|\b(cat|head|tail|sed)\b|\$\(\s*<", text):
+            if (hidden or re.search(r"\b(gh|git)\b", text, re.IGNORECASE)) and re.search(r"--body-file|--notes-file|--input|--file|--field|=@|(^|\s)-[A-Za-z]*F|\b(cat|head|tail|sed)\b|\$\(\s*<", text):
                 unreadable("a message file in a command this gate can't parse")
         # nor can a writer's options be read (a file option held in a variable, say): one that may be a gh or git
         # writer is refused, with or without a file option the text shows (TASK-266)
-        if any(may_write(text) for text in readings[1:]):
+        if any(may_write(text, hidden) for text in readings[1:]):
             unparsed_writer()
         sys.exit(0)
 
