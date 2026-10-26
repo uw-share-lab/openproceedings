@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-19 11:49'
-updated_date: '2026-10-25 15:16'
+updated_date: '2026-10-26 01:39'
 labels:
   - hooks
   - security
@@ -33,4 +33,6 @@ On ParseError (.claude/hooks/block-ai-attribution.sh ~line 271) the hook runs th
 2026-10-24: refuse, not widen: a command the gate can't parse has no readable options, so no file-option regex can be complete (a flag in a variable). may_write() on the joined text refuses git message verbs, gh pr/issue/release writes and any gh api; other unparseable commands stay allowed. 22 rows (the $OPT_266 row fails on dev), 2 rows flipped allow->block on purpose. 13 mutants KILLED; narrowed mutate runs (TASK-253/248/wrapper/unparseable/266/269) 0 problems; full mutate-changed stopped at 199/455, all killed (load ~270); qa-auditor reruns it in the gate.
 
 2026-10-25 (review round 1): an unparseable command is read three ways (as written; with quotes, backslashes and the $ of $'…'/$"…" removed, so g$''it reads git; as tokenize's words, so $'\x67'it reads git), both checks run on them, and gh/git match case-blind; the parsed walk case-folds command names (GIT commit runs git on macOS). 13 rows, 7 new mutants; full mutate-changed 529 mutants, all killed after one new row.
+
+2026-10-25 (review round 3, 2e74966b): when neither parse nor tokenize works, block-ai decodes $'...' with cmdparse's ANSI-C reader and reads the decoded text with quotes stripped; find -exec/-execdir/-ok/-okdir commands are read as commands; a writer named by an unresolved expansion needs only a writer verb to be refused. Case-fold moved into cmdparse (block-ai's own fold loop removed).
 <!-- SECTION:NOTES:END -->
