@@ -21,7 +21,8 @@ Close every Must and Should in the TASK-266/269 review rounds on fix/hardening-b
 - The owner stopped round-4 hardening at 2e74966b and reverted N2 (7bacedb0), with no follow-up task. This would change if the hooks ever had to contain a hostile agent; that needs a sandbox, not a better parser.
 
 ## Follow-ups
-- None. The round-4 diff was not kept in the repo; the owner declined a task.
+- None for round 4. The diff was not kept in the repo, and the owner declined a task for it.
+- [ ] task-285: a review of how cmdparse reads git config and options, held to the accident scope above. Unlike round 4's forms, a repo's real push.default or includeIf settings are what an agent meets by accident (owner, 2026-10-26).
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — no: the scope belongs in the reviewers' brief. The owner's rule is recorded in this entry, which hook reviewers should be pointed at.
