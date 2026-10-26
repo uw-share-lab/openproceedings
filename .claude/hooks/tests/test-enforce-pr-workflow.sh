@@ -383,6 +383,7 @@ check main      allow 'GIT status'
 check main      allow 'SUDO -nu root git status'                     # an upper-case getopt wrapper is stripped, options and all
 check main      block 'noglob git commit -m x'                       # zsh's precommand modifiers run what follows (round 3)
 check main      allow '$OP_UNSET_X --version'                        # no write word
+check main      block '"${OP_GIT_CLOSE:-git}" commit -m x'            # ${VAR:-word} with VAR unset reads as word (closing review)
 check feature/x allow '"$PYTHON" scripts/pull_data.py'                # a name it can't resolve is read as written (round 4)
 check feature/x allow 'git commit -m "fix: x" && "$EDITOR" CHANGELOG.md'
 check feature/x block 'GIT push origin HEAD:dev'

@@ -1618,7 +1618,11 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
         # a command name made by an expansion the walk can resolve to a plain name is read as that name (`X=git; $X
         # push` runs git); any other is read as written (review round 3)
         st = state or {}
-        value = expand_word(rest[0], st.get("dir"), st.get("vars", {}), env_empty=st.get("env_empty", False))
+        value = _default_name(rest[0], st)  # `"${PYTHON:-python3}" -m pytest` (closing review)
+        if value is None:
+            value = expand_word(
+                rest[0], st.get("dir"), st.get("vars", {}), env_empty=st.get("env_empty", False)
+            )
         if value and not re.search(r"[$`]", base(value)):
             rest = [value, *rest[1:]]
     out.head_word = rest[0] if rest else ""
@@ -1630,6 +1634,40 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
     else:
         out[:] = [name, *rest[1:]] if rest else []
     return out
+
+
+# Variables the shell sets itself, which this hook's environment may not show (closing review)
+SHELL_SET_NAME = re.compile(
+    r"(BASH|ZSH|PS)\w*|SHELL|PWD|OLDPWD|HOME|USER|LOGNAME|PATH|IFS|RANDOM|SECONDS|LINENO|PPID|UID|EUID|HOSTNAME"
+    r"|OSTYPE|MACHTYPE|TERM|_"
+)
+DEFAULT_REF = re.compile(r"\$\{(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?P<op>:?-)(?P<word>[^$`{}]*)\}")
+
+
+def _default_name(word: str, state: dict) -> str | None:
+    """A command name written `${X:-word}` or `${X-word}`, with X's value as far as it is known: set or unset earlier in
+    the command (the walk's), else this hook's environment (HOME/TMPDIR/USER also as '' in that reading), else unset.
+    `word` when X is unset (`:-`: or empty), X's value when set; None (left as written) for a variable the shell sets
+    itself that this hook can't see (`${SHELL:-ls}`) and for any other form (closing review: `"${PYTHON:-python3}"
+    -m pytest`)."""
+    m = DEFAULT_REF.fullmatch(word)
+    if not m:
+        return None
+    name, colon, default = m.group("name"), m.group("op") == ":-", m.group("word")
+    shell = state.get("vars", {})
+    if name in shell:
+        value = shell[name]
+    elif name in ENV_FALLBACK:
+        value = "" if state.get("env_empty") else os.environ.get(name, "")
+    elif name in os.environ:
+        value = os.environ[name]
+    elif SHELL_SET_NAME.fullmatch(name):
+        return None
+    else:
+        value = None
+    if value is None or (colon and value == ""):
+        return default
+    return value
 
 
 def note_exports(argv: Argv, state: dict) -> bool:

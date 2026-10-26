@@ -2538,7 +2538,7 @@ check $P allow "data-only: time cd /tmp; rm -rf data/snapshots (the keyword)" "$
 check $P allow "data-only: EXEC rm -rf data/snapshots (no EXEC program: nothing runs)" "$(payload_do 'EXEC rm -rf data/snapshots')"
 check $P block "COMMAND cd /tmp; rm backlog/tasks/x.md"          "$(payload_bl 'COMMAND cd /tmp; rm backlog/tasks/x.md')"
 
-echo "== review round 3 (security): \$'…' with no tokenize, find -exec, zsh precommand modifiers, unresolvable names"
+echo "== review round 3 (security): \$'…' with no tokenize, find -exec, zsh precommand modifiers, names made by an expansion"
 check $A block "\$'\\x67'it commit -m \$X, unclosed quote next line" "$(payload_bash $'$\'\\x67\'it commit -m "$OP_X_3"\necho \'x')"
 check $A block "G\$'\\x49'T commit -F f, unclosed quote next line"  "$(payload_bash "G\$'\\x49'T commit -F '$TMP/clean.md'"$'\n'"echo 'x")"
 check $A block "find -exec git commit -F <trailer file>"          "$(payload_bash "find . -maxdepth 0 -exec git commit -F '$TMP/msg.txt' ';'")"
@@ -2561,6 +2561,24 @@ check $P allow "data-only: \$EDITOR notes.md"                    "$(payload_do '
 check $A allow "\$EDITOR notes.md (no git or gh)"                "$(payload_bash '$EDITOR notes.md')"
 check $P allow "data-only: \$(which python3) -V"                 "$(payload_do '$(which python3) -V')"
 check $A allow "git commit -m \"fix: x\" && \"\$EDITOR\" CHANGELOG.md" "$(payload_bash 'git commit -m "fix: x" && "$EDITOR" CHANGELOG.md')"
+# closing review: ${VAR:-word} names, read with VAR's value when known, else word (GIT/RM/PYTHON unset for these rows)
+check_unset_names() {
+  local g="${GIT-}" hg="${GIT+x}" r="${RM-}" hr="${RM+x}" p="${PYTHON-}" hp="${PYTHON+x}"
+  unset GIT RM PYTHON
+  check "$@"
+  if [ -n "$hg" ]; then export GIT="$g"; fi
+  if [ -n "$hr" ]; then export RM="$r"; fi
+  if [ -n "$hp" ]; then export PYTHON="$p"; fi
+}
+check_unset_names $R block "\"\${GIT:-git}\" push origin other2"  "$(payload_bash '"${GIT:-git}" push origin other2')"
+check_unset_names $P block "data-only: \"\${RM:-rm}\" -rf data/snapshots" "$(payload_do '"${RM:-rm}" -rf data/snapshots')"
+check_unset_names $A block "\"\${GIT:-git}\" commit -F <trailer file>" "$(payload_bash "\"\${GIT:-git}\" commit -F '$TMP/msg.txt'")"
+check_unset_names $P allow "data-only: \"\${PYTHON:-python3}\" -m pytest -q" "$(payload_do '"${PYTHON:-python3}" -m pytest -q')"
+check $P allow "data-only: \"\${SECONDS:-rm}\" -rf data/snapshots (set by the shell: left as written)" "$(payload_do '"${SECONDS:-rm}" -rf data/snapshots')"
+OP_TEST_SET='ls' check $P allow "data-only: \${OP_TEST_SET:-rm} -rf data/snapshots (set to ls in the environment)" "$(payload_do '${OP_TEST_SET:-rm} -rf data/snapshots')"
+# closing review: a find's {} is the file find finds, not a message file, unless a writer reads what it prints
+check $A allow "find -exec head -1 {} + && git commit -m (clean)"  "$(payload_bash "git add -A && find docs -name '*.md' -exec head -1 {} + && git commit -m 'docs: x'")"
+check $A block "find -exec cat {} ';' | git commit -F -"          "$(payload_bash "find . -maxdepth 0 -exec cat {} ';' | git commit -F -")"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")

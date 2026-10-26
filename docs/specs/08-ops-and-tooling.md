@@ -1086,7 +1086,8 @@ them:
   another case, runs as a program of its own in a child process (`Argv.external`), so a `cd`/`pushd`/`popd`,
   assignment, `export` or `unset` there (`env cd /tmp`, `COMMAND cd`, `/usr/bin/cd`, `env D=x`) moves no directory and
   sets no variable (review round 3); a command name made by an expansion is resolved with the variables the walk
-  knows (`X=git; $X push`), and one it can't resolve is read as written; zsh's
+  knows (`X=git; $X push`), `${VAR:-word}` resolves to word when VAR is unset (in the walk and this hook's environment,
+  and not a variable the shell sets itself), and one it can't resolve is read as written; zsh's
   precommand modifiers `noglob`, `nocorrect` and `-` are wrappers (review round 3); and a `git-<sub>` program (`$(git --exec-path)/git-push`) is `git <sub>`;
 - `export VAR=…`, `VAR=…; export VAR` and `declare -x` reach every later command's assignments (`GIT_DIR`),
   and so does every assignment while `set -a` / `set -o allexport` is on;

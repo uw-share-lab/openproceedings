@@ -362,8 +362,8 @@
  {
   "label": "cat pipe not read",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "        if argv[0] in READERS:\n            sent += [(a, argv, d) for a in reader_files(argv)]",
-  "new": "        if False:\n            sent += [(a, argv, d) for a in reader_files(argv)]"
+  "old": "            sent += [(a, argv, d) for a in reader_files(argv) if not (skip_found and a == \"{}\")]",
+  "new": "            pass"
  },
  {
   "label": "dd branch removed",
@@ -7743,5 +7743,35 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "            rest = [value, *rest[1:]]\n",
   "new": "            pass\n"
+ },
+ {
+  "label": "block-ai closing: a find's {} read as a message file",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            skip_found = getattr(argv, \"from_find\", False) and not (stdin_sent or argv.in_subst)\n",
+  "new": "            skip_found = False\n"
+ },
+ {
+  "label": "block-ai closing: a find's {} skipped though a writer reads stdin",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            skip_found = getattr(argv, \"from_find\", False) and not (stdin_sent or argv.in_subst)\n",
+  "new": "            skip_found = getattr(argv, \"from_find\", False)\n"
+ },
+ {
+  "label": "cmdparse closing: ${VAR:-word} not resolved",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        value = _default_name(rest[0], st)  # `\"${PYTHON:-python3}\" -m pytest` (closing review)\n",
+  "new": "        value = None\n"
+ },
+ {
+  "label": "cmdparse closing: ${VAR:-word} takes word for an env-set VAR",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    elif name in os.environ:\n        value = os.environ[name]\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse closing: ${VAR:-word} takes word for a shell-set VAR",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    elif SHELL_SET_NAME.fullmatch(name):\n        return None\n",
+  "new": ""
  }
 ]

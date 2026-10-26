@@ -280,6 +280,7 @@ def find_commands(argv):
                 for attr in ("shell_vars", "olddir", "dir_unknown", "env_empty", "in_subst", "cd_stayed"):
                     setattr(inner, attr, getattr(argv, attr))
                 inner.assigns = {**argv.assigns, **inner.assigns}
+                inner.from_find = True  # its `{}` is each file find finds (`reader_words`)
                 out.append(inner)
             k = j
         k += 1
@@ -411,10 +412,16 @@ def main():
         for op, target in redirects:
             if reads_in(op, target) and not op.startswith("<<"):
                 sent.append((target, argv, d))
+    # a writer that reads its text from stdin (`-F -`, `--body-file -`): what a find's reader prints may be it
+    stdin_sent = any(word == "-" for word, _, _ in sent)
     for argv, d in commands:
         # a cat, head, tail or sed anywhere, in a `$(…)` or backquotes too: the walk reads the bodies
         if argv[0] in READERS:
-            sent += [(a, argv, d) for a in reader_files(argv)]
+            # a find's `{}` is what find finds, not a message file, unless what the reader prints may be sent (a pipe
+            # into a writer reading stdin, or a substitution): `find … -exec head -1 {} + && git commit -m …` (closing
+            # review)
+            skip_found = getattr(argv, "from_find", False) and not (stdin_sent or argv.in_subst)
+            sent += [(a, argv, d) for a in reader_files(argv) if not (skip_found and a == "{}")]
         elif (argv.in_subst or stdin_writer and argv[0] != "gh") and reads_unmodeled_file(argv, d):
             unresolved(" ".join(argv[:3]))
     # A file the call writes before it sends it is read here as it was before the call. When what writes it is
