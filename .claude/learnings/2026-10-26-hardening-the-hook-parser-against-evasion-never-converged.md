@@ -12,7 +12,7 @@ Close every Must and Should in the TASK-266/269 review rounds on fix/hardening-b
 ## What we learned
 - **Each parser fix opened new findings.** Round 3 reported 10 bypasses and round 4 about 12, and the automated security review added 5 more against the fixes in progress. The arithmetic-skip bypass (`((rm -rf data/snapshots) )`) came from the glob fix, which came from the variable-name fix. None of the round-4 forms is one an agent writes by accident: `touch rm; r? -rf …`, `X=env; $X rm …`, `\time cd`, `COMMAND eval cd`, `find -exec sh -c '…'`, zsh's `command cd`.
 - **Strictness cost real commands.** Refusing unresolvable command names (round-3 N2, `UnresolvedName`) blocked `"$PYTHON" -m pytest`, `$EDITOR notes.md` and `$(which python3) -V`, and the round-4 zsh fix would have blocked `command cd "$WT"; git commit`.
-- **The accidental forms are few and cheap.** The one reopened shape an agent plausibly writes, a Makefile-style `"${GIT:-git}" push` or `"${RM:-rm}" -rf …`, needed only a default rule in `expand_word` (6aed89bf).
+- **The accidental forms are few and cheap.** The one reopened shape an agent plausibly writes, a Makefile-style `"${GIT:-git}" push` or `"${RM:-rm}" -rf …`, needed only a default rule, `cmdparse._default_name`, called from `_strip_prefixes` (6aed89bf).
 
 ## Dead ends — don't repeat these
 - Treating every reviewer bypass as a Must or Should under the fix-all rule. A shell parser has no natural end to that list. An agent set on evasion can use `python3 -c 'import shutil; …'`, which no hook parses.
