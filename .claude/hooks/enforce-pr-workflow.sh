@@ -111,7 +111,7 @@ import json, os, re, shlex, subprocess, sys
 # `cd`/`pushd`/`popd` (a target it can't resolve leaves the directory unknown), `$` words, exports and the
 # assignments before `bash -c`, `bash -c`/`eval`, git aliases, and command names by basename (`/usr/bin/git`), case-folded but for builtins (`GIT`: cmdparse.fold).
 sys.path.insert(0, sys.argv[1])
-from cmdparse import (Argv, FailClosed, ParseError, UnresolvedName, base as _base, fold as _fold, expand_git_alias, expand_word, git as _git,
+from cmdparse import (Argv, FailClosed, ParseError, base as _base, fold as _fold, expand_git_alias, expand_word, git as _git,
                       git_anchored, git_config, git_config_opaque, git_dir, git_subcommand, payload, push_config,
                       push_config_risk, walk, xargs_hides_args)
 
@@ -527,8 +527,6 @@ def analyze(cmd, cwd):
             v = analyze_pass(cmd, cwd, env_empty)
             if v != "allow":
                 return v
-    except UnresolvedName:
-        return "parse-fail-name"  # a command name it can't resolve may be git (`g$()it commit`: round 3)
     except FailClosed:
         return "unreadable"  # an ambiguous option, an alias set where this gate can't read it, a config write
     except ParseError:
@@ -579,9 +577,6 @@ verdict=$(printf '%s' "$input" | python3 -c "$PROG" "$HOOK_LIB" "$hook_cwd" 2>/d
 # Fail closed: if the command can't be parsed (or the parser crashed), refuse any command whose text has git and
 # a write word in it (TASK-067 final review gate: `git push origin HEAD:d''ev <<EOF`, an unclosed heredoc bash
 # still runs, passed a plain-text match); line continuations are joined first.
-# A command name it couldn't resolve may be git itself, so then a write word alone is enough (review round 3).
-name_hidden=''
-if [ "$verdict" = "parse-fail-name" ]; then name_hidden=1; verdict="parse-fail"; fi
 if [ "$verdict" = "parse-fail" ] || { [ -z "$verdict" ] && command -v python3 >/dev/null 2>&1; }; then
   # cmdparse's one join, which joins every continuation in text it can't scan (TASK-164)
   joined=$(printf '%s' "$input" | python3 -c 'import sys
@@ -589,7 +584,7 @@ sys.path.insert(0, sys.argv[1])
 from cmdparse import join_continuations, read_payload
 print(join_continuations(read_payload()[0]))' "$HOOK_LIB" 2>/dev/null) || joined=$input
   # case-blind: `GIT commit` runs git on macOS's case-blind filesystem (review round 3)
-  if { [ -n "$name_hidden" ] || printf '%s' "$joined" | grep -Eqi 'git'; } \
+  if printf '%s' "$joined" | grep -Eqi 'git' \
      && printf '%s' "$joined" | grep -Eqi 'push|commit|merge|reset|rebase|cherry-pick|revert|[^a-z]am[^a-z]|branch|update-ref|checkout|switch|worktree|fetch|pull'; then
     verdict="opaque"
   else

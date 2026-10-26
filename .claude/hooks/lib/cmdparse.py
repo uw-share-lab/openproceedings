@@ -482,12 +482,6 @@ class ParseError(ValueError):
     pass
 
 
-class UnresolvedName(ParseError):
-    """A command name made by an expansion this parser can't resolve (`g$()it`, `$UNSET commit`): it may be any
-    program, git included, so a gate that refuses by the program's name reads it as one that may be its own
-    (review round 3, N2)."""
-
-
 class FailClosed(ParseError):
     """A git command that parses but can't be classified: an ambiguous abbreviated option (`git push --a`),
     or a subcommand that may be an alias defined where this parser can't read it (`--config-env`, `-c
@@ -1621,14 +1615,12 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
             break
     rest = argv[i:]
     if rest and re.search(r"[$`]", base(rest[0])):
-        # a command name made by an expansion: `X=git; $X push` runs git, `g$()it` and `$UNSET git` hide it. One
-        # this parser can't resolve to a plain name is a ParseError, which every gate refuses where it matters
-        # (review round 3, N2)
+        # a command name made by an expansion the walk can resolve to a plain name is read as that name (`X=git; $X
+        # push` runs git); any other is read as written (review round 3)
         st = state or {}
         value = expand_word(rest[0], st.get("dir"), st.get("vars", {}), env_empty=st.get("env_empty", False))
-        if not value or re.search(r"[$`]", base(value)):
-            raise UnresolvedName(f"a command name this parser can't resolve: {rest[0]!r}")
-        rest = [value, *rest[1:]]
+        if value and not re.search(r"[$`]", base(value)):
+            rest = [value, *rest[1:]]
     out.head_word = rest[0] if rest else ""
     name = fold(rest[0]) if rest else ""
     # `/usr/bin/cd` and `Cd` are programs, never the builtin (round 3)

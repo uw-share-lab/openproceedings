@@ -382,9 +382,9 @@ check feature/x block 'unknown-wrapper GIT-push origin HEAD:dev'
 check main      allow 'GIT status'
 check main      allow 'SUDO -nu root git status'                     # an upper-case getopt wrapper is stripped, options and all
 check main      block 'noglob git commit -m x'                       # zsh's precommand modifiers run what follows (round 3)
-check main      block 'g$()it commit -m x'                           # a name it can't resolve may be git: a write word is enough
-check main      block 'g${OP_U_3}it commit -m x'
 check main      allow '$OP_UNSET_X --version'                        # no write word
+check feature/x allow '"$PYTHON" scripts/pull_data.py'                # a name it can't resolve is read as written (round 4)
+check feature/x allow 'git commit -m "fix: x" && "$EDITOR" CHANGELOG.md'
 check feature/x block 'GIT push origin HEAD:dev'
 # documentation only: git_calls scans every word for git, so these block with or without the wrapper fold (qa round 3)
 check feature/x block 'ENV GIT push origin HEAD:dev'

@@ -3022,8 +3022,8 @@
  {
   "label": "enforce: a parse failure with a git write allowed",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "  if { [ -n \"$name_hidden\" ] || printf '%s' \"$joined\" | grep -Eqi 'git'; } \\\n",
-  "new": "  if false && { [ -n \"$name_hidden\" ] || printf '%s' \"$joined\" | grep -Eqi 'git'; } \\\n"
+  "old": "  if printf '%s' \"$joined\" | grep -Eqi 'git' \\\n",
+  "new": "  if false && printf '%s' \"$joined\" | grep -Eqi 'git' \\\n"
  },
  {
   "label": "enforce: -t inside a short cluster not read",
@@ -6716,8 +6716,8 @@
  {
   "label": "TASK-243: an unparseable call with no file option refused",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "re.search(r\"\\b(gh|git)\\b\", text, re.IGNORECASE)) and re.search(",
-  "new": "re.search(r\"\\b(gh|git)\\b\", text, re.IGNORECASE)) or re.search("
+  "old": "if re.search(r\"\\b(gh|git)\\b\", text, re.IGNORECASE) and re.search(",
+  "new": "if re.search(r\"\\b(gh|git)\\b\", text, re.IGNORECASE) or re.search("
  },
  {
   "label": "TASK-243: an inline-written file's current text not read",
@@ -7384,19 +7384,19 @@
  {
   "label": "TASK-266: git's message verbs not read",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "    if (hidden or named({\"git\"}, text)) and named(GIT_MSG, text):",
+  "old": "    if named({\"git\"}, text) and named(GIT_MSG, text):",
   "new": "    if False:"
  },
  {
   "label": "TASK-266: a message verb alone read as git",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "    if (hidden or named({\"git\"}, text)) and named(GIT_MSG, text):",
-  "new": "    if (hidden or named({\"git\"}, text)) or named(GIT_MSG, text):"
+  "old": "    if named({\"git\"}, text) and named(GIT_MSG, text):",
+  "new": "    if named({\"git\"}, text) or named(GIT_MSG, text):"
  },
  {
   "label": "TASK-266: gh writers read without gh",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "    if not (hidden or named({\"gh\"}, text)):\n        return False\n",
+  "old": "    if not named({\"gh\"}, text):\n        return False\n",
   "new": ""
  },
  {
@@ -7578,8 +7578,8 @@
  {
   "label": "TASK-266 review: the writer check reads only the raw text",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "        if any(may_write(text, hidden) for text in readings[1:]):",
-  "new": "        if any(may_write(text, hidden) for text in readings[:1]):"
+  "old": "        if any(may_write(text) for text in readings[1:]):",
+  "new": "        if any(may_write(text) for text in readings[:1]):"
  },
  {
   "label": "TASK-266 review: unparseable writer names read case-sensitively",
@@ -7590,8 +7590,8 @@
  {
   "label": "TASK-266 review: unparseable gh/git read case-sensitively by the file-option check",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "(hidden or re.search(r\"\\b(gh|git)\\b\", text, re.IGNORECASE)) and",
-  "new": "(hidden or re.search(r\"\\b(gh|git)\\b\", text)) and"
+  "old": "if re.search(r\"\\b(gh|git)\\b\", text, re.IGNORECASE) and",
+  "new": "if re.search(r\"\\b(gh|git)\\b\", text) and"
  },
  {
   "label": "cmdparse fold: command names not case-folded (TASK-269 review)",
@@ -7687,8 +7687,8 @@
  {
   "label": "enforce-pr: the parse-fail fallback reads git case-sensitively (review round 3)",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "grep -Eqi 'git'; } \\",
-  "new": "grep -Eq 'git'; } \\"
+  "old": "grep -Eqi 'git' \\",
+  "new": "grep -Eq 'git' \\"
  },
  {
   "label": "enforce-pr: the parse-fail fallback reads the write word case-sensitively (review round 3)",
@@ -7721,30 +7721,6 @@
   "new": "FIND_EXEC = {\"-exec\", \"-ok\", \"-okdir\"}"
  },
  {
-  "label": "block-ai round 3: an unresolvable name read as no writer",
-  "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "        hidden = isinstance(exc, UnresolvedName)\n",
-  "new": "        hidden = False\n"
- },
- {
-  "label": "block-ai round 3: an unresolvable name never git",
-  "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "    if (hidden or named({\"git\"}, text)) and named(GIT_MSG, text):",
-  "new": "    if named({\"git\"}, text) and named(GIT_MSG, text):"
- },
- {
-  "label": "block-ai round 3: an unresolvable name never gh",
-  "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "    if not (hidden or named({\"gh\"}, text)):",
-  "new": "    if not named({\"gh\"}, text):"
- },
- {
-  "label": "block-ai round 3: an unresolvable name's file option not refused",
-  "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "            if (hidden or re.search(r\"\\b(gh|git)\\b\", text, re.IGNORECASE)) and re.search(",
-  "new": "            if (re.search(r\"\\b(gh|git)\\b\", text, re.IGNORECASE)) and re.search("
- },
- {
   "label": "cmdparse round 3: noglob not a wrapper",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "    \"noglob\": set(),\n",
@@ -7763,21 +7739,9 @@
   "new": ""
  },
  {
-  "label": "cmdparse round 3: an unresolvable command name read as written",
-  "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        if not value or re.search(r\"[$`]\", base(value)):\n            raise UnresolvedName(",
-  "new": "        if False:\n            raise UnresolvedName("
- },
- {
   "label": "cmdparse round 3: a resolved command name not used",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        rest = [value, *rest[1:]]\n",
-  "new": ""
- },
- {
-  "label": "enforce-pr round 3: an unresolvable name read as a plain parse failure",
-  "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "        return \"parse-fail-name\"  # a command name it can't resolve may be git (`g$()it commit`: round 3)\n",
-  "new": "        return \"parse-fail\"\n"
+  "old": "            rest = [value, *rest[1:]]\n",
+  "new": "            pass\n"
  }
 ]

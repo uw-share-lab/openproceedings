@@ -2549,20 +2549,18 @@ check $A block "noglob git commit -F <trailer file>"              "$(payload_bas
 check $A block "nocorrect git commit -F <trailer file>"           "$(payload_bash "nocorrect git commit -F '$TMP/msg.txt'")"
 check $A block "- git commit -F <trailer file> (zsh's -)"         "$(payload_bash "- git commit -F '$TMP/msg.txt'")"
 check $P block "data-only: noglob rm -rf data/snapshots"          "$(payload_do 'noglob rm -rf data/snapshots')"
-# a command name it can't resolve may be any program: refused where the gate refuses what it can't parse
-check $A block "g\${OP_U}it commit -m x"                          "$(payload_bash 'g${OP_U_3}it commit -m x')"
-check $A block "g\$()it commit -m x"                              "$(payload_bash 'g$()it commit -m x')"
-check $A block "\$UNSET commit -m x"                              "$(payload_bash '$OP_UNSET_G commit -m x')"
-check $A block "\$UNSET pr create --title x"                      "$(payload_bash '$OP_UNSET_G pr create --title x')"
-check $A block "\$UNSET log -F f (a file option, no verb)"        "$(payload_bash "\$OP_UNSET_G log -F '$TMP/clean.md'")"
+# a command name made by an expansion: resolved when the walk knows its value, else read as written (round 3);
+# commands named only by a variable the hook can't see are not refused (owner decision, round 4)
 check $A allow "\$UNSET --version (no writer verb)"               "$(payload_bash '$OP_UNSET_G --version')"
 check $A block "X=Gh; \$X pr comment --body-file <trailer file>"  "$(payload_bash "X=Gh; \$X pr comment 1 --body-file '$TMP/msg.txt'")"
 check $R block "X=Git; \$X push origin other2"                    "$(payload_bash 'X=Git; $X push origin other2')"
-check $R block "g\$()it push origin other2"                       "$(payload_bash 'g$()it push origin other2')"
 check $R allow "X=git; \$X status"                                "$(payload_bash 'X=git; $X status')"
-check $P block "data-only: r\$()m -rf data/snapshots"             "$(payload_do 'r$()m -rf data/snapshots')"
-check $P block "data-only: r\${OP_U}m -rf data/snapshots"         "$(payload_do 'r${OP_U_3}m -rf data/snapshots')"
 check $P allow "data-only: X=ls; \$X data/snapshots"              "$(payload_do 'X=ls; $X data/snapshots')"
+check $P allow "data-only: \"\$PYTHON\" -m pytest -q"             "$(payload_do '"$PYTHON" -m pytest -q')"
+check $P allow "data-only: \$EDITOR notes.md"                    "$(payload_do '$EDITOR notes.md')"
+check $A allow "\$EDITOR notes.md (no git or gh)"                "$(payload_bash '$EDITOR notes.md')"
+check $P allow "data-only: \$(which python3) -V"                 "$(payload_do '$(which python3) -V')"
+check $A allow "git commit -m \"fix: x\" && \"\$EDITOR\" CHANGELOG.md" "$(payload_bash 'git commit -m "fix: x" && "$EDITOR" CHANGELOG.md')"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")

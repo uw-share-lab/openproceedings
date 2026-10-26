@@ -47,7 +47,7 @@ HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 IFS= read -r -d '' PROG <<'PY' || true
 import glob, os, re, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
-from cmdparse import (ParseError, UnresolvedName, _ansi_c, expand_known, expand_word, gh_subcommand, git_subcommand,
+from cmdparse import (ParseError, _ansi_c, expand_known, expand_word, gh_subcommand, git_subcommand,
                       join_continuations, heredoc_quoting, opt_values, read_payload, strip_prefixes, tokenize, walk)
 
 PATTERN = re.compile(
@@ -289,14 +289,13 @@ def named(names, text):
     """Is one of `names` a word of `text`, in any case (`GIT` runs git on a case-blind filesystem)?"""
     return re.search(r"\b(" + "|".join(map(re.escape, sorted(names))) + r")\b", text, re.IGNORECASE) is not None
 
-def may_write(text, hidden=False):
+def may_write(text):
     """Text the walk couldn't parse, so couldn't split into commands: does it name, anywhere, a writer main() checks?
     git with a message verb, gh pr or issue with a write verb (`new` too), gh release create/edit, or any gh api (its
-    method and fields can't be read, so a read isn't told from a write) (TASK-266). With `hidden` (a command name it
-    can't resolve) the name may be git or gh, so a verb alone counts (round 3)."""
-    if (hidden or named({"git"}, text)) and named(GIT_MSG, text):
+    method and fields can't be read, so a read isn't told from a write) (TASK-266)."""
+    if named({"git"}, text) and named(GIT_MSG, text):
         return True
-    if not (hidden or named({"gh"}, text)):
+    if not named({"gh"}, text):
         return False
     return (named({"api"}, text) or named({"pr", "issue"}, text) and named(GH_PR_WRITE | GH_ISSUE_WRITE | {"new"}, text)
             or named({"release"}, text) and named(GH_RELEASE_WRITE, text))
@@ -336,9 +335,7 @@ def main():
         if "~" in cmd or "$" in cmd:
             # and with HOME/TMPDIR/USER read as '', which the agent's shell may have: `cd ~` then stays put (TASK-156)
             walked += with_find(walk(cmd, cwd, env_empty=True))
-    except ParseError as exc:
-        # a command name it can't resolve (`g$()it`, `$UNSET commit`) may be git or gh: the name isn't needed (round 3)
-        hidden = isinstance(exc, UnresolvedName)
+    except ParseError:
         # unbalanced quotes: bash won't run it, but don't let it look approved; read with its line continuations
         # joined (every one, when it can't be scanned: TASK-164), then its quotes and backslashes gone, which keeps
         # every raw match and joins `'Cl''aude'` (TASK-156 review)
@@ -364,11 +361,11 @@ def main():
             pass
         for text in readings:
             # `GIT` runs git on a case-blind filesystem (macOS): the names are read case-blind (TASK-266 review)
-            if (hidden or re.search(r"\b(gh|git)\b", text, re.IGNORECASE)) and re.search(r"--body-file|--notes-file|--input|--file|--field|=@|(^|\s)-[A-Za-z]*F|\b(cat|head|tail|sed)\b|\$\(\s*<", text):
+            if re.search(r"\b(gh|git)\b", text, re.IGNORECASE) and re.search(r"--body-file|--notes-file|--input|--file|--field|=@|(^|\s)-[A-Za-z]*F|\b(cat|head|tail|sed)\b|\$\(\s*<", text):
                 unreadable("a message file in a command this gate can't parse")
         # nor can a writer's options be read (a file option held in a variable, say): one that may be a gh or git
         # writer is refused, with or without a file option the text shows (TASK-266)
-        if any(may_write(text, hidden) for text in readings[1:]):
+        if any(may_write(text) for text in readings[1:]):
             unparsed_writer()
         sys.exit(0)
 
