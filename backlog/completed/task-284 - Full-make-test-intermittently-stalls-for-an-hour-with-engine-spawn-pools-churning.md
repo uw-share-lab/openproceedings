@@ -3,11 +3,11 @@ id: TASK-284
 title: >-
   Full make test intermittently stalls for an hour with engine spawn pools
   churning
-status: In Progress
+status: Done
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-23 17:57'
-updated_date: '2026-10-25 15:16'
+updated_date: '2026-10-26 13:07'
 labels:
   - test
   - engine
@@ -35,3 +35,9 @@ Seen twice on 2026-10-23 in TASK-275's branch (4f47fe8f, 92295b74), both times p
 
 2026-10-25 (review round 1): pooled(snapshot, workers) decides the pool once per build or parity check; index_build_started and index_parity_ok log workers and parallel; a readable manifest with no whole-number record_count builds serially and logs one snapshot_record_count_unreadable WARNING (error: the value's type, or missing). Pool tests per served tokenizer (2, 3) and on the 5k fixture; the measurement loop committed as backend/tests/bench/normalize_crossover.py; a test pins PARALLEL_FROM at 10,000.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The hour-long stalls were test builds each spawning an 8-worker pool (about 500 interpreters a run inside xdist workers). Fixed: the test session builds serially, and callers close normalized(). The pool is now decided once per build or parity check by pooled() from the manifest's record_count (PARALLEL_FROM = 10,000, from the crossover note). An unreadable count builds serially and logs snapshot_record_count_unreadable. faulthandler_timeout is 1200. Pinned by pool tests per tokenizer, the 5k fixture, the parity part-way test and a threshold test. Full make test passed without a stall.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -1,11 +1,11 @@
 ---
 id: TASK-255
 title: 'Proxy: cut unsized request bodies that stall on the non-compare API routes'
-status: In Progress
+status: Done
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-16 23:07'
-updated_date: '2026-10-25 02:51'
+updated_date: '2026-10-26 13:07'
 labels:
   - ops
   - security
@@ -33,3 +33,9 @@ Review of the follow-ups branch (2026-10-16, security-reviewer): what is at stak
 
 2026-10-24: measured on dev: chunked bodies stopped at 65,536 bytes held API connections the full read_body (60 s), GET /search included (BodyLimit reads every method). Fix: request_buffers 65537 (one over the cap) + 411 for any chunked /api/* request (a chunked body past the cap that stalled still held the API: Go drains a closed HTTP/1.1 body). Smoke (both modes): chunked -> 411, unsized HTTP/2 stall at 64 KiB holds 0 API connections. Web paths measured: the app reads no body, nothing held past its 5 s keep-alive. Results: docs/results/2026-10-24-proxy-body-limits.md.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Unsized bodies on /api/* no longer hold API connections. request_buffers 65537 (one byte over the cap), plus a 411 for any chunked /api/* request; Go drains a closed HTTP/1.1 body, so cutting at the cap alone still held the connection. Smoke in both modes: chunked -> 411, and an unsized HTTP/2 stall at 64 KiB holds 0 API connections. Measured in docs/results/2026-10-24-proxy-body-limits.md.
+<!-- SECTION:FINAL_SUMMARY:END -->

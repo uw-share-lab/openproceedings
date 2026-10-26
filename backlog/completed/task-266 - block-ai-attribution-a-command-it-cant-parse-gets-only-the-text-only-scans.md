@@ -1,11 +1,11 @@
 ---
 id: TASK-266
 title: 'block-ai-attribution: a command it can''t parse gets only the text-only scans'
-status: In Progress
+status: Done
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-19 11:49'
-updated_date: '2026-10-26 01:39'
+updated_date: '2026-10-26 13:07'
 labels:
   - hooks
   - security
@@ -35,4 +35,12 @@ On ParseError (.claude/hooks/block-ai-attribution.sh ~line 271) the hook runs th
 2026-10-25 (review round 1): an unparseable command is read three ways (as written; with quotes, backslashes and the $ of $'…'/$"…" removed, so g$''it reads git; as tokenize's words, so $'\x67'it reads git), both checks run on them, and gh/git match case-blind; the parsed walk case-folds command names (GIT commit runs git on macOS). 13 rows, 7 new mutants; full mutate-changed 529 mutants, all killed after one new row.
 
 2026-10-25 (review round 3, 2e74966b): when neither parse nor tokenize works, block-ai decodes $'...' with cmdparse's ANSI-C reader and reads the decoded text with quotes stripped; find -exec/-execdir/-ok/-okdir commands are read as commands; a writer named by an unresolved expansion needs only a writer verb to be refused. Case-fold moved into cmdparse (block-ai's own fold loop removed).
+
+2026-10-26 (review round 4, 7bacedb0): the round-3 refusal of a command name hidden by an unresolvable expansion is reverted: it blocked "$PYTHON" -m pytest and $EDITOR f, and the owner scoped the hooks to agent mistakes, not deliberate evasion. Such a name is read as written again.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+When block-ai-attribution can't parse a command, it now reads the command's words as well as the text: with $'...' and $"..." quoting stripped and decoded, the tokenize words, and names case-blind (the fold is in cmdparse). It also reads the commands find -exec/-execdir/-ok run. A git or gh writer with a file option in an unparseable command is refused. Review round 3's refusal of command names hidden by an unresolvable expansion was reverted (it blocked "$PYTHON" -m pytest and $EDITOR f); the owner scoped the hooks to agent mistakes, not deliberate evasion (2026-10-25). Rows and mutants for each.
+<!-- SECTION:FINAL_SUMMARY:END -->

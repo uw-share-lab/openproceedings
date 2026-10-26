@@ -3,11 +3,11 @@ id: TASK-273
 title: >-
   doi_key's unquote of a percent-encoded doi.org link costs ~20x its length in
   memory
-status: In Progress
+status: Done
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-20 15:03'
-updated_date: '2026-10-26 01:39'
+updated_date: '2026-10-26 13:07'
 labels:
   - eval
   - security
@@ -33,3 +33,9 @@ Found in TASK-272's review (qa+security, 2026-10-20): urllib's unquote builds a 
 
 2026-10-25 (review rounds 1 and 2): the 329 MB -> 33.6 MB figure above held only for a bare link (docs-reviewer S1). Round 1 reads a link by position (pattern match with pos/endpos, str.count with bounds, one reversed slice): its one copy is the path reversed, 16.8 MB peak at MAX_COMPARE_LINE (16 MiB, 16,777,216 characters) whether bare, labelled or padded (was 33.6/50.3/67.1 MB). Round 2: a value that is no link was still sliced, rstripped and had its closing ')'s added back (up to 3 copies, 50.3 MB). Past caps.MAX_DOI characters only the trailing run and whitespace may follow, so the rest is checked in place and only the first MAX_DOI characters are sliced: under 0.1 MB on every no-link shape. The link branch skips trailing whitespace on its reversed copy, so rstrip no longer copies the line. Measured in docs/results/2026-10-24-doi-key-memory.md (old, round 1, round 2, now). test_doi_key_reads_the_largest_compare_line_in_bounded_memory: links under 1.1x the line, no-link values (padded, labelled, trailing '.', unbalanced '(...))', and review-methodologist's shapes) under 0.1 MB (an absolute bound, 100,000 bytes). Equivalence: frozen-copy property plus examples at the cap; exactness-guardian's diff_doi.py 0 diffs over 700,000 random values (against round 1 and against the pre-fix function), its link boundary sweep 0, and a 9,900-case no-link sweep around MAX_DOI 0 under the cap rule.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+doi_key reads a value by position. A link's one copy is its path reversed (16.8 MB at MAX_COMPARE_LINE, 16 MiB, against 329 MB before), and a value with no link is keyed from its first caps.MAX_DOI characters plus a bounded scan (under 0.1 MB). Keys are identical to before (700,000 random values and boundary sweeps, 0 diffs). A bounded-memory test holds links under 1.1x the line and no-link values under 0.1 MB. docs/results/2026-10-24-doi-key-memory.md.
+<!-- SECTION:FINAL_SUMMARY:END -->

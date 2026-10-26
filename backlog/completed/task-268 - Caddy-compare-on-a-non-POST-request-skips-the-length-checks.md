@@ -1,11 +1,11 @@
 ---
 id: TASK-268
 title: 'Caddy compare-on: a non-POST request skips the length checks'
-status: In Progress
+status: Done
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-19 11:49'
-updated_date: '2026-10-25 02:51'
+updated_date: '2026-10-26 13:07'
 labels:
   - deploy
   - security
@@ -32,3 +32,9 @@ deploy/Caddyfile's compare-on matchers check only POST, so a PUT (or other metho
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-24: built as AC #3 (the AC was revised: a proxy 405 would break a CORS preflight and differ from the API's envelope). Smoke --compare: chunked PUT /compare -> 411, sized PUT -> 405 with Allow: POST.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+With comparisons on, only a POST takes the 16 MiB /api/v1/compare path. Other methods stay under the 64 KiB cap and get the API's own 405 (a proxy 405 would break a CORS preflight). smoke --compare: chunked PUT -> 411, sized PUT -> 405 with Allow: POST.
+<!-- SECTION:FINAL_SUMMARY:END -->

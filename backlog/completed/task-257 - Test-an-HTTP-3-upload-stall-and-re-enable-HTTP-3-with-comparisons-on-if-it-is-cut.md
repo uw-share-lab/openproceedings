@@ -3,11 +3,11 @@ id: TASK-257
 title: >-
   Test an HTTP/3 upload stall and re-enable HTTP/3 with comparisons on if it is
   cut
-status: In Progress
+status: Done
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-16 23:07'
-updated_date: '2026-10-25 15:17'
+updated_date: '2026-10-26 13:07'
 labels:
   - ops
 dependencies: []
@@ -33,3 +33,9 @@ TASK-183 (PR #156) turns HTTP/3 off in the compare-on block because a stalled up
 
 2026-10-25 (review round 1): AC #1's 'within OP_READ_BODY ± 2 s' was shown for a silent stall only at read_body 20s; at the shipped 60s a silent stall is closed first by QUIC's 30 s idle timeout (30.89 s, 504), and a trickle is cut at read_body (60.10-60.14 s). Both end well within the bound's intent (no upload outlives read_body); smoke-test.sh --compare sends trickles for that reason.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+HTTP/3 is re-enabled with comparisons on. A trickling QUIC upload is cut at read_body (60.10-60.14 s at the shipped 60 s), and a silent one is closed sooner by QUIC's 30 s idle timeout. A cut upload is forwarded truncated and refused by the API, never compared. Measured with a pinned HTTP/3 curl image (deploy/smoke-h3.Dockerfile), built on every smoke run. smoke-test.sh --compare passed on 2026-10-24 and 2026-10-25.
+<!-- SECTION:FINAL_SUMMARY:END -->

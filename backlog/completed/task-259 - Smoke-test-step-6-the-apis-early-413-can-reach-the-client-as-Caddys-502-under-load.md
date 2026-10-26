@@ -3,11 +3,11 @@ id: TASK-259
 title: >-
   Smoke test step 6: the api's early 413 can reach the client as Caddy's 502
   under load
-status: In Progress
+status: Done
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-18 04:43'
-updated_date: '2026-10-25 02:51'
+updated_date: '2026-10-26 13:07'
 labels:
   - ops
   - deploy
@@ -36,3 +36,9 @@ Found by the 2026-10-17 Dependabot batch (#163): deploy/smoke-test.sh step 6 (64
 
 2026-10-24: reproduced: 150 tries per protocol under 8 busy loops (host load 14-35): HTTP/1.1 133 Caddy 413 / 12 API 413 / 5 x 502; HTTP/2 141/5/4 (broken pipe: the API refused from the header and closed mid-send). Fix in the proxy: a declared length over 64 KiB gets error 413 before any body is read, and handle_errors 413 answers in the API's exact envelope. After: 300/300 API-envelope 413 at load ~230. Smoke step 6 sends it 20x over HTTP/1.1 and HTTP/2 and compares byte for byte with the API's own 413.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The early 413 could reach a client as Caddy's 502 under load (reproduced 5/150 over HTTP/1.1, 4/150 over HTTP/2). Now a declared length over 64 KiB gets the proxy's 413 before any body is read. handle_errors 413 answers in the API's exact envelope, with Connection: close only over HTTP/1.x. After: 300/300 envelope 413s at load ~230. Smoke step 6 sends it 20x per protocol and compares byte for byte with the API's own 413.
+<!-- SECTION:FINAL_SUMMARY:END -->

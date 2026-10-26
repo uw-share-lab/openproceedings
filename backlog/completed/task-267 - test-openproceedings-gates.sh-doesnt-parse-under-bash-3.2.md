@@ -1,11 +1,11 @@
 ---
 id: TASK-267
 title: test-openproceedings-gates.sh doesn't parse under bash 3.2
-status: In Progress
+status: Done
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-19 11:49'
-updated_date: '2026-10-25 02:50'
+updated_date: '2026-10-26 13:07'
 labels:
   - hooks
   - tooling
@@ -31,3 +31,9 @@ ordinal: 174000
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-24: bash 3.2 misparses a quoted heredoc containing ( inside $(...); the program is read into SAME_PATTERN first. Table under /bin/bash 3.2: 1738 passed. Follow-up done in-branch: check_old_bash.py runs bash -n with /bin/bash 3.x in make tooling (30 files; skips elsewhere).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+bash 3.2 misread a quoted heredoc containing ( inside $(...). The table now reads that program into SAME_PATTERN first, and passes under /bin/bash 3.2. check_old_bash.py runs bash -n with /bin/bash 3.x over every Makefile SHELL_FILES script in make tooling (it skips where no bash 3 exists).
+<!-- SECTION:FINAL_SUMMARY:END -->
