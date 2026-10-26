@@ -375,6 +375,22 @@ check feature/x block 'caffeinate -i /usr/libexec/git-core/git-push origin HEAD:
 check feature/x block 'unknown-wrapper -i /usr/libexec/git-core/git-push origin HEAD:dev'   # basenamed, git-<sub> kept as its subcommand
 check main      block 'unknown-wrapper git-commit -m x'
 check feature/x allow 'unknown-wrapper git-push origin feat'          # positive control
+# command names case-folded (macOS finds GIT); builtins match only as spelled (TASK-269 review)
+check main      block 'GIT commit -m x'
+check main      block 'Sudo -u me GIT commit -m x'
+check feature/x block 'unknown-wrapper GIT-push origin HEAD:dev'
+check main      allow 'GIT status'
+check main      allow 'SUDO -nu root git status'                     # an upper-case getopt wrapper is stripped, options and all
+check main      block 'noglob git commit -m x'                       # zsh's precommand modifiers run what follows (round 3)
+check main      allow '$OP_UNSET_X --version'                        # no write word
+check main      block '"${OP_GIT_CLOSE:-git}" commit -m x'            # ${VAR:-word} with VAR unset reads as word (closing review)
+check feature/x allow '"$PYTHON" scripts/pull_data.py'                # a name it can't resolve is read as written (round 4)
+check feature/x allow 'git commit -m "fix: x" && "$EDITOR" CHANGELOG.md'
+check feature/x block 'GIT push origin HEAD:dev'
+# documentation only: git_calls scans every word for git, so these block with or without the wrapper fold (qa round 3)
+check feature/x block 'ENV GIT push origin HEAD:dev'
+check feature/x block 'NICE -n 5 git push origin HEAD:dev'
+check feature/x allow 'ENV GIT push origin feat'
 
 echo "an unparseable command with a git write word is refused (TASK-067 final review gate):"
 check main      block 'git cherry-pick x "'
@@ -665,6 +681,9 @@ check feature/x block "$BR; git push origin HEAD:d''ev"                 # deep b
 check feature/x block "git push origin HEAD:d''ev <<EOF"                # unclosed heredoc: bash still runs the push
 check feature/x block "git commit -m x <<EOF"
 check feature/x allow 'echo "unbalanced'                                # a parse failure with no git write in it
+check main      block $'GIT commit -m x <<EOF\nbody'                     # unparseable, GIT: the fallback reads it case-blind
+check feature/x block 'GIT push origin HEAD:dev "'
+check feature/x block 'git PUSH origin HEAD:dev "'                      # the write word case-blind too (fails closed)
 check feature/x block 'git push origin {x{1..4096},HEAD:dev}'          # past the brace limit: a parse error
 
 echo "final review gate: bundled -t and a trailing -- still switch branches (TASK-067):"
@@ -722,6 +741,14 @@ check_cwd main "$REPO" allow "env -C \"$WT\" git commit -m x"               # th
 check_cwd main "$REPO" allow "sudo -nD \"$WT\" git commit -m x"             # a group ending in -D: the next word
 check_cwd main "$REPO" allow "env --ch=\"$WT\" git commit -m x"             # a unique prefix of --chdir
 check_cwd main "$WT"   block 'env -C "$OP_UNSET_253" git commit -m x'      # a directory it can't resolve
+check_cwd main "$REPO" block "CD \"$WT\"; git commit -m x"                # CD is no cd: the commit runs here, on main
+# a builtin after a wrapper runs in a child process: the commit still runs here (review round 3)
+check_cwd main "$REPO" block "COMMAND cd \"$WT\"; git commit -m x"
+check_cwd main "$REPO" block "TIME cd \"$WT\"; git commit -m x"
+check_cwd main "$REPO" block "env cd \"$WT\"; git commit -m x"
+check_cwd main "$REPO" allow "command cd \"$WT\"; git commit -m x"           # the builtin: the worktree's branch
+# the getopt fold decides this one: ENV -C moves the commit into the worktree only when ENV is read as env (qa round 3)
+check_cwd main "$REPO" allow "ENV -C \"$WT\" git commit -m x"
 check_cwd main "$WT"   allow 'env -C . git commit -m x'                    # resolved from the call's cwd, not the hook's
 check feature/x block 'env -C /tmp true >> .git/config; git p origin HEAD:main'  # the shell writes ./.git/config
 

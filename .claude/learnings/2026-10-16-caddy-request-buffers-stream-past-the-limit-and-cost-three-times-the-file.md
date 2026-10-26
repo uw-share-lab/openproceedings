@@ -75,3 +75,48 @@ bounded and measured.
   `docs/results/2026-10-16-compare-proxy.md`.
 - Test: `deploy/smoke-test.sh --compare` checks the stall, the memory peak, 413, 411 and the 64 KiB cap; no
   skill change (no skill covers Caddy).
+
+## Addendum — 2026-10-24 (TASK-255, TASK-259, TASK-257, TASK-268: the other API routes, the 413 race, HTTP/3)
+Measured on the Docker stack (Caddy 2.11.7, Go 1.26.8); numbers in `docs/results/2026-10-24-proxy-body-limits.md`,
+the as-built config in `deploy/Caddyfile`, `deploy/README.md` §Comparisons and spec 08 §Deploy (commits 5888f841,
+2d4d8aa8).
+- **A cap that refuses only as it reads lets the upstream refuse first, and that becomes a 502 under load.** The
+  fix above was made for `/api/v1/compare` only; the 64 KiB routes kept forwarding a declared length over the cap.
+  With 8 busy-loop containers, 150 requests of 65,537 bytes per protocol gave three different answers: Caddy's
+  empty 413 (most), the API's JSON 413, and 9 × 502 (`write: broken pipe`: the API refused from the header and
+  closed while the proxy was still sending its buffer). Refusing a declared over-cap length before reading the
+  body (`error 413` from an `expression` matcher) and answering every proxy 413 from the 64 KiB cap in the API's
+  exact envelope, `Content-Type`, `Cache-Control`, and `Connection: close` over HTTP/1.x only (`handle_errors 413`;
+  on HTTP/3 the header made the 413 malformed, RFC 9114 §4.2: review round 1) gave 150 × the API's 413
+  on each protocol. Lesson: when a race is fixed on one route, apply it to every route behind the same cap; and
+  make the proxy's refusal indistinguishable from the upstream's, so a client gets one answer.
+- **Caddy's `handle_errors` skips the site's `header` directive.** A 502 with `web` stopped carried `server: Caddy`
+  and no HSTS; the site `header` runs only on routes that answer normally. A site-wide `handle_errors` that
+  imports the same header operations (snippet `error-headers`, imported by the 413 block too) fixes every response
+  the proxy writes from an error (`smoke-test.sh` checks a 413 on `/` and the 502).
+- **A chunked body over the cap that then stalls holds the API anyway, because Go drains a closed body.**
+  `request_buffers` one byte over the cap (65537) stops the at-cap stream-through (4 stalls of 65,536 bytes held 0
+  API connections), but 4 chunked stalls of 70,000 bytes still held 4 for the whole `read_body`: `bufferedBody`
+  opens the upstream request after the cap's error, the transport fails and closes the body, and Go's HTTP/1.1
+  server reads up to 256 KiB of a body being closed to reuse the connection, blocking on the silent client
+  (Go 1.26 `net/http` `transfer.go`, read from the source, consistent with the 59.98 s roundtrip). HTTP/2 does not
+  drain (an unsized 200,000-byte HTTP/2 stall held 0 and got 413). So every chunked `/api/*` request gets 411
+  (`header Transfer-Encoding *` sees the coding Go removes from the header map); neither the web app nor `op` sends one.
+- **It was every method, not only POST.** The API's `BodyLimit` reads any body before routing, so a stalled
+  chunked `GET /api/v1/search` held a connection too; and the compare handle took every method while its length
+  checks were `POST`-only, so a chunked `PUT` reached the 16 MiB buffer. Only a `POST` enters it now (`PUT` → the
+  API's 405). Lesson: scope a matcher's checks to exactly what enters the handle, or a method the checks skip
+  inherits the handle's looser limits.
+- **HTTP/3 back on: `read_body` cuts a trickling QUIC upload, but the cut upload is forwarded.** With a
+  Debian curl 8.14.1 built with HTTP/3 (`deploy/smoke-h3.Dockerfile`; macOS's curl, `curlimages/curl` and Alpine's
+  have none), 16 trickles were cut at `read_body` 60s (504); a stall was cut there only at `read_body 20s` (16 at
+  20.0-20.5 s). At 60 s a client that sends nothing is closed first by QUIC's 30 s idle timeout (30.89 s). Unlike HTTP/1.1 (499, context cancelled, the API never sees it), the HTTP/3 deadline
+  leaves the context alive and `bufferedBody` forwards what it read: 10 of 16 reached the API, which refused each
+  within half a second (408/429), never comparing it. Accepted and documented; a memory check of HTTP/3 after an
+  HTTP/1.1 batch measures the two protocols' buffers, so the smoke test compares a second HTTP/3 batch with a first.
+- **Pin an apt-installed tool through the base image's Debian snapshot.** An exact `curl=` pin against
+  deb.debian.org would break at the next security update (the security archive keeps only the latest version);
+  `smoke-h3.Dockerfile` points apt at the snapshot named in the image's own `debian.sources`.
+- Propagated to: `deploy/README.md` §Comparisons, spec 08 §Deploy, the `Caddyfile`'s comments, decision-035's
+  as-built note (6378d5f8), and `deploy/smoke-test.sh` (411s, 405, the API envelope on 413 under 20 tries per
+  protocol, HTTP/3 batches, error headers, a stalled web body). Still no skill: none covers Caddy.

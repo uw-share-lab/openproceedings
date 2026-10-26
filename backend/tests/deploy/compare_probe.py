@@ -4,14 +4,15 @@ they are cut and what the proxy holds meanwhile. Standard library only; it talks
 localhost and nothing else.
 
     python3 backend/tests/deploy/compare_probe.py ris <records.jsonl> <bytes> <out.ris>
-    python3 backend/tests/deploy/compare_probe.py stall <port> <cacert> <path> <declared bytes> <sent> <uploads>
+    python3 backend/tests/deploy/compare_probe.py stall <port> <cacert> <path> <declared bytes> <sent> <uploads> [<method>]
 
 `ris` writes a file of exactly `<bytes>` bytes: one record per fixture paper with an abstract, by title, venue
 and year (the first 400), each padded with `N1` note lines (no field the comparison reads) so the file fits
 the API's caps (64 lines a record, 32,768 characters a line). Prints its record count.
 
-`stall` opens `<uploads>` connections at once, each a `POST <path>` (query string included) declaring
-`<declared bytes>` and sending `<sent>` bytes of body, then stops sending. It prints `sent` once every upload
+`stall` opens `<uploads>` connections at once, each a `<method> <path>` (`POST` unless given; query string
+included) declaring `<declared bytes>` (or `chunked`: sent chunked, with no length, the last chunk never sent;
+TASK-255, TASK-268) and sending `<sent>` bytes of body, then stops sending. It prints `sent` once every upload
 has sent its bytes (the moment the proxy holds them all), then waits for each connection to end and prints one
 JSON line: how many seconds after its request's first byte the first and last were cut (read_body counts from
 there; -1 for one that failed to connect or was cut while still sending), and the status lines they got.
@@ -80,13 +81,24 @@ class Cut:
     status: str | None
 
 
-def stall(port: int, cacert: str, target: str, declared: int, sent: int, uploads: int) -> None:
+def stall(
+    port: int, cacert: str, target: str, declared: int | None, sent: int, uploads: int, method: str = "POST"
+) -> None:
+    """`declared` None: the body is sent chunked."""
     context = ssl.create_default_context(cafile=cacert)
+    length = "Transfer-Encoding: chunked" if declared is None else f"Content-Length: {declared}"
+    kind = (
+        "application/x-research-info-systems" if target.startswith("/api/v1/compare") else "application/json"
+    )
     head = (
-        f"POST {target} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n"
-        f"Content-Type: application/x-research-info-systems\r\nContent-Length: {declared}\r\n\r\n"
+        f"{method} {target} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n"
+        f"Content-Type: {kind}\r\n{length}\r\n\r\n"
     ).encode()
     line = b"N1  - " + b"x" * 1017 + b"\n"
+
+    def framed(piece: bytes) -> bytes:  # a chunk of a chunked body, or the bytes themselves
+        return piece if declared is not None else f"{len(piece):x}\r\n".encode() + piece + b"\r\n"
+
     cuts = [Cut(-1.0, "not finished") for _ in range(uploads)]
     ready = threading.Barrier(uploads + 1, timeout=WAIT)
 
@@ -105,7 +117,7 @@ def stall(port: int, cacert: str, target: str, declared: int, sent: int, uploads
                 s.sendall(head)
                 left = sent
                 while left > 0:
-                    s.sendall(line[: min(left, len(line))])
+                    s.sendall(framed(line[: min(left, len(line))]))
                     left -= min(left, len(line))
             except OSError:  # the proxy cut it before it had sent its bytes (read_body passed while sending)
                 cuts[i] = Cut(-1.0, "cut while sending")
@@ -155,8 +167,9 @@ def main() -> None:
     match sys.argv[1:]:
         case ["ris", records, size, out]:
             print(ris(Path(records), int(size), Path(out)))
-        case ["stall", port, cacert, target, declared, sent, uploads]:
-            stall(int(port), cacert, target, int(declared), int(sent), int(uploads))
+        case ["stall", port, cacert, target, declared, sent, uploads, *method] if len(method) <= 1:
+            length = None if declared == "chunked" else int(declared)
+            stall(int(port), cacert, target, length, int(sent), int(uploads), *method)
         case _:
             raise SystemExit(__doc__)
 

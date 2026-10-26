@@ -25,6 +25,7 @@ import logging
 import time
 from collections import Counter
 from collections.abc import Iterator
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,7 @@ from openproceedings.engine.index import (
     analyzer,
     normalized,
     open_index,
+    pooled,
     verify_index,
 )
 from openproceedings.logs import elapsed_ms
@@ -90,26 +92,31 @@ def check_parity(
     # a tampered snapshot may stop this loop with ParityError before iter_records reaches its own hash check
     # by the tokenizer the index was built with (an older served one, for an index a record pins)
     workers = workers if workers is not None else _cpus()
-    for record, fields in normalized(snapshot, workers, manifest["tokenizer_version"]):
-        n += 1
-        doc_id, doc = next(stored, (None, {}))
-        if doc_id != record.id:
-            missing = record.id if doc_id is None or doc_id > record.id else doc_id
-            side = (
-                "the snapshot, not in the index" if missing == record.id else "the index, not in the snapshot"
-            )
-            raise ParityError(f"{missing}: in {side}")
-        if form.abstract_kind and doc["abstract_kind"] != record.abstract_kind:
-            raise ParityError(
-                f"{record.id}: the index stores abstract_kind {doc['abstract_kind']!r}, the record's is "
-                f"{record.abstract_kind!r}"
-            )
-        for field in TEXT:
-            _first_difference(record.id, field, exact.analyze(doc[field]), fields[field])
-            if len(fields[field]) >= 2:
-                phrases += 1
-                _positions(tantivy_index, searcher, record.id, field, fields[field])
-            expected.update((field, t) for t in set(fields[field]))
+    parallel = pooled(snapshot, workers)
+    rows = normalized(snapshot, workers, manifest["tokenizer_version"], parallel)
+    with closing(rows):  # a refusal shuts its worker pool down at once, never only when collected
+        for record, fields in rows:
+            n += 1
+            doc_id, doc = next(stored, (None, {}))
+            if doc_id != record.id:
+                missing = record.id if doc_id is None or doc_id > record.id else doc_id
+                side = (
+                    "the snapshot, not in the index"
+                    if missing == record.id
+                    else "the index, not in the snapshot"
+                )
+                raise ParityError(f"{missing}: in {side}")
+            if form.abstract_kind and doc["abstract_kind"] != record.abstract_kind:
+                raise ParityError(
+                    f"{record.id}: the index stores abstract_kind {doc['abstract_kind']!r}, the record's is "
+                    f"{record.abstract_kind!r}"
+                )
+            for field in TEXT:
+                _first_difference(record.id, field, exact.analyze(doc[field]), fields[field])
+                if len(fields[field]) >= 2:
+                    phrases += 1
+                    _positions(tantivy_index, searcher, record.id, field, fields[field])
+                expected.update((field, t) for t in set(fields[field]))
     extra = next(stored, None)
     if extra is not None:
         raise ParityError(f"{extra[0]}: in the index, not in the snapshot")
@@ -124,7 +131,7 @@ def check_parity(
     log.info(
         "index_parity_ok",
         extra={"index_version": manifest["index_version"], "records": n, "terms": report.terms,
-               "phrases": phrases, "ms": elapsed_ms(started)},
+               "phrases": phrases, "workers": workers, "parallel": parallel, "ms": elapsed_ms(started)},
     )  # fmt: skip
     return report
 

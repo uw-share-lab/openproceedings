@@ -164,8 +164,8 @@
  {
   "label": "absolute path not basenamed",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    name = base(rest[0]) if rest else \"\"",
-  "new": "    name = rest[0] if rest else \"\""
+  "old": "    name = base(word)\n",
+  "new": "    name = word\n"
  },
  {
   "label": "comments not stripped",
@@ -362,8 +362,8 @@
  {
   "label": "cat pipe not read",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "        if argv[0] in READERS:\n            sent += [(a, argv, d) for a in reader_files(argv)]",
-  "new": "        if False:\n            sent += [(a, argv, d) for a in reader_files(argv)]"
+  "old": "            sent += [(a, argv, d) for a in reader_files(argv) if not (skip_found and a == \"{}\")]",
+  "new": "            pass"
  },
  {
   "label": "dd branch removed",
@@ -428,8 +428,8 @@
  {
   "label": "PR gate: git not basenamed",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "        prog = _base(w)",
-  "new": "        prog = w"
+  "old": "        prog = _fold(w)  # `GIT-push` too: macOS finds it case-blind\n",
+  "new": "        prog = w.lower()\n"
  },
  {
   "label": "record: on_base check removed",
@@ -2310,8 +2310,8 @@
  {
   "label": "cmdparse: pushd not tracked",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        if head in (\"cd\", \"pushd\", \"popd\"):",
-  "new": "        if head in (\"cd\", \"popd\"):"
+  "old": "        if head in (\"cd\", \"pushd\", \"popd\") and not argv.external:",
+  "new": "        if head in (\"cd\", \"popd\") and not argv.external:"
  },
  {
   "label": "cmdparse: popd doesn't pop",
@@ -3022,8 +3022,8 @@
  {
   "label": "enforce: a parse failure with a git write allowed",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "  if printf '%s' \"$joined\" | grep -Eq 'git' \\\n",
-  "new": "  if false && printf '%s' \"$joined\" | grep -Eq 'git' \\\n"
+  "old": "  if printf '%s' \"$joined\" | grep -Eqi 'git' \\\n",
+  "new": "  if false && printf '%s' \"$joined\" | grep -Eqi 'git' \\\n"
  },
  {
   "label": "enforce: -t inside a short cluster not read",
@@ -6716,8 +6716,8 @@
  {
   "label": "TASK-243: an unparseable call with no file option refused",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "if re.search(r\"\\b(gh|git)\\b\", raw) and re.search(",
-  "new": "if re.search(r\"\\b(gh|git)\\b\", raw) or re.search("
+  "old": "if re.search(r\"\\b(gh|git)\\b\", text, re.IGNORECASE) and re.search(",
+  "new": "if re.search(r\"\\b(gh|git)\\b\", text, re.IGNORECASE) or re.search("
  },
  {
   "label": "TASK-243: an inline-written file's current text not read",
@@ -7367,5 +7367,411 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "                if writes_git_config(Argv([]), redirects, state):\n                    state[\"config_written\"] = True\n                yield _context",
   "new": "                yield _context"
+ },
+ {
+  "label": "TASK-266: an unparseable writer allowed",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            unparsed_writer()\n",
+  "new": "            pass\n"
+ },
+ {
+  "label": "TASK-266: the unparseable-writer check keeps the quotes (g''it) - equivalent since round 3: the $'\u2026'-decoded reading strips the same quotes, and differs only inside a $'\u2026' span, where it reads what bash reads",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        readings = [raw, re.sub(r\"\\$?[\\\"'\\\\]\", \"\", raw)]\n",
+  "new": "        readings = [raw, raw]\n",
+  "equivalent": true
+ },
+ {
+  "label": "TASK-266: git's message verbs not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    if named({\"git\"}, text) and named(GIT_MSG, text):",
+  "new": "    if False:"
+ },
+ {
+  "label": "TASK-266: a message verb alone read as git",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    if named({\"git\"}, text) and named(GIT_MSG, text):",
+  "new": "    if named({\"git\"}, text) or named(GIT_MSG, text):"
+ },
+ {
+  "label": "TASK-266: gh writers read without gh",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    if not named({\"gh\"}, text):\n        return False\n",
+  "new": ""
+ },
+ {
+  "label": "TASK-266: gh api not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    return (named({\"api\"}, text) or named(",
+  "new": "    return (named("
+ },
+ {
+  "label": "TASK-266: gh pr/issue read without a write verb",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": " named({\"pr\", \"issue\"}, text) and named(GH_PR_WRITE | GH_ISSUE_WRITE | {\"new\"}, text)",
+  "new": " named({\"pr\", \"issue\"}, text)"
+ },
+ {
+  "label": "TASK-266: a write verb read without pr/issue",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": " named({\"pr\", \"issue\"}, text) and named(GH_PR_WRITE | GH_ISSUE_WRITE | {\"new\"}, text)",
+  "new": " named(GH_PR_WRITE | GH_ISSUE_WRITE | {\"new\"}, text)"
+ },
+ {
+  "label": "TASK-266: gh pr new not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "GH_PR_WRITE | GH_ISSUE_WRITE | {\"new\"}",
+  "new": "GH_PR_WRITE | GH_ISSUE_WRITE"
+ },
+ {
+  "label": "TASK-266: gh release writers not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "\n            or named({\"release\"}, text) and named(GH_RELEASE_WRITE, text))",
+  "new": ")"
+ },
+ {
+  "label": "TASK-266: gh release read without a write verb",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "or named({\"release\"}, text) and named(GH_RELEASE_WRITE, text))",
+  "new": "or named({\"release\"}, text))"
+ },
+ {
+  "label": "TASK-266: a release verb read without release",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "or named({\"release\"}, text) and named(GH_RELEASE_WRITE, text))",
+  "new": "or named(GH_RELEASE_WRITE, text))"
+ },
+ {
+  "label": "TASK-266: names matched inside words",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    return re.search(r\"\\b(\" + \"|\".join(map(re.escape, sorted(names))) + r\")\\b\", text, re.IGNORECASE) is not None",
+  "new": "    return re.search(r\"(\" + \"|\".join(map(re.escape, sorted(names))) + r\")\", text, re.IGNORECASE) is not None"
+ },
+ {
+  "label": "TASK-269: sudoedit not a wrapper",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "fold(a) in GETOPT_WRAPPERS or fold(a) == \"sudoedit\"",
+  "new": "fold(a) in GETOPT_WRAPPERS"
+ },
+ {
+  "label": "TASK-269: sudoedit not an edit",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            edit = name == \"sudoedit\"\n",
+  "new": "            edit = False\n"
+ },
+ {
+  "label": "TASK-269: sudoedit's options not read as sudo's",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            name = \"sudo\" if edit else name\n",
+  "new": ""
+ },
+ {
+  "label": "TASK-269: sudo -e not an edit",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                edit = edit or (name == \"sudo\" and opt == \"-e\")\n",
+  "new": "                edit = edit\n"
+ },
+ {
+  "label": "TASK-269: sudo -E read as the edit",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(name == \"sudo\" and opt == \"-e\")",
+  "new": "(name == \"sudo\" and opt == \"-E\")"
+ },
+ {
+  "label": "TASK-269: any wrapper's -e read as an edit (flock -e is exclusive)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(name == \"sudo\" and opt == \"-e\")",
+  "new": "(opt == \"-e\")"
+ },
+ {
+  "label": "TASK-269: the edited files also read as a command",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    out.creates += [(d, f) for f in argv[i:]]\n                i = len(argv)\n",
+  "new": "                    out.creates += [(d, f) for f in argv[i:]]\n"
+ },
+ {
+  "label": "TASK-269: the first edited file skipped",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "out.creates += [(d, f) for f in argv[i:]]",
+  "new": "out.creates += [(d, f) for f in argv[i + 1 :]]"
+ },
+ {
+  "label": "TASK-269: sudo -D -e read only from -D's directory",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "for d in dict.fromkeys([here, out.chdir or here]):",
+  "new": "for d in dict.fromkeys([out.chdir or here]):"
+ },
+ {
+  "label": "TASK-269: sudo -D -e read only from the shell's directory",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "for d in dict.fromkeys([here, out.chdir or here]):",
+  "new": "for d in dict.fromkeys([here]):"
+ },
+ {
+  "label": "TASK-269: the shell's directory not known to sudo -e",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                here = state[\"dir\"] if state is not None else \"\"\n                for d in",
+  "new": "                here = \"\"\n                for d in"
+ },
+ {
+  "label": "TASK-269: sudo -e with -R not refused",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                raise ParseError(\"sudo -e with -R: the files are read inside a chroot\")\n",
+  "new": "                pass\n"
+ },
+ {
+  "label": "TASK-269: -R refused without -e",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if edit and chroot:\n",
+  "new": "            if chroot:\n"
+ },
+ {
+  "label": "TASK-269: sudo -r (a role) read as the chroot",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "chroot = chroot or (name == \"sudo\" and opt == \"-R\")",
+  "new": "chroot = chroot or (name == \"sudo\" and opt in (\"-R\", \"-r\"))"
+ },
+ {
+  "label": "TASK-269: -R before -e forgotten (chroot reset per option)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                chroot = chroot or (name == \"sudo\" and opt == \"-R\")\n",
+  "new": "                chroot = name == \"sudo\" and opt == \"-R\"\n"
+ },
+ {
+  "label": "check_old_bash: a failing file not reported",
+  "file": ".claude/scripts/check_old_bash.py",
+  "old": "        if r.returncode != 0:\n            bad.append(",
+  "new": "        if False:\n            bad.append("
+ },
+ {
+  "label": "check_old_bash: every version checked as 3.x",
+  "file": ".claude/scripts/check_old_bash.py",
+  "old": "    if version != \"3\":\n",
+  "new": "    if False:\n"
+ },
+ {
+  "label": "check_old_bash: an unreadable version skipped",
+  "file": ".claude/scripts/check_old_bash.py",
+  "old": "        return 1\n    if version != \"3\":",
+  "new": "        return 0\n    if version != \"3\":"
+ },
+ {
+  "label": "check_old_bash: a missing bash fails",
+  "file": ".claude/scripts/check_old_bash.py",
+  "old": "        print(f\"check_old_bash: skipped ({args.bash} not found)\")\n        return 0\n",
+  "new": "        print(f\"check_old_bash: skipped ({args.bash} not found)\")\n        return 1\n"
+ },
+ {
+  "label": "TASK-266 review: `$'`/`$\"` left in the plain stripped reading (g$''it) - equivalent since round 3: the decoded reading drops the same `$`",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        readings = [raw, re.sub(r\"\\$?[\\\"'\\\\]\", \"\", raw)]\n",
+  "new": "        readings = [raw, re.sub(r\"[\\\"'\\\\]\", \"\", raw)]\n",
+  "equivalent": true
+ },
+ {
+  "label": "TASK-266 review: tokenize's words not read for a writer - equivalent since round 3: every name tokenize decodes (`$'\\x67'it`, `g''it`, `$\"git\"`) the decoded reading also reads",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            readings.append(\" \".join(tokenize(cmd)))\n",
+  "new": "            pass\n",
+  "equivalent": true
+ },
+ {
+  "label": "TASK-266 review: the writer check reads only the raw text",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if any(may_write(text) for text in readings[1:]):",
+  "new": "        if any(may_write(text) for text in readings[:1]):"
+ },
+ {
+  "label": "TASK-266 review: unparseable writer names read case-sensitively",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "+ r\")\\b\", text, re.IGNORECASE) is not None",
+  "new": "+ r\")\\b\", text) is not None"
+ },
+ {
+  "label": "TASK-266 review: unparseable gh/git read case-sensitively by the file-option check",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "if re.search(r\"\\b(gh|git)\\b\", text, re.IGNORECASE) and",
+  "new": "if re.search(r\"\\b(gh|git)\\b\", text) and"
+ },
+ {
+  "label": "cmdparse fold: command names not case-folded (TASK-269 review)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    return name if name.lower() in CASE_SENSITIVE_NAMES else name.lower()\n",
+  "new": "    return name\n"
+ },
+ {
+  "label": "cmdparse fold: builtins folded too (CD moves the directory; TASK-269 review)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    return name if name.lower() in CASE_SENSITIVE_NAMES else name.lower()\n",
+  "new": "    return name.lower()\n"
+ },
+ {
+  "label": "cmdparse fold: export folded - equivalent since round 3: a case-changed name is Argv.external, so note_exports leaves EXPORT's variable unset either way",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"export\",\n",
+  "new": "",
+  "equivalent": true
+ },
+ {
+  "label": "cmdparse fold: getopt wrappers matched as spelled (SUDO; TASK-269 review)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            fold(a) in GETOPT_WRAPPERS or fold(a) == \"sudoedit\"\n        ):  # env -i, nice -n 5, sudo -nu x, timeout -s KILL, flock -nw5 (TASK-253)\n            name = fold(a)",
+  "new": "            base(a) in GETOPT_WRAPPERS or base(a) == \"sudoedit\"\n        ):  # env -i, nice -n 5, sudo -nu x, timeout -s KILL, flock -nw5 (TASK-253)\n            name = base(a)"
+ },
+ {
+  "label": "cmdparse fold: other wrappers matched as spelled (XARGS, NOHUP; TASK-269 review)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif fold(a) in WRAPPERS:\n            name = fold(a)",
+  "new": "        elif base(a) in WRAPPERS:\n            name = base(a)"
+ },
+ {
+  "label": "cmdparse fold: the command's name matched as spelled (TASK-269 review)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    name = fold(rest[0]) if rest else \"\"\n",
+  "new": "    name = base(rest[0]) if rest else \"\"\n"
+ },
+ {
+  "label": "enforce-pr: a git word inside another command matched as spelled (TASK-269 review)",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        prog = _fold(w)  # `GIT-push` too: macOS finds it case-blind\n",
+  "new": "        prog = _base(w)\n"
+ },
+ {
+  "label": "cmdparse external: a getopt wrapper's command read as a builtin (env cd; round 3)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            out.external = True  # each runs what follows as a program of its own (round 3)\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse external: another wrapper's command read as a builtin (COMMAND cd, nohup cd; round 3)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            out.external = out.external or a not in (\"command\", \"builtin\", \"time\")\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse external: COMMAND/TIME read as the builtin command/time (round 3)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "a not in (\"command\", \"builtin\", \"time\")",
+  "new": "fold(a) not in (\"command\", \"builtin\", \"time\")"
+ },
+ {
+  "label": "cmdparse external: builtin cd read as a program (round 3)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "a not in (\"command\", \"builtin\", \"time\")",
+  "new": "a not in (\"command\", \"time\")"
+ },
+ {
+  "label": "cmdparse external: time cd read as a program (round 3)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "a not in (\"command\", \"builtin\", \"time\")",
+  "new": "a not in (\"command\", \"builtin\")"
+ },
+ {
+  "label": "cmdparse external: /usr/bin/cd read as the builtin (round 3)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    out.external = out.external or (bool(rest) and (\"/\" in rest[0] or base(rest[0]) != name))\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse external: an assignment in a child sets the shell's variable (round 3)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if argv.external:  # `env D=x`, `COMMAND export D=x`: set in a child process, not here (round 3)\n        return False\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse external: a child's cd moves the walk (round 3)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        if head in (\"cd\", \"pushd\", \"popd\") and not argv.external:",
+  "new": "        if head in (\"cd\", \"pushd\", \"popd\"):"
+ },
+ {
+  "label": "enforce-pr: the parse-fail fallback reads git case-sensitively (review round 3)",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "grep -Eqi 'git' \\",
+  "new": "grep -Eq 'git' \\"
+ },
+ {
+  "label": "enforce-pr: the parse-fail fallback reads the write word case-sensitively (review round 3)",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "grep -Eqi 'push|commit|",
+  "new": "grep -Eq 'push|commit|"
+ },
+ {
+  "label": "block-ai round 3: the \\$'\u2026'-decoded reading not made",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        readings.append(re.sub(r\"\\$?[\\\"'\\\\]\", \"\", decode_ansi_c(raw)))\n",
+  "new": ""
+ },
+ {
+  "label": "block-ai round 3: a \\$'\u2026' span's value dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            parts += [line[i:k], value]\n",
+  "new": "            parts += [line[i:k]]\n"
+ },
+ {
+  "label": "block-ai round 3: find -exec's command not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            out += [(inner, d, []) for inner in find_commands(argv)]\n",
+  "new": "            pass\n"
+ },
+ {
+  "label": "block-ai round 3: find -execdir not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "FIND_EXEC = {\"-exec\", \"-execdir\", \"-ok\", \"-okdir\"}",
+  "new": "FIND_EXEC = {\"-exec\", \"-ok\", \"-okdir\"}"
+ },
+ {
+  "label": "cmdparse round 3: noglob not a wrapper",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"noglob\": set(),\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse round 3: nocorrect not a wrapper",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"nocorrect\": set(),\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse round 3: zsh's - not a wrapper",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"-\": set(),\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse round 3: a resolved command name not used",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            rest = [value, *rest[1:]]\n",
+  "new": "            pass\n"
+ },
+ {
+  "label": "block-ai closing: a find's {} read as a message file",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            skip_found = getattr(argv, \"from_find\", False) and not (stdin_sent or argv.in_subst)\n",
+  "new": "            skip_found = False\n"
+ },
+ {
+  "label": "block-ai closing: a find's {} skipped though a writer reads stdin",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            skip_found = getattr(argv, \"from_find\", False) and not (stdin_sent or argv.in_subst)\n",
+  "new": "            skip_found = getattr(argv, \"from_find\", False)\n"
+ },
+ {
+  "label": "cmdparse closing: ${VAR:-word} not resolved",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        value = _default_name(rest[0], st)  # `\"${PYTHON:-python3}\" -m pytest` (closing review)\n",
+  "new": "        value = None\n"
+ },
+ {
+  "label": "cmdparse closing: ${VAR:-word} takes word for an env-set VAR",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    elif name in os.environ:\n        value = os.environ[name]\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse closing: ${VAR:-word} takes word for a shell-set VAR",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    elif SHELL_SET_NAME.fullmatch(name):\n        return None\n",
+  "new": ""
  }
 ]

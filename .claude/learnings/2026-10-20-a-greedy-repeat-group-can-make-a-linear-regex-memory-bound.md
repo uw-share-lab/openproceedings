@@ -38,3 +38,24 @@ in a row there (10.3x and 11.3x CPU for 4x the input; the limit is 8x), but pass
 ## Propagated to
 - Skill: `.claude/skills/testing-standards/SKILL.md` §7 (possessive repeats on untrusted input, and a `tracemalloc` bound).
 - Test: `tests/timing.py` `peak_bytes`, used by `backend/tests/unit/test_scholar_compare.py`, `backend/tests/unit/ingest/test_record.py` and `backend/tests/unit/ingest/test_html.py`.
+
+## Addendum — 2026-10-24 (TASK-273: doi_key's unquote)
+- **Bound a decoder's input by the output cap times the decoding's largest expansion, and refuse past it before
+  decoding.** urllib's `unquote` holds about 20 bytes a character, ~329 MB on a link at `MAX_COMPARE_LINE` (16 MiB, 16,777,216 characters)
+  against a file's ~250 MB budget. A DOI longer than `caps.MAX_DOI` (1,000) names no record (decision-053), and a
+  character unquotes from at most 12 (four UTF-8 bytes of three characters each), so a link path over
+  `_MAX_ENCODED_DOI = 12 * caps.MAX_DOI` is refused unread, and only the part before the trailing run is unquoted
+  (the run is read percent-encoded on the reversed path, in one possessive pass). Peak 329 MB → 34 MB (the path's
+  two copies) (evidence: `scholar_compare.py` `doi_key`; spec 07; commit e8539317).
+- **Count the copies on every form of the value, not only the bare one.** Round 1's 34 MB held for a bare link
+  only: `strip()` and the label's slice each copied the line again, 50 MB labelled and 67 MB padded (review round
+  1). Reading by position (`pattern.match(text, pos, endpos)`, `str.count(sub, start, end)`, one reversed slice
+  `text[end - 1 : start - 1 : -1]`) leaves one copy, 16.8 MB on every form of a link. Round 2 found the same on the no-link branch (three
+  copies, 50 MB): past the cap only the trailing run and whitespace may follow, so it reads the rest in place
+  and slices only the first `caps.MAX_DOI` characters (docs/results/2026-10-24-doi-key-memory.md).
+- **A rewrite of a matcher keeps its answers only if a frozen copy says so.** The old `doi_key` is kept in the test
+  file and a property checks the new one equals it on every value that keys within the cap
+  (`test_doi_key_is_the_frozen_function_up_to_the_doi_cap`), with the memory bound tested in bytes as above
+  (`test_doi_key_reads_the_largest_compare_line_in_bounded_memory`, under 1.1× the line, bare, labelled and padded).
+- Propagated to: spec 07 §B. Scholar comparison (the bound and why); no skill change, since `testing-standards` §7
+  already asks for a `tracemalloc` bound on untrusted input.

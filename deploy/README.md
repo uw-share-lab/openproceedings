@@ -16,6 +16,7 @@ that is TASK-064's decision. The requirements behind each setting are in
 | `caddy.Dockerfile` | Caddy with the Caddyfile, as user `caddy` (uid 10002) |
 | `index-permissions.sh` | gives `op-api` read access to one index version (§Permissions) |
 | `smoke-test.sh` | the whole stack over a throwaway fixture (§Trying it locally) |
+| `smoke-h3.Dockerfile` | an HTTP/3 client (curl) that `smoke-test.sh --compare` builds and runs against the stack; never part of it. Its packages come from the Debian snapshot its base image was built from, curl at an exact version |
 
 Every base image is pinned by digest (`make tooling` checks it, and Dependabot bumps it). Every container
 has a read-only root filesystem, drops all capabilities and sets `no-new-privileges`. `api` and `web` sit on
@@ -262,7 +263,8 @@ was listed keeps it withheld until a rebuild without the id is promoted.
 are off on this stack: `op serve` behind a proxy doesn't offer them unless told to. Turning them on is your
 decision as the operator (decision-035), with `deploy/compare.yml` (below), and not before
 `deploy/smoke-test.sh --compare` has passed on your host (decision-035; it passed on Docker Desktop on
-2026-10-16, TASK-183). What it means:
+2026-10-16, TASK-183, and the current test again on 2026-10-24 and 2026-10-25,
+`docs/results/2026-10-24-proxy-body-limits.md`). What it means:
 
 - anyone can upload a RIS file of up to 16 MiB and 5,000 records. It is read in memory for that one request
   and dropped: never written to disk, never logged (the access line has counts only), never added to the
@@ -308,11 +310,13 @@ dc up -d --build   # caddy's image holds the Caddyfile: rebuild it if yours pred
   `--compare` added; `smoke-test.sh --compare` checks they stay that way). With `--compare` the network pause
   above applies (an instance on by the loopback default has none).
 - **`caddy`** gets `OP_COMPARE=on`. The `Caddyfile` then imports its `compare-on` snippet instead of
-  `compare-off`: the API's 64 KiB body cap stays on every other path (`request_body @rest`, `@rest` being
-  `not path /api/v1/compare`; a site-wide cap would wrap the comparison path's handle and refuse the file
-  first), and `/api/v1/compare` alone gets `request_body` and `request_buffers` of 16MiB, so the proxy reads
-  the whole file before it asks the API. The units matter: Caddy's `16MB` is 16,000,000 bytes, under the
-  16,777,216 the API advertises in `limits.compare.max_body_bytes`, and its `64KB` is 64,000, under the API's
+  `compare-off`: the API's 64 KiB body cap stays on every other request (`request_body @rest`, `@rest` being
+  anything but a `POST` to `/api/v1/compare`; a site-wide cap would wrap the comparison's handle and refuse
+  the file first), and a `POST` to `/api/v1/compare` alone gets `request_body` and `request_buffers` of 16MiB,
+  so the proxy reads the whole file before it asks the API. Any other method there is an ordinary API request
+  under the 64 KiB cap, which the API answers (405 with `Allow: POST`; a chunked one gets the proxy's 411,
+  below); before, a chunked `PUT` entered the handle and skipped its length checks (TASK-268). The units
+  matter: Caddy's `16MB` is 16,000,000 bytes, under the 16,777,216 the API advertises in `limits.compare.max_body_bytes`, and its `64KB` is 64,000, under the API's
   own 65,536 (`64KiB` now, on every path). A `POST` there must declare a `Content-Length` (411 otherwise):
   past `request_buffers` Caddy streams the rest of a body on to the API, so a chunked (or HTTP/2, unsized)
   file that went over 16 MiB and then stalled reached the API and held its one slot until the API's own
@@ -321,24 +325,19 @@ dc up -d --build   # caddy's image holds the Caddyfile: rebuild it if yours pred
   connection while the proxy was still sending, which reached the client as a 502 in one smoke run of five,
   the other four getting 413); a length that isn't 1 to 18 plain digits gets 400 (over HTTP/2 Go passes it on to
   Caddy, whose arithmetic on it would fail into a 500); browsers
-  declare a file's length (Chromium over HTTP/2 did). The server
-  also stops speaking HTTP/3 (`protocols h1 h2`): no stall over QUIC has been run against this block (TASK-257). Caddy
-  builds its HTTP/3 server with only the idle timeout, and `read_body` reaches a QUIC stream only through the
-  per-request read deadline Caddy sets since 2.11.6 (`modules/caddyhttp/server.go`); until a stall is shown
-  to be cut there, an upload stalled over QUIC might hold its buffer for as long as the client keeps the
-  connection alive. Any
+  declare a file's length (Chromium over HTTP/2 did). The server keeps speaking HTTP/3: `read_body` reaches a
+  QUIC stream through the per-request read deadline Caddy sets since 2.11.6: an HTTP/3 upload that trickled a
+  byte a second was cut at `read_body`, and one that stalls, sending nothing, is closed sooner by QUIC's 30 s
+  idle timeout (TASK-257, below). Any
   value of `OP_COMPARE` but `on` or `off` names a snippet (or file) that doesn't exist, and Caddy refuses to
   start.
 - **`caddy`** also gets `OP_READ_BODY` (default `60s`: a 16 MiB file then needs more than 2.24 Mbit/s), a
   memory limit `OP_CADDY_MEM_LIMIT` (default `1g`, with no swap on top) and `GOMEMLIMIT`
   `OP_CADDY_GOMEMLIMIT` (default `800MiB`: Go collects harder as the heap nears it, well before the kernel's
   limit). **`read_body` is a timeout of the whole server**, every path, not of the comparison path: Caddy has
-  no per-path setting for it, so a slow client of any route is now cut after 60 s rather than 10. The other
-  API routes don't require a `Content-Length` yet (with the overlay or without it): an unsized body there that
-  reaches the 64 KiB `request_buffers` and stalls is streamed on to the API, and may hold one of its 256
-  `limit_concurrency` connections until `read_body` runs out, so about 256 such requests (some 16 MiB in all)
-  could hold every API connection, searches included (inferred from the comparison path, not measured on
-  those routes; alert on the rate of uvicorn's `Exceeded concurrency limit.` lines; open: TASK-255).
+  no per-path setting for it, so a slow client of any route is now cut after 60 s rather than 10. A slow client
+  holds a proxy goroutine there, never an API connection: every other API request's body is read whole by the
+  proxy before the API is asked (§The body cap on the other routes).
 
 What was measured on this stack with `compare.yml`'s defaults (TASK-183, 2026-10-16: Docker Desktop, engine
 24.0.7, on an 8-CPU Mac shared with other builds; caddy 2.11.7, with 2.11.4's figures close to these; the raw
@@ -367,21 +366,74 @@ uploads held at once reached its edge (peaks of 890 to 998 MiB) and 32 did not f
 address or many, and Caddy as built here limits
 neither connections nor uploads per client. That bound is not built here yet. The owner decided on 2026-10-17
 (TASK-256) where it goes: a per-source connection limit in front of Caddy at the host, for example nftables
-`connlimit` on 443, set once TASK-064 chooses the host. There will be no custom Caddy build. That caps what one
-address can hold; many addresses together can still reach the memory limit, which then restarts the proxy as now.
+`connlimit`, on TCP and UDP 443 (QUIC: HTTP/3 is on, TASK-257), set once TASK-064 chooses the host. There will be
+no custom Caddy build. That caps the connections one address can hold, not its uploads: HTTP/2 and HTTP/3 carry
+many uploads on one connection. Many addresses together can still reach the memory limit, which then restarts
+the proxy as now.
 Until it is set, size `OP_CADDY_MEM_LIMIT` as above and expect a restart past it.
 
 A stalled upload was cut by the proxy when `read_body` ran out (60 s after its request started, sending
 included) and never reached the API: with uploads stalled in the proxy, a whole 16 MiB comparison ran at once
 (200), and the API logged only that one. That was measured over HTTP/1.1; a stall over HTTP/2 was not
 measured. A cut upload gets `499` from Caddy 2.11.7 (2.11.4 wrote an empty `200`), and the API logged none
-of them: a client sees no comparison in it. A file one byte over 16 MiB gets 413, one with no length 411 and
-one with a length that isn't 1 to 18 plain digits 400, all from the proxy, as plain text rather than the API's JSON
-error (the smoke test checks the 413's text).
+of them: a client sees no comparison in it. Over HTTP/3 (TASK-257, 2026-10-24,
+[`docs/results/2026-10-24-proxy-body-limits.md`](../docs/results/2026-10-24-proxy-body-limits.md)) an upload
+that trickled a byte a second was cut at `read_body` too (60.10 to 60.14 s, 8 at once, in the logged runs). One
+that stalls, sending nothing, is closed sooner at this `read_body` of 60 s, by QUIC's 30 s idle timeout
+(30.89 s); a stall was cut at `read_body` only when that was shorter (20.0 to 20.5 s with `read_body 20s`).
+Each gets 504. Unlike HTTP/1.1, the proxy then forwards what it read, and the API refuses it within half a
+second (408 `API_UPLOAD_TIMEOUT`, or 429 while another comparison runs or once the client's bucket is
+empty, debited to it; never a comparison), so a cut QUIC upload holds the API's slot for that half second, not for `read_body`. A second
+batch of 8 HTTP/3 stalls, once the first was cut, raised the proxy's memory peak by 43 MiB (with `read_body 20s`).
+
+A file one byte over 16 MiB gets 413, one with no length 411 and one with a length that isn't 1 to 18 plain
+digits 400, all from the proxy, as plain text rather than the API's JSON error (the smoke test checks the 413's
+text).
 
 `GET /api/v1/meta` then shows `limits.compare`, and the web app offers the panel; no rebuild of the `web`
 image is needed. **To turn them off again**, run `docker compose -f deploy/compose.yml up -d` (without
 `compare.yml`): `api` and `caddy` are recreated with comparisons off and the 64 KiB cap on every path.
+
+### The body cap on the other routes
+
+Every API request but a `POST` to `/api/v1/compare` (with comparisons on) keeps the API's 64 KiB body cap, with
+or without `compare.yml`, and the proxy refuses what is over it before the API holds a connection for it
+(TASK-255, TASK-259, 2026-10-24; measured in
+[`docs/results/2026-10-24-proxy-body-limits.md`](../docs/results/2026-10-24-proxy-body-limits.md)):
+
+- a declared `Content-Length` over 65,536 bytes gets the proxy's 413 at once, before any of the body is read.
+  Forwarded, the API refused it from the header and closed the connection while the proxy was still writing
+  the body, which reached the client as a 502 in 9 of 300 tries under load (and as Caddy's own empty 413 in
+  most of the rest);
+- a request sent chunked (HTTP/1.1, any method) gets 411 (`Send the request with a Content-Length.`, plain
+  text). Past the cap Caddy still opens the upstream request with what it buffered, and a chunked body that
+  went over it and then stalled held an API connection until `read_body` (Go's server reads on from a body
+  being closed). The web app's requests declare their length, and `op` sends none through the proxy;
+- the proxy reads every other body whole before it asks the API (`request_buffers 65537`, one byte over the
+  cap): an unsized HTTP/2 body that stops at the cap waits in the proxy's buffer, and one that passes it
+  gets 413. At `64KiB` exactly, a body that reached the cap was streamed on, and one that then stalled held
+  an API connection until `read_body`, a `GET`'s too (the API reads any body before routing): about 256 of
+  them could have held every connection the API takes (`limit_concurrency`), searches included.
+
+Every 413 the proxy sends on `/api/*` from the 64 KiB cap is the API's own JSON error (`API_BODY_TOO_LARGE`,
+the same message, and `Connection: close` over HTTP/1.x only; the `Caddyfile`'s `handle_errors 413`), so a client
+gets one answer whichever of the two refuses. Over HTTP/3 the `Connection` header made the answer malformed (curl:
+"stream 0 was closed cleanly, but before getting all response header fields"; RFC 9114 §4.2 forbids it), so it
+is sent only where it is valid. `smoke-test.sh` checks each of these, with comparisons on and off.
+
+The web app's paths share the 64 KiB cap and the 413 for a declared length over it (a chunked body over the
+cap there is 413 too), and need nothing more (2026-10-24, measured): the web app takes no request body (no
+server actions, no route handlers; a `POST` gets 405, or the page, or 400 with a `Next-Action` header, within
+0.1 s and without reading the body), and its server lets go of a connection whose client is still sending as
+it does after any request, after its 5 s keep-alive: four chunked bodies that stalled for 30 s held its
+connections 6 s, as a plain `GET` holds one 5 s. The proxy passes web bodies on unbuffered; a route that read
+bodies would change that, and `smoke-test.sh` would see it (it checks that a stalled body holds no web
+connection at 9 s).
+
+Every response the proxy writes from an error rather than from the API or the web app (a 502 while an
+upstream is down, a 504, the cap's 413 on a web path) carries the same `Strict-Transport-Security` and no
+`Server` header, as every other response does (`handle_errors` in the `Caddyfile`; before, a 502 had
+`Server: Caddy` and no HSTS). `smoke-test.sh` checks a 413 on `/` and a 502 with `web` stopped.
 
 ### Tuning comparisons
 
@@ -429,8 +481,10 @@ a copy taken once is enough.
 ## Trying it locally
 
 `deploy/smoke-test.sh` builds the images under its own tag and starts the stack over a fixture data
-directory in a temporary directory. It uses its own Compose project, `openproceedings-smoke`, so it never
-touches a running stack or its images. It checks what this runbook claims:
+directory in a temporary directory. It uses its own Compose project (`OP_SMOKE_PROJECT`, default
+`openproceedings-smoke`) and its own internal network (172.30.81.0/24, since Docker refuses a second network
+that overlaps a running stack's default 172.30.80.0/24), so it never touches a running stack or its images.
+It checks what this runbook claims:
 
 - healthz and the web root over https://localhost;
 - the API's user, its read-only mounts, and a takedown directory holding only `withheld.txt`;
@@ -438,17 +492,28 @@ touches a running stack or its images. It checks what this runbook claims:
 - retires: refused for the served version and for a pinned one, refused on the host, and done for an
   unpinned one, with the record store still the API's and a backup that opens;
 - a withheld abstract next to a served one, with `takedown-check` passing;
+- the 64 KiB cap on the other routes (§The body cap on the other routes): the proxy's 413, in the API's own
+  words (compared with the API's), 20 times over HTTP/1.1 and over HTTP/2, once over HTTP/3 with no `Connection`
+  header, and `Connection: close` over HTTP/1.1; 411 for a chunked body, a `PUT` to
+  `/api/v1/compare` included, and the API's own 405 for a `PUT` with a length; 413 for an unsized HTTP/2 body
+  over the cap, and no API connection held by one that stops at it (still in flight when counted, then a quick
+  422 once whole); no web connection held by a stalled body to `/search` (in flight when counted, then 200); HSTS and no `Server` header on the proxy's own 413 on `/` and its 502 while `web` is stopped
+  (it stops `web` and starts it again);
 - no query text in any log.
 
 `deploy/smoke-test.sh --compare` runs the same over `compose.yml` and `compare.yml`, and adds what §Comparisons
 claims: the overlay's `api` command, a 16 MiB comparison while uploads stalled in the proxy (`OP_SMOKE_STALLS`,
-default 8) neither reach the API nor outlast `read_body`, the proxy's memory peak under its limit with no OOM
-kill, the proxy's own 413 (by its text) one byte over 16 MiB, 411 for a file with no length, 400 for an HTTP/2
-`Content-Length: abc`, and the 64 KiB cap on every other path (in the proxy's adapted config, and checked
-without `--compare` too, with `/meta` offering no comparisons and HTTP/3 advertised only then). It reads the
-caddy container's cgroup v2 memory files: `memory.peak` needs Linux 5.19 or later (before that it samples
-`memory.current` while the uploads are held). It takes about a minute longer (149 to 186 s, against 87 to 128 s
-without it, on that Mac): the stalled uploads wait out `read_body`.
+default 8) neither reach the API nor outlast `read_body`, then two batches as large over HTTP/3 (trickling a
+byte a second, from `smoke-h3.Dockerfile`'s curl on the stack's edge network) cut at `read_body` with none
+compared, the proxy's memory peak under its limit with no OOM kill and the second HTTP/3 batch raising it by
+less than 25 MiB an upload, the proxy's own 413 (by its text) one byte over 16 MiB, 411 for a file with no length, 400 for an
+HTTP/2 `Content-Length: abc`, and the 64 KiB cap on every other request (in the proxy's adapted config, and
+checked without `--compare` too, with `/meta` offering no comparisons; HTTP/3 is advertised either way). It
+reads the caddy container's cgroup v2 memory files: `memory.peak` needs Linux 5.19 or later (before that it samples
+`memory.current` while the uploads are held, and skips the HTTP/3 peak check). It takes about three minutes
+longer: the runs after review round 1 (2026-10-25) took 333 s, against 156 s without it, on that Mac (299 and
+111 s on 2026-10-24, before review round 1's rows; 149 to 186 s and 87 to 128 s on 2026-10-16, before the HTTP/3
+batches); the stalled uploads wait out `read_body` three times.
 
 It removes everything it created on exit. It needs Docker and uv, and ports 80 and 443 on 127.0.0.1 (or
 `OP_HTTP_PORT`/`OP_HTTPS_PORT`, such as `127.0.0.1:18443`; it binds loopback only). Docker Desktop keeps a host
@@ -469,7 +534,5 @@ Linux host. No CI job runs it.
 - Do the first start and its checks on the host: client addresses (First start, step 4), and the rate limit
   and CORS (TASK-067 AC #2).
 - Schedule the record-store backup (§Backups).
-- Alert on the rate of uvicorn's `Exceeded concurrency limit.` lines. With or without comparisons, an
-  unsized body that reaches 64 KiB on an API route other than `/api/v1/compare` and stalls may hold one of
-  the API's 256 connections until `read_body` (10 s, or 60 s with `compare.yml`), so about 256 such
-  requests could refuse every search for that long (inferred, not measured; open: TASK-255).
+- Alert on the rate of uvicorn's `Exceeded concurrency limit.` lines (spec 08 §Deploy): a burst means the
+  API's 256 connections are full.

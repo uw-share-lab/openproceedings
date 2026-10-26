@@ -62,6 +62,7 @@ tooling:
 	python3 .claude/scripts/check_digest_pins.py
 	python3 .claude/scripts/check_file_modes.py
 	python3 .claude/scripts/check_uv_pin.py
+	python3 .claude/scripts/check_old_bash.py $(SHELL_FILES)
 	python3 .claude/scripts/dependabot/npm_specs.py
 	python3 .claude/scripts/lint_probes.py
 	python3 .claude/scripts/mutate.py --check

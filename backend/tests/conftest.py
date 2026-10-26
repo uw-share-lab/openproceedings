@@ -3,6 +3,7 @@
 Tests never call real APIs (OpenReview, Semantic Scholar, PMLR, …). Every TCP connection and UDP send other
 than a Unix socket or loopback, and every non-loopback name lookup, fails with NetworkBlockedError, for the
 whole test session (limits: `pytest_configure`). Crawler tests use recorded HTTP fixtures (01 §Testing); there is no opt-out marker.
+Index builds and parity checks normalize in one process unless a test asks for workers (`_serial_index_builds`).
 
 
 Select with HYPOTHESIS_PROFILE or `--hypothesis-profile`: `dev` (200 examples, no wall-clock checks: the local
@@ -24,6 +25,7 @@ changes nothing.
 import logging
 import os
 import socket
+import sys
 from collections.abc import Iterator
 from typing import Any
 
@@ -142,6 +144,20 @@ def pytest_configure(config: pytest.Config) -> None:
     if os.environ.get("OP_EARLY_FAILURES") == "1" and not hasattr(config, "workerinput"):
         config.pluginmanager.register(_EarlyFailures(config), "op-early-failures")
     _block_the_network()
+    _serial_index_builds()
+
+
+def _serial_index_builds() -> None:
+    """Every index build and parity check normalizes in its own process, unless a test sets `PARALLEL_FROM`
+    itself (`test_index.py`'s parallel rows, which compare the two paths). When the product's threshold was 2,000
+    records, each build of the synthetic 5k corpus (about 60 a run) started a spawn pool of `os.cpu_count()`
+    workers inside every xdist worker: at 5,000 fixture records 0.45 s wall against 0.33 s serial and 2.17 s CPU
+    against 0.33 s (docs/results/2026-10-24-parallel-normalize-crossover.md), and dozens of interpreters starting
+    at once beside the slow properties (TASK-284). It is 10,000 now; this keeps a larger
+    test corpus serial too."""
+    from openproceedings.engine import index
+
+    index.PARALLEL_FROM = sys.maxsize
 
 
 def _block_the_network() -> None:

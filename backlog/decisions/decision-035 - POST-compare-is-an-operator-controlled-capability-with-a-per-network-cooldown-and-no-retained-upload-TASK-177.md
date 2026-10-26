@@ -102,9 +102,13 @@ one IPv6 /48, held the slot 100% of the time.
   `deploy/compose.yml` + `deploy/compare.yml` (`op serve --compare`; the `Caddyfile`'s `compare-on` snippet:
   the 64KiB cap kept off `/api/v1/compare`, 16MiB there with a 411 for an unsized `POST`, a 400 for a
   malformed length and a 413 for one declaring more, no HTTP/3; `read_body` 60s; a 1g memory limit on
-  `caddy`), and the precondition is that `deploy/smoke-test.sh --compare` passes on
+  `caddy`; since TASK-268/257 (2026-10-24) only a `POST` takes the 16MiB path, other methods getting the
+  API's 405 under the 64KiB cap, and HTTP/3 is on again: a trickling QUIC upload was measured cut at `read_body`, and a silent one is
+  closed sooner by QUIC's 30 s idle timeout,
+  `docs/results/2026-10-24-proxy-body-limits.md`), and the precondition is that `deploy/smoke-test.sh --compare` passes on
   the host. It passed on Docker Desktop on 2026-10-16, on Caddy 2.11.4 and again on 2.11.7 (the Linux-only
-  ownership checks skipped there). A
+  ownership checks skipped there), and the current test again on 2026-10-24 and 2026-10-25
+  (`docs/results/2026-10-24-proxy-body-limits.md`). A
   further stated limit it measured: every upload in flight costs the proxy about 50 MiB, and the stack bounds
   how many by the memory limit alone, past which the proxy is OOM-killed and restarted, dropping every
   connection, searches included (24 at once reached the edge of 1 GiB, peaks 890 to 998 MiB, and 32 did not

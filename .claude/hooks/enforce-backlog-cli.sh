@@ -2,6 +2,7 @@
 # PreToolUse guard: Backlog.md task/doc/draft/milestone files are CLI-managed.
 # Block direct Write/Edit to them so metadata, relationships, and history stay consistent.
 # Reads the tool-call JSON on stdin; exit 2 blocks the call and feeds stderr back to the agent.
+# File tools only: shell edits under backlog/ (Bash) are refused by protect-data-dir.sh, through cmdparse.
 #
 # Decisions are the one exception, and deliberately so: `backlog decision` exposes only `create`
 # (title + status) — there is no `edit`, and no way to write a decision's Context/Decision/Consequences
