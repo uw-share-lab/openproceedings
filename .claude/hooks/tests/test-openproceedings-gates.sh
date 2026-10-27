@@ -2365,6 +2365,7 @@ check $A allow "nice -+5 git commit -F clean notes (nice's -+N)" "$(payload_bash
 check $P block "data-only: sudo -nu root rm -rf data/snapshots" "$(payload_do 'sudo -nu root rm -rf data/snapshots')"
 check $P block "data-only: flock -nw 5 <lock> rm -rf data/snapshots" "$(payload_do 'flock -nw 5 /tmp/op.lock rm -rf data/snapshots')"
 check $P block "data-only: env - rm -rf data/snapshots (env - is env -i)" "$(payload_do 'env - rm -rf data/snapshots')"
+check $P block "data-only: env - -u FOO rm -rf data/snapshots (env reads options after its -)" "$(payload_do 'env - -u FOO rm -rf data/snapshots')"
 check $P allow "data-only: nice -5 ls data/snapshots (nice's old -N form)" "$(payload_do 'nice -5 ls data/snapshots')"
 check $P allow "data-only: sudo -- ls data/snapshots"           "$(payload_do 'sudo -- ls data/snapshots')"
 check $P allow "data-only: sudo --login ls (an exact name, though --login-class shares it)" "$(payload_do 'sudo --login ls data/snapshots')"
