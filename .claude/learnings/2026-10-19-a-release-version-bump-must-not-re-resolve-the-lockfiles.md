@@ -87,3 +87,22 @@ the proof was run:
 shared checkout; step 2: choose MINOR or PATCH from the release's Added section, not from `changelog.py`; and step 1's
 release-branch summary: check `CITATION.cff`'s title, abstract and keywords, and `backend/pyproject.toml`'s
 `description`, against the README's venues and years).
+
+## Addendum — 2026-10-27 (v0.6.0)
+- **The golden reads the installed version, not `pyproject.toml`.** After the bump to 0.6.0 was committed, the
+  combined-snapshot golden still passed: `openproceedings.__version__` comes from
+  `importlib.metadata.version("openproceedings")`, and the worktree's editable install still carried 0.5.0's
+  metadata from `make sync`, run before the bump. Only after `uv sync --locked` did `__version__` read 0.6.0 and the
+  golden fail (`3aa99f93…` against `4be40e62…`). A probe run before that sync would also have "proved" nothing,
+  since both of its builds would have used 0.5.0. Re-sync after the bump, then run the golden and the probe.
+- **The probe route worked again.** With `__version__` patched to 0.5.0 the `git archive` copy hashed to
+  `4be40e62…` (the value before), `SNAPSHOT_HASH` unchanged; with 0.6.0 it hashed to `3aa99f93…`, the new
+  `FILES_HASH`.
+- **`RECORD_SCHEMA_VERSION` is not one of the four.** #195 moved the snapshot record schema from 9 to 10
+  (decision-055). It is in the snapshot manifest and in no `index_version` input, so it applies from the next
+  snapshot build and the release is still verified on the served index; `git diff origin/main...origin/dev --
+  backend/src` matched it when searching for the version constants, which is worth reading past rather than
+  stopping at.
+
+**Propagated to:** `.claude/agents/release-manager.md` (§How you work, step 2: run `uv sync --locked` after the
+bump, before reading the golden).
