@@ -93,8 +93,8 @@ three times, and close it.
 - `test-git-long-opts.sh` fails when the installed git lists a `--option` that a gate names, under a tabled
   subcommand, and the table lacks. Git 2.56 added `git branch --dry-run`, and runners moved to 2.56 a few
   at a time. So `claude-tooling` and the nightly's mutate baselines failed only on the jobs that landed on a 2.56
-  runner, about a third of them: the 0.6.0 candidate nightly, shards 5, 12 and 14. The fix is one word in
-  `GIT_LONG_OPTS`. When `claude-tooling` fails on some runners but not others, compare `git --version` in each
+  runner, about a third of them: the 0.6.0 candidate nightly, shards 5, 12 and 14. The fix is a few words in
+  `GIT_LONG_OPTS` (`dry-run`, `no-dry-run`, and 2.56's `delete-merged` and `forked`). When `claude-tooling` fails on some runners but not others, compare `git --version` in each
   job's log before suspecting the code.
 
 ## Follow-ups
