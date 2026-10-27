@@ -100,9 +100,8 @@ release-branch summary: check `CITATION.cff`'s title, abstract and keywords, and
   `FILES_HASH`.
 - **`RECORD_SCHEMA_VERSION` is not one of the four.** #195 moved the snapshot record schema from 9 to 10
   (decision-055). It is in the snapshot manifest and in no `index_version` input, so it applies from the next
-  snapshot build and the release is still verified on the served index; `git diff origin/main...origin/dev --
-  backend/src` matched it when searching for the version constants, which is worth reading past rather than
-  stopping at.
+  snapshot build and the release is still verified on the served index. A grep for `SCHEMA_VERSION =` in
+  `git diff origin/main...origin/dev -- backend/src` matches it, so read which constant matched.
 
 **Propagated to:** `.claude/agents/release-manager.md` (§How you work, step 2: run `uv sync --locked` after the
 bump, before reading the golden).
