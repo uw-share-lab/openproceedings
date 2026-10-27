@@ -21,6 +21,7 @@ names the index it was verified on and which saved records still reproduce.
 - read digits only as ASCII in crawl headers, dblp years and the review gate's git config ([#197](https://github.com/uw-share-lab/openproceedings/pull/197))
 - linear log scrubbing and author split; scrub bare, encoded and quoted secrets (TASK-275, TASK-276, TASK-283) ([#198](https://github.com/uw-share-lab/openproceedings/pull/198))
 - hardening batch (TASK-284, 266, 269, 267, 268, 255, 259, 257, 273) ([#202](https://github.com/uw-share-lab/openproceedings/pull/202))
+- hooks: know git 2.56's new branch options; revive the env - mutant ([#204](https://github.com/uw-share-lab/openproceedings/pull/204))
 
 ### Internal
 

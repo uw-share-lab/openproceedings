@@ -22,7 +22,7 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
 1. **Release (spec 08 §Release, decision-023).** Run its checklist, steps 1 to 9, in order, pasting each
    command's result into the promotion PR (step 6's tag-ruleset check as a comment on it, since the
    promotion has merged by then); stop and list blockers at the first step that fails. In short:
-   readiness on `dev` (required checks, `e2e`, `bench`, the latest `web-image` run, a nightly from the last day that tested `dev`'s head (dispatched with `--ref dev`, or a scheduled run whose summary names that sha), the M4 gate, no open
+   readiness on `dev` (required checks, `e2e`, `bench`, the latest `web-image` run, a nightly from the last day that tested `dev`'s head (dispatched with `--ref dev`, or a scheduled run whose summary names that sha, only while `main`'s and `dev`'s `nightly.yml` are the same: a schedule runs `main`'s copy, 2026-10-27), the M4 gate, no open
    Must); the security gate (`/security-review` over `origin/main...origin/dev`; TASK-067 Done before the
    first release a public instance serves; a reviewer run in parallel reads other trees with `git show <ref>:<path>`,
    `git diff` or its own `git worktree add --detach`, never a checkout in the shared one, 2026-10-22); verify the index (the served one, or a new one when

@@ -915,7 +915,9 @@ retention (step 8) matter (guarantee 4).
 1. **Readiness on `dev`.** The required checks are green on its head, and so are `e2e`, `bench`, the
    latest `web-image` run on `dev` and a `nightly` run from the last day that tested `dev`'s head: one dispatched
    on it (`gh workflow run nightly --ref dev`, whose `headSha` is `origin/dev`), or a scheduled run whose summary
-   names that sha (a scheduled run is listed under the default branch's sha, decision-052). `backlog task list --plain` shows no open Must finding. The latest
+   names that sha (a scheduled run is listed under the default branch's sha, decision-052). A scheduled run counts
+   only while `git diff origin/main origin/dev -- .github/workflows/nightly.yml` is empty: it runs `main`'s copy of
+   the workflow against `dev`'s code (0.6.0's learning). `backlog task list --plain` shows no open Must finding. The latest
    `docs/results/*-coverage.md` passes the M4 gate.
 2. **Security gate.** `security-reviewer` (`/security-review`) over `origin/main...origin/dev`, every finding
    dispositioned as in `/review-gate`. Before the first release a public instance serves, TASK-067 (the
