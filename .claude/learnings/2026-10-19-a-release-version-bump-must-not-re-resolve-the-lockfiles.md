@@ -87,3 +87,40 @@ the proof was run:
 shared checkout; step 2: choose MINOR or PATCH from the release's Added section, not from `changelog.py`; and step 1's
 release-branch summary: check `CITATION.cff`'s title, abstract and keywords, and `backend/pyproject.toml`'s
 `description`, against the README's venues and years).
+
+## Addendum — 2026-10-27 (v0.6.0)
+- **The golden reads the installed version, not `pyproject.toml`.** After the bump to 0.6.0 was committed, the
+  combined-snapshot golden still passed: `openproceedings.__version__` comes from
+  `importlib.metadata.version("openproceedings")`, and the worktree's editable install still carried 0.5.0's
+  metadata from `make sync`, run before the bump. Only after `uv sync --locked` did `__version__` read 0.6.0 and the
+  golden fail (`3aa99f93…` against `4be40e62…`). A probe run before that sync would also have "proved" nothing,
+  since both of its builds would have used 0.5.0. Re-sync after the bump, then run the golden and the probe.
+- **The probe route worked again.** With `__version__` patched to 0.5.0 the `git archive` copy hashed to
+  `4be40e62…` (the value before), `SNAPSHOT_HASH` unchanged; with 0.6.0 it hashed to `3aa99f93…`, the new
+  `FILES_HASH`.
+- **`RECORD_SCHEMA_VERSION` is not one of spec 08 §Release's four versions** (`TOKENIZER_VERSION`,
+  `SCHEMA_VERSION`, Tantivy, `QUERY_VERSION`). #195 moved the snapshot record schema from 9 to 10
+  (decision-055). It is in the snapshot manifest and in no `index_version` input, so it applies from the next
+  snapshot build and the release is still verified on the served index. A grep for `SCHEMA_VERSION =` in
+  `git diff origin/main...origin/dev -- backend/src` matches it, so read which constant matched.
+
+- **A scheduled nightly runs `main`'s workflow on `dev`'s code.** The 13:11 UTC scheduled run (40509841227)
+  resolved `dev`'s head 78b14b4d, so it looked like the candidate's nightly. But a schedule always reads the default
+  branch's `nightly.yml`, and `main`'s copy lacked #202's `-o faulthandler_timeout=0`, while `dev`'s root
+  `pyproject.toml` now sets `faulthandler_timeout = 1200`. The 50,000-example steps were killed at the 20-minute stack dump (exit 139,
+  "Timeout (0:20:00)!") in properties (engine), properties (ingest) and year-edits (2). Those failures say nothing
+  about the code; only a run dispatched with `--ref dev` (40565751043, on a6619039) tests the candidate with its own
+  workflow. Use a scheduled run only when `git diff origin/main origin/dev -- .github/workflows/nightly.yml` is empty.
+- **The same run found two real tooling defects**, so the release waited for #204: GitHub's runners began moving to
+  git 2.56.0, which adds `git branch --dry-run` (a long option the gates name), so `test-git-long-opts.sh` failed the
+  mutate baseline on every shard that drew a 2.56 runner, and #202's zsh `-` wrapper had left the "env - is not an
+  option" mutant surviving. A mutate shard's git version is in its log's post-job `git version` line; compare a
+  passing and a failing shard before blaming the code. A newer git can be tried locally without installing it:
+  extract `brew fetch --force-bottle git`'s bottle into the scratchpad and run its `bin/git` with `GIT_EXEC_PATH` and
+  `DYLD_FALLBACK_LIBRARY_PATH` (pcre2, gettext) set.
+- **The tag slipped a day.** The fix, the re-cut branch and a fresh 2.5-hour nightly pushed the tag past 00:00 UTC,
+  so `CITATION.cff`'s `date-released` was re-dated to 2026-10-28 before the branch was pushed.
+
+**Propagated to:** `.claude/agents/release-manager.md` (§How you work, step 1: a scheduled nightly counts only while
+`main`'s and `dev`'s `nightly.yml` match; step 2: run `uv sync --locked` after the bump, before reading the golden);
+`docs/specs/08-ops-and-tooling.md` §Release step 1 (the same scheduled-run condition).

@@ -71,7 +71,9 @@ SNAPSHOT_HASH = "94c07048e05de79db6c622f6e266195ef698d1ac6a82bc68aab9cd7213168bd
 # to b2cfbda7… (the value before; dev's CI at 0.4.3). SNAPSHOT_HASH is unchanged.
 # TASK-281 changed it again: record schema v10 (the native-id bounds, decision-055); with the version set back to "9"
 # the files hash to e6906934… (the value before; checked 2026-10-22). No record changed, so SNAPSHOT_HASH is unchanged.
-FILES_HASH = "4be40e6255fc27120a0c8fd1a5ae7dfb839262ca8f51070e9e2afef512bc543b"
+# Release 0.6.0 changed only openproceedings_version, "0.5.0" to "0.6.0": with it set back to "0.5.0" the files hash
+# to 4be40e62… (the value before; dev's CI at 0.5.0). SNAPSHOT_HASH is unchanged.
+FILES_HASH = "3aa99f9342f58373d0b49ef62dff4bb2553d627ea7ad37bb657532d750f00b75"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:
