@@ -89,6 +89,14 @@ three times, and close it.
   (`-exec rm`, `-exec git restore`, `-exec sh`) → which files it picks can't be seen → a start path that leaves
   backlog/ out is the workaround.
 
+## Addendum 2026-10-27: a new git on the runners breaks the table with no code change
+- `test-git-long-opts.sh` fails when the installed git lists a `--option` that a gate names, under a tabled
+  subcommand, and the table lacks. Git 2.56 added `git branch --dry-run`, and runners moved to 2.56 a few
+  at a time. So `claude-tooling` and the nightly's mutate baselines failed only on the jobs that landed on a 2.56
+  runner, about a third of them: the 0.6.0 candidate nightly, shards 5, 12 and 14. The fix is one word in
+  `GIT_LONG_OPTS`. When `claude-tooling` fails on some runners but not others, compare `git --version` in each
+  job's log before suspecting the code.
+
 ## Follow-ups
 - cmdparse's wrapper list lacks `xcrun`, `caffeinate`, `arch`, `doas`, `flock` and `unbuffer`, which every gate shares
   (security review nit): task-248.
