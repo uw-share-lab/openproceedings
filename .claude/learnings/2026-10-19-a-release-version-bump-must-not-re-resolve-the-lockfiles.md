@@ -106,8 +106,8 @@ release-branch summary: check `CITATION.cff`'s title, abstract and keywords, and
 
 - **A scheduled nightly runs `main`'s workflow on `dev`'s code.** The 13:11 UTC scheduled run (40509841227)
   resolved `dev`'s head 78b14b4d, so it looked like the candidate's nightly. But a schedule always reads the default
-  branch's `nightly.yml`, and `main`'s copy lacked #202's `-o faulthandler_timeout=0`, while `dev`'s `pyproject.toml`
-  now sets `faulthandler_timeout = 1200`. The 50,000-example steps were killed at the 20-minute stack dump (exit 139,
+  branch's `nightly.yml`, and `main`'s copy lacked #202's `-o faulthandler_timeout=0`, while `dev`'s root
+  `pyproject.toml` now sets `faulthandler_timeout = 1200`. The 50,000-example steps were killed at the 20-minute stack dump (exit 139,
   "Timeout (0:20:00)!") in properties (engine), properties (ingest) and year-edits (2). Those failures say nothing
   about the code; only a run dispatched with `--ref dev` (40565751043, on a6619039) tests the candidate with its own
   workflow. Use a scheduled run only when `git diff origin/main origin/dev -- .github/workflows/nightly.yml` is empty.
