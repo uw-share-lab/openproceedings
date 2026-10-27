@@ -257,10 +257,10 @@ GIT_LONG_OPTS: dict[str, frozenset[str]] = {
             "verbose quiet track set-upstream set-upstream-to unset-upstream color remotes contains "
             "no-contains with without abbrev all delete move omit-empty copy list show-current "
             "create-reflog edit-description force merged no-merged column sort points-at ignore-case "
-            "recurse-submodules format dry-run no-verbose no-quiet no-track no-set-upstream no-set-upstream-to "
+            "recurse-submodules format dry-run delete-merged forked no-verbose no-quiet no-track no-set-upstream no-set-upstream-to "
             "no-unset-upstream no-color no-abbrev no-delete no-move no-omit-empty no-copy no-list "
             "no-show-current no-create-reflog no-edit-description no-force no-column no-sort no-points-at "
-            "no-ignore-case no-recurse-submodules no-format no-dry-run"  # dry-run: git 2.56
+            "no-ignore-case no-recurse-submodules no-format no-dry-run"  # dry-run, delete-merged, forked: git 2.56
         ),
         "checkout": (
             "guess overlay quiet recurse-submodules progress merge conflict detach track force orphan "
