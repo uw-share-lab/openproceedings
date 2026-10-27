@@ -49,8 +49,9 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    origin/main..origin/dev`); a `feat` means at least MINOR (spec 08 §Release, Versioning; 2026-10-22).
    The combined-snapshot golden includes the manifest's app version. After an app-version bump, run `uv sync
    --locked` in the worktree first: `__version__` is read from the installed package's metadata, so until then
-   the golden still passes on the old version (2026-10-27). If that golden then fails, prove that reverting only `openproceedings_version` in memory restores the exact prior
-   whole-directory hash before updating its expected hash. To do that, use a throwaway test that
+   the golden still passes on the old version (2026-10-27). If that golden then fails, prove that reverting only
+   `openproceedings_version` in memory restores the exact prior whole-directory hash before updating its
+   expected hash. To do that, use a throwaway test that
    monkeypatches `openproceedings.ingest.snapshot.__version__` (the name the module bound at import) to the old
    version. Put it under `backend/tests/` in a `git archive HEAD backend pyproject.toml` copy in a mktemp
    directory, and run it from the copy's root with the worktree's `.venv` python: the copy is its own rootdir, so

@@ -98,7 +98,8 @@ release-branch summary: check `CITATION.cff`'s title, abstract and keywords, and
 - **The probe route worked again.** With `__version__` patched to 0.5.0 the `git archive` copy hashed to
   `4be40e62…` (the value before), `SNAPSHOT_HASH` unchanged; with 0.6.0 it hashed to `3aa99f93…`, the new
   `FILES_HASH`.
-- **`RECORD_SCHEMA_VERSION` is not one of the four.** #195 moved the snapshot record schema from 9 to 10
+- **`RECORD_SCHEMA_VERSION` is not one of spec 08 §Release's four versions** (`TOKENIZER_VERSION`,
+  `SCHEMA_VERSION`, Tantivy, `QUERY_VERSION`). #195 moved the snapshot record schema from 9 to 10
   (decision-055). It is in the snapshot manifest and in no `index_version` input, so it applies from the next
   snapshot build and the release is still verified on the served index. A grep for `SCHEMA_VERSION =` in
   `git diff origin/main...origin/dev -- backend/src` matches it, so read which constant matched.
