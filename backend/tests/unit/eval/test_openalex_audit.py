@@ -36,7 +36,7 @@ def test_compare(official: str, other: str, kind: str) -> None:
 def test_the_sample_is_seeded_and_covers_the_named_venue_years() -> None:
     from tests.unit.eval.audit_fixture import (
         records,
-    )  # FAccT 2022/2025/2026, AIES 2024-2025, AAAI 2010+ (official)
+    )  # FAccT 2022/2025/2026, AIES 2024-2026, AAAI 2010+ (official)
 
     one, two = oa.sample(records(), aaai_sample=5, seed=49), oa.sample(records(), aaai_sample=5, seed=49)
     assert [r.id for r in one] == [r.id for r in two]
@@ -46,6 +46,7 @@ def test_the_sample_is_seeded_and_covers_the_named_venue_years() -> None:
         ("FAccT", 2026),
         ("AIES", 2024),
         ("AIES", 2025),
+        ("AIES", 2026),
     }
     assert sum(r.venue == "AAAI" for r in one) == 5 and all(r.abstract_kind == "official" for r in one)
 
@@ -54,7 +55,7 @@ def test_the_sample_leaves_out_other_years_records_with_no_doi_and_no_official_a
     picked = {r.id for r in oa.sample(audit_fixture.records(), aaai_sample=5, seed=49)}
     assert not picked & {"op:facct:2023:doi-3593013.3600", "op:facct:2025:doi-3715275.3700",
                          "op:facct:2025:doi-3715275.3701", "op:aaai:1990:dblp-SmithL90"}  # fmt: skip
-    assert len(oa.sample(audit_fixture.records(), aaai_sample=500, seed=49)) == 10 + 12  # all, when fewer
+    assert len(oa.sample(audit_fixture.records(), aaai_sample=500, seed=49)) == 12 + 12  # all, when fewer
     assert {r.id for r in oa.sample(audit_fixture.records(), aaai_sample=5, seed=50)} != picked
 
 
@@ -311,13 +312,20 @@ def _library_corpus() -> list:
             _library("GoneG90", "Nobody Lists This Either", None)]  # refused in both runs: subtracted  # fmt: skip
 
 
-def _seed_library(t: FakeTransport) -> None:
+def _seed_library(t: FakeTransport, differs_authors: list[dict] | None = None) -> None:
+    """The listing, and the authors answer for the one `differs` work (W63; default: the record's own author)."""
     _script(t, openalex.listing_url(LIBRARY_TABLE.listings[("AAAI", 1990)]),
             api.work("W61", None, title="Same Text", year=1990, text="An archived abstract,  word for word."),
             api.work("W62", None, title="Other Case", year=1990, text="AN ARCHIVED ABSTRACT IN ITS OWN CASE"),
             api.work("W63", None, title="Wholly Different", year=1990, text="Search trees and their uses."),
             api.work("W64", None, title="No OpenAlex Text", year=1990, text=None),
             api.work("W65", None, title="Filled By OpenAlex", year=1990, text="OpenAlex's own abstract."))  # fmt: skip
+    body = {"meta": {"count": 1, "per_page": 50}, "results": [
+        {"id": "https://openalex.org/W63", "authorships": _authors("A. Person") if differs_authors is None
+         else differs_authors, "biblio": {}}]}  # fmt: skip
+    t.script[canonical(oa.authors_url(["W63"]), keep_query=True)] = [
+        response(json.dumps(body), headers=api.JSON)
+    ]
 
 
 def test_the_library_check_compares_openalex_with_aaai_librarys_abstracts(tmp_path: Path) -> None:
@@ -331,6 +339,57 @@ def test_the_library_check_compares_openalex_with_aaai_librarys_abstracts(tmp_pa
     assert check.differs == ("op:aaai:1990:dblp-DiffC90",)
     assert check.compared == 3
     assert check.library == check.compared + check.no_abstract + sum(check.refused.values())
+
+
+@pytest.mark.parametrize(("theirs", "verdict"), [
+    (None, "agree"),  # the record's own author: the same paper, a genuinely different text
+    (_authors("Someone Else"), "wrong"),  # no shared surname: another paper attached by title
+    ([], "unverifiable"),  # no authors in OpenAlex: can't be told
+])  # fmt: skip
+def test_the_library_check_judges_each_differs_attach_by_openalexs_authors(
+    tmp_path: Path, theirs: list[dict] | None, verdict: str
+) -> None:
+    t = FakeTransport({})
+    _seed_library(t, theirs)
+    check = oa.library_check(_library_corpus(), _fetcher(tmp_path, t), table=LIBRARY_TABLE)
+    assert check is not None
+    assert [(a.record_id, a.work_id, a.verdict) for a in check.authors] == [
+        ("op:aaai:1990:dblp-DiffC90", "W63", verdict)
+    ]
+    assert len(check.shapes) == len(check.differs) == 1  # only `differs` texts are author-checked
+
+
+def test_the_library_section_splits_the_differs_texts_into_wrong_papers_and_different_texts(
+    tmp_path: Path,
+) -> None:
+    def text(theirs: list[dict] | None) -> str:
+        t = FakeTransport({})
+        _seed_library(t, theirs)
+        check = oa.library_check(_library_corpus(), _fetcher(tmp_path / str(theirs is None), t),
+                                 table=LIBRARY_TABLE)  # fmt: skip
+        return oa.render(oa.AuditResult(rows={}, library=check),
+                         oa.Meta(snapshot="s", commit="c", seed=49, aaai_sample=0))  # fmt: skip
+
+    same = text(None)
+    assert "### The `differs` texts: another paper, or another text?" in same
+    assert "- **Genuinely different texts:** 1 (100.0%)." in same
+    assert "- **Wrong-paper attaches:** 0 (0.0%)." in same and "| Near spelling |" not in same
+    assert "the author check above tells which" in same and "with no author check" not in same
+    wrong = text(_authors("Someone Else"))
+    assert "- **Wrong-paper attaches:** 1 (100.0%)." in wrong
+    assert "| `op:aaai:1990:dblp-DiffC90` | `W63` | person | else | no |" in wrong
+    assert "of the 3 attaches compared, 1 (33.3%) look like another paper" in wrong
+    assert "Search trees" not in wrong
+
+
+@pytest.mark.parametrize(("official", "other", "ratio", "opening"), [
+    ("one two three four five six", "one two three four five six seven eight nine", 1.5, True),
+    ("one two three four five six", "six five four three two one", 1.0, False),
+    ("one two three", "one two three four", 4 / 3, False),  # fewer than OPENING tokens: never opening alike
+    ("!!!", "one", 0.0, False),
+])  # fmt: skip
+def test_shape(official: str, other: str, ratio: float, opening: bool) -> None:
+    assert oa.shape(official, other) == oa.Shape(ratio, opening)
 
 
 def test_the_library_check_leaves_out_a_record_with_a_doi(tmp_path: Path) -> None:
@@ -362,7 +421,7 @@ def test_the_library_section_reports_the_exact_near_exact_and_differs_rates(tmp_
             "(33.3%): together 2 (66.7%) would match every search exactly as AAAI's text does.") in text  # fmt: skip
     assert "nothing attached, by reason: `title_unmatched` 1." in text
     assert (
-        "a `differs` can also be another paper" in text
+        "A `differs` can also be another paper" in text
         and "The DOI route covers AIES" in text
         and "`op:aaai:1990:dblp-DiffC90`" in text
     )
