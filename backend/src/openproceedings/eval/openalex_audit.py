@@ -553,14 +553,15 @@ def _library_section(check: LibraryCheck) -> list[str]:
 
 
 def _differs_authors(judged: Sequence[TitleAttach], shapes: Sequence[Shape], compared: int) -> list[str]:
-    """The `differs` texts split by OpenAlex's authors for the work (TASK-250): another paper attached by title
-    (`wrong`), the same paper with a genuinely different text (`agree`), or can't be told (`unverifiable`); and
+    """The `differs` texts split by OpenAlex's authors for the work (TASK-250): what looks like another paper
+    attached by title (`wrong`), the same paper with a genuinely different text (`agree`), or can't be told (`unverifiable`); and
     the shape of the genuinely different ones (`Shape`)."""
     wrong = [a for a in judged if a.verdict == "wrong"]
     same = [s for a, s in zip(judged, shapes, strict=True) if a.verdict == "agree"]
     agree = len(same)
     opening = sum(s.same_opening for s in same)
     longer = sum(s.ratio >= LONGER for s in same)
+    both = sum(s.same_opening and s.ratio >= LONGER for s in same)
     unverifiable = sum(a.verdict == "unverifiable" for a in judged)
     near = [a for a in wrong if _near_spelling(a)]
     n = len(judged)
@@ -573,9 +574,11 @@ def _differs_authors(judged: Sequence[TitleAttach], shapes: Sequence[Shape], com
         f"- **Genuinely different texts:** {agree:,} ({_pct(agree, n)}). The author lists share a surname, so the "
         f"work is the same paper and the two texts differ. Of these, {opening:,} open with the same {OPENING} search "
         f"tokens as AAAI's, and OpenAlex's text is at least {LONGER}× as long as AAAI's in {longer:,} (median "
-        f"{_median([s.ratio for s in same]):.1f}×).",
-        f"- **Wrong-paper attaches:** {len(wrong):,} ({_pct(len(wrong), n)}). OpenAlex lists authors and none of "
-        "their surnames is any of ours, so the title route attached another paper with the same title key.",
+        f"{_median([s.ratio for s in same]):.1f}×); {both:,} do both, the shape of a text that runs on past the "
+        "abstract.",
+        f"- **Look like wrong-paper attaches:** {len(wrong):,} ({_pct(len(wrong), n)}). OpenAlex lists authors and "
+        "none of their surnames is any of ours, so the title route may have attached another paper with the same "
+        "title key.",
         f"- **Can't be told:** {unverifiable:,} ({_pct(unverifiable, n)}; no authors on one side).",
     ]
     if wrong:
@@ -588,9 +591,10 @@ def _differs_authors(judged: Sequence[TitleAttach], shapes: Sequence[Shape], com
             "",
             f"{len(near):,} of the {len(wrong):,} have a first-author surname close to ours (a character ratio of at "
             f"least {NEAR_SPELLING}), by the look of them spelling or OCR variants of the same surname; if they are "
-            f"the same authors, {left:,} are wrong-paper attaches. A text that agrees (`exact` to `similar`) is the "
-            f"same paper, so of the {compared:,} attaches compared, {len(wrong):,} ({_pct(len(wrong), compared)}) "
-            f"look like another paper, or {left:,} ({_pct(left, compared)}) without the near spellings.",
+            f"the same authors, {left:,} are wrong-paper attaches. A text that agrees (`exact` to `similar`) is taken "
+            f"to be the same paper (not author-checked), so of the {compared:,} attaches compared, {len(wrong):,} "
+            f"({_pct(len(wrong), compared)}) look like another paper, or {left:,} ({_pct(left, compared)}) if the "
+            "near spellings are the same authors.",
         ]
     return lines
 
@@ -750,10 +754,6 @@ _CHECKED = (
     "A `differs` can also be another paper attached by title; the author check above tells which, by surnames, "
     "not checked by a person."
 )
-_UNCHECKED = (
-    "The texts are title-route attaches with no author check, so a `differs` can also be another paper (the title "
-    "route's wrong-attach estimate is below)."
-)
 
 
 def _caveats(result: AuditResult) -> list[str]:
@@ -773,8 +773,8 @@ def _caveats(result: AuditResult) -> list[str]:
         )
         lines.append(
             "- In that comparison AAAI's text is itself read from archived HTML, and OpenAlex's is often text-mined, "
-            "so a `similar` or `differs` can be an OCR, hyphenation or extraction difference on either side. "
-            + (_CHECKED if result.library.authors else _UNCHECKED)
+            "so a `similar` or `differs` can be an OCR, hyphenation or extraction difference on either side."
+            + (" " + _CHECKED if result.library.differs else "")
         )
     check = result.title
     if check is None:

@@ -372,14 +372,47 @@ def test_the_library_section_splits_the_differs_texts_into_wrong_papers_and_diff
 
     same = text(None)
     assert "### The `differs` texts: another paper, or another text?" in same
-    assert "- **Genuinely different texts:** 1 (100.0%)." in same
-    assert "- **Wrong-paper attaches:** 0 (0.0%)." in same and "| Near spelling |" not in same
+    assert (
+        "- **Genuinely different texts:** 1 (100.0%). The author lists share a surname, so the work is the same "
+        "paper and the two texts differ. Of these, 0 open with the same 5 search tokens as AAAI's, and OpenAlex's "
+        "text is at least 1.5× as long as AAAI's in 0 (median 1.0×); 0 do both, the shape of a text that runs on "
+        "past the abstract."
+    ) in same
+    assert "- **Look like wrong-paper attaches:** 0 (0.0%)." in same and "| Near spelling |" not in same
     assert "the author check above tells which" in same and "with no author check" not in same
     wrong = text(_authors("Someone Else"))
-    assert "- **Wrong-paper attaches:** 1 (100.0%)." in wrong
+    assert "- **Look like wrong-paper attaches:** 1 (100.0%)." in wrong
     assert "| `op:aaai:1990:dblp-DiffC90` | `W63` | person | else | no |" in wrong
     assert "of the 3 attaches compared, 1 (33.3%) look like another paper" in wrong
     assert "Search trees" not in wrong
+
+
+def test_the_differs_shape_figures_count_only_the_same_papers_texts() -> None:
+    def attach(rid: str, verdict: str) -> oa.TitleAttach:
+        return oa.TitleAttach(record_id=rid, work_id="W1", year_ok=True, ours_first="smith",
+                              theirs_first="smith" if verdict == "agree" else "jones",
+                              shared=int(verdict == "agree"), theirs=1, pages=False, verdict=verdict)  # fmt: skip
+
+    judged = [attach("a", "agree"), attach("b", "agree"), attach("c", "wrong"), attach("d", "unverifiable")]
+    shapes = [oa.Shape(2.0, True), oa.Shape(1.0, False), oa.Shape(9.0, True), oa.Shape(9.0, True)]
+    text = "\n".join(oa._differs_authors(judged, shapes, compared=10))
+    assert "- **Genuinely different texts:** 2 (50.0%)." in text
+    assert ("Of these, 1 open with the same 5 search tokens as AAAI's, and OpenAlex's text is at least 1.5× as long "
+            "as AAAI's in 1 (median 1.5×); 1 do both") in text  # fmt: skip
+    assert (
+        "- **Look like wrong-paper attaches:** 1 (25.0%)." in text
+        and "- **Can't be told:** 1 (25.0%;" in text
+    )
+    assert "of the 10 attaches compared, 1 (10.0%) look like another paper, or 1 (10.0%) if the near" in text
+
+
+def test_the_caveats_name_no_author_check_when_nothing_differs() -> None:
+    check = oa.LibraryCheck(
+        library=1, rows={("AAAI", 1990): {"exact": 1}}, no_abstract=0, refused={}, differs=()
+    )
+    text = oa.render(oa.AuditResult(rows={}, library=check), oa.Meta(snapshot="s", commit="c", seed=49,
+                                                                   aaai_sample=0))  # fmt: skip
+    assert "another paper" not in text and "### The `differs` texts" not in text
 
 
 @pytest.mark.parametrize(("official", "other", "ratio", "opening"), [

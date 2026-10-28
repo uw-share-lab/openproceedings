@@ -398,13 +398,18 @@ release gate. Both become required only if a decision superseding decision-017 r
 
 OpenAlex fills an abstract only where every official source gave none (spec 01 §Sources), so on the records it fills
 there is no official text to check it against. The audit measures it where both exist, and writes
-`docs/results/<date>-openalex-audit.md` (the current report is [2026-10-28-openalex-audit.md](../results/2026-10-28-openalex-audit.md), on snapshot
-`2026-10-16-03eab0ef56c4` (index `78d2e70310f3`, with AIES 2026); it adds AIES 2026 to the DOI route and the author
-check of the `aaai_library` comparison's `differs` texts (TASK-250) to the
-[2026-10-16 report](../results/2026-10-16-openalex-audit.md) on the final snapshot `2026-10-11-93c2937e2f29`, which adds the `aaai_library` comparison to the milestone's
-[2026-10-11 report](../results/2026-10-11-openalex-audit.md) on the same snapshot, where the title route attaches 19 and 18 agree; the earlier
-[2026-10-10 report](../results/2026-10-10-openalex-audit.md), on snapshot `2026-10-10-22a339940466` before `aaai_library`
-took over most AAAI 1980–2008 abstracts, checked 1,061 title attaches; the DOI-route rates below are the same in both).
+`docs/results/<date>-openalex-audit.md`. The current report is
+[2026-10-28-openalex-audit.md](../results/2026-10-28-openalex-audit.md), on snapshot `2026-10-16-03eab0ef56c4` (index
+`78d2e70310f3`, with AIES 2026). It adds AIES 2026 to the DOI route and the author check of the `aaai_library`
+comparison's `differs` texts (TASK-250). The earlier reports stay as history:
+
+- [2026-10-16](../results/2026-10-16-openalex-audit.md), on the milestone-C snapshot `2026-10-11-93c2937e2f29`, added
+  the `aaai_library` comparison.
+- [2026-10-11](../results/2026-10-11-openalex-audit.md), on the same snapshot: the title route attaches 19 and 18 agree.
+- [2026-10-10](../results/2026-10-10-openalex-audit.md), on snapshot `2026-10-10-22a339940466` before `aaai_library`
+  took over most AAAI 1980–2008 abstracts, checked 1,061 title attaches. The DOI-route rates below are the same in it
+  and the 2026-10-11 report.
+
 It feeds nothing: it writes no extract, touches no snapshot and gates nothing, and the rates are not thresholds.
 
 **Method (`eval/openalex_audit.py`).**
@@ -437,8 +442,8 @@ It feeds nothing: it writes no extract, touches no snapshot and gates nothing, a
   the one measure of OpenAlex's text for those years. It measures agreement, not error: AAAI's text is itself read
   from archived HTML and OpenAlex's is often text-mined, so `similar` and `differs` include OCR, hyphenation and
   extraction differences on either side. Each `differs` attach is then checked against OpenAlex's authors for its
-  work as the title route's are (TASK-250; one request per 50 works): `wrong` (no shared surname) is another paper
-  attached by title, `agree` the same paper with a genuinely different text, whose shape the report gives (how many
+  work as the title route's are (TASK-250; one request per 50 works): `wrong` (no shared surname) looks like another
+  paper attached by title, `agree` the same paper with a genuinely different text, whose shape the report gives (how many
   open with the same 5 search tokens, and how many of OpenAlex's texts are at least 1.5× as long).
 - **Reproducibility.** The fetcher is the one OpenAlex fetcher and cache (api.openalex.org only, one request a second,
   keyless, no contact address). The reproduction command in the report starts `op eval openalex --offline …` and
@@ -475,11 +480,13 @@ is a measure, not a threshold: the records OpenAlex does fill are the ones the a
 carry `abstract_kind: openalex`.
 
 **The `differs` texts and AIES 2026** ([2026-10-28 report](../results/2026-10-28-openalex-audit.md), snapshot
-`2026-10-16-03eab0ef56c4`; every earlier figure is unchanged on it). Of the 123 `differs` texts, 122 are the same
-paper by its authors: genuinely different texts, 63 opening with the same 5 search tokens as AAAI's and 86 of
-OpenAlex's at least 1.5× as long (median 2.4×), so OpenAlex's text often runs past the abstract or is another
-extraction of it. 1 shares no surname (`op:aaai:1998:dblp-Pedersen98a`, `pedersen`/`pederson`), a near spelling of
-the same first author, so no wrong-paper attach is evident among the 1,131 compared; the title route's ruling stands.
+`2026-10-16-03eab0ef56c4`; every earlier venue-year, title-route and `aaai_library` figure is unchanged on it). Of the
+123 `differs` texts, 122 are the same paper by its authors: genuinely different texts. 63 open with the same 5 search
+tokens as AAAI's and 86 of OpenAlex's are at least 1.5× as long (median 2.4×); 47 do both, the shape of a text that
+runs on past the abstract, and the rest have no one shape. 1 shares no surname (`op:aaai:1998:dblp-Pedersen98a`,
+`pedersen`/`pederson`), a near spelling, likely the same first author (judged by a character ratio, not by a
+person). Taking a text that agrees as the same paper, no wrong-paper attach is evident among the 1,131 compared; the
+title route's ruling stands.
 AIES 2026 on the DOI route: 262 of 265 exact (98.9%), 1 differs, and 2 have no OpenAlex work; with it the DOI route
 compares 2,387 records, 84.8% exact or near-exact.
 
