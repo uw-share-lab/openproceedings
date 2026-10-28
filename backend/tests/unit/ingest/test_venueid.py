@@ -439,7 +439,11 @@ V2_NOTES: list[tuple[str, str, str]] = [
     ("v2/icml-2026/notes-presentation-position-paper-track.json", "position", "accepted"),
     ("v2/icml-2026/notes-rejected.json", "main", "rejected"),  # `Submitted to ICML 2026`: an opt-in rejection
     ("v2/icml-2026/notes-workshop-submission.json", "workshop", "unknown"),  # `…/Workshop/GenBio/Submission`
-    ("v2/iclr-2026/notes-workshop-sub-venue.json", "workshop", "accepted"),  # `…/Workshop/Re-Align/Research`, TASK-191
+    (
+        "v2/iclr-2026/notes-workshop-sub-venue.json",
+        "workshop",
+        "accepted",
+    ),  # `…/Workshop/Re-Align/Research`, TASK-191
 ]
 
 V2_VENUE_LABELS = [

@@ -153,7 +153,7 @@ and any note for a cell that no longer fails (remove it). Then "Owner-accepted e
 (counts, who, when, decision, reason, papers, cause), and any stale one. Then every
 proceedings listing that skipped entries or whose count disagreed with its page, and every OpenReview crawl
 that is incomplete, has coverage gaps, conflicts, unmapped venues or non-routine skipped groups (`proposal`
-and `container` are routine; `not_a_v2_venue`, which can be an unreadable group, and `no_submission_venue_id`
+and `container` are routine; `not_a_v2_venue`, which can be an unreadable group or a placeholder whose venues are more than one level down (list its children live: openreview-api skill, TASK-191), and `no_submission_venue_id`
 are not), or skipped anything but
 `not_submission` replies. Then "Accepted records only an imported set holds" (TASK-178): per cell, the accepted
 records whose only source is an imported RIS set (no listing or note behind them), with the cell's delta

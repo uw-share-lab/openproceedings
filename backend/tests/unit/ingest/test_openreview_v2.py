@@ -653,7 +653,9 @@ def test_the_recorded_re_align_placeholder_and_its_children_crawl_as_workshop_ve
 def test_a_group_that_is_no_venue_and_holds_none_stays_not_a_v2_venue(tmp_path: Path) -> None:
     server = world()
     server.children["ICLR.cc/2024/Program_Chairs"] = ["ICLR.cc/2024/Program_Chairs/Members"]
-    server.groups["ICLR.cc/2024/Program_Chairs/Members"] = group_doc("ICLR.cc/2024/Program_Chairs/Members", domain=CONF)
+    server.groups["ICLR.cc/2024/Program_Chairs/Members"] = group_doc(
+        "ICLR.cc/2024/Program_Chairs/Members", domain=CONF
+    )
     report = orv.crawl(client(tmp_path, server), "ICLR", 2024).report
     assert report.skipped_groups["ICLR.cc/2024/Program_Chairs"] == "not_a_v2_venue"
     assert report.skipped_groups["ICLR.cc/2024/Program_Chairs/Members"] == "not_a_v2_venue"
@@ -989,6 +991,26 @@ def test_a_dry_run_lists_what_it_would_fetch_and_writes_nothing(tmp_path: Path) 
         "&limit=1000&offset=0&sort=number%3Aasc",
     ]
     assert report.track_status["main"] == {"accepted": 3, "withdrawn": 1, "desk_rejected": 1}
+
+
+def test_a_dry_run_keeps_the_cached_children_of_a_group_that_is_no_venue(tmp_path: Path) -> None:
+    """TASK-191 review: one uncached child is a `would_fetch`, and the venues among the other children still count."""
+    server = world()
+    holder = "ICLR.cc/2024/Workshop/Re-Align"
+    cached, uncached = f"{holder}/Challenge", f"{holder}/Research"
+    server.children["ICLR.cc/2024/Workshop"].append(holder)
+    server.children[holder] = [cached, uncached]
+    server.groups[holder] = {"id": holder, "domain": "OpenReview.net", "readers": ["everyone"], "content": {}}
+    server.groups.update({g: group_doc(g) for g in (cached, uncached)})
+    orv.crawl(client(tmp_path, server), "ICLR", 2024)
+    gone = f"https://api2.openreview.net/groups?id={uncached}"
+    for p in orv.http_dir(tmp_path).rglob("*.json"):
+        if json.loads(p.read_text())["key"] == gone:
+            p.unlink()
+    report = orv.crawl(client(tmp_path, FakeOpenReview(), credentials=None, offline=True), "ICLR", 2024,
+                       dry_run=True).report  # fmt: skip
+    assert cached in report.groups and uncached not in report.groups
+    assert report.skipped_groups[holder] == "container" and gone in report.to_manifest()["would_fetch"]
 
 
 def test_a_dry_run_needs_an_offline_client(tmp_path: Path) -> None:

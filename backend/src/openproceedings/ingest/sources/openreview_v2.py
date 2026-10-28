@@ -445,23 +445,29 @@ def venue_groups(client: OpenReviewClient, venue: str, year: int, report: CrawlR
                 if (group := _venue_group(client, gid, report)) is not None:
                     found.append(group)
                 elif report.skipped_groups[gid] == "not_a_v2_venue":
-                    found += _child_venues(client, gid, report, page_size)
+                    found += _child_venues(client, gid, report, page_size, on_miss)
             except CacheMiss as e:
                 on_miss(e)
     return found
 
 
-def _child_venues(client: OpenReviewClient, gid: str, report: CrawlReport, page_size: int) -> list[VenueGroup]:
+def _child_venues(client: OpenReviewClient, gid: str, report: CrawlReport, page_size: int,
+                  on_miss: Callable[[CacheMiss], None]) -> list[VenueGroup]:  # fmt: skip
     """The v2 venues one level under a group that is no venue itself (TASK-191: ICLR 2026 `Workshop/Re-Align`
     holds `/Research` and `/Challenge`, NeurIPS 2025 `Workshop/DBM` holds `/Findings`, NeurIPS 2024 `Competition`
     holds `/LMC`). The group is reported `container` when a child is a venue; otherwise it stays
-    `not_a_v2_venue`, and each child that is no venue is reported too."""
+    `not_a_v2_venue`, and each child that is no venue is reported too. An uncached child (a dry run) goes to
+    `on_miss` without losing the venues among the other children."""
     venues = []
     for child in _group_ids(client, gid, report, page_size):
         if "proposal" in child.casefold():
             report.skipped_groups[child] = "proposal"
-        elif (group := _venue_group(client, child, report)) is not None:
-            venues.append(group)
+            continue
+        try:
+            if (group := _venue_group(client, child, report)) is not None:
+                venues.append(group)
+        except CacheMiss as e:
+            on_miss(e)
     if venues:
         report.skipped_groups[gid] = "container"
     return venues
