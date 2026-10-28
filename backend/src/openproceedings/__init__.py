@@ -1,4 +1,4 @@
-"""openproceedings: exact, reproducible Boolean search over NeurIPS, ICLR, ICML, AAAI, AIES and IASEAI titles and abstracts."""
+"""openproceedings: exact, reproducible Boolean search over NeurIPS, ICLR, ICML, AAAI, AIES, FAccT and IASEAI titles and abstracts."""
 
 from importlib.metadata import PackageNotFoundError, version
 
