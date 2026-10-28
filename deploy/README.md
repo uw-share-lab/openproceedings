@@ -501,8 +501,9 @@ What it does not do:
 - **A full set fails open.** Each limit keeps up to 262,144 sources, and nftables doesn't limit a new source
   while the set is full. Real sources aren't needed to fill one: spoofed packets do it. A byte-rate entry
   goes 20 s after a source's last packet, so it takes about 13,000 spoofed packets a second to keep a set full.
-  A spoofed SYN's source stays in a connection set while conntrack holds the half-open connection: about 4,400
-  a second at the usual 60 s.
+  A spoofed SYN's source stays in a connection set while conntrack holds the half-open connection: about 3,000
+  to 4,400 a second keep one full (conntrack's 60 s, stretched to about 90 s by SYN-ACK retries without SYN
+  cookies).
 - **UDP flows linger.** conntrack keeps a QUIC flow after its last packet for `nf_conntrack_udp_timeout`
   (30 s by default), or `nf_conntrack_udp_timeout_stream` (120 s, 180 s on older kernels) once traffic has
   gone both ways. The flow counts against the 16 until then.
