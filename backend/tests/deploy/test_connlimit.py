@@ -41,7 +41,10 @@ def test_chain_sees_the_published_port_after_conntrack() -> None:
     # after conntrack (-200), before Docker's DNAT (-100), which would turn 443 into the container's port
     assert "type filter hook prerouting priority -150; policy accept;" in text
     assert "meta l4proto != { tcp, udp } accept" in text  # TCP and UDP (QUIC: HTTP/3 is on)
-    assert "th dport != 443 accept" in text
+    assert "define https_port = 443" in text
+    assert "th dport != $https_port accept" in text
+    # packets to the host's own addresses only (Docker's DNAT test), never a container's HTTPS going out
+    assert "fib daddr type != local accept" in text
     # only this table is replaced on a reload, never Docker's
     assert re.search(
         r"^table inet openproceedings_limits\ndelete table inet openproceedings_limits$", text, re.M
