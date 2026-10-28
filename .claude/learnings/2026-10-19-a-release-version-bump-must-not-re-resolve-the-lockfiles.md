@@ -139,5 +139,5 @@ release-branch summary: check `CITATION.cff`'s title, abstract and keywords, and
   suites took 168 s with `-n 4`; the lockfile check, the snapshot golden and the probe ran in seconds; the full suite
   was left to CI's `test` job.
 
-**Propagated to:** none new; `release-manager` step 2 already describes the probe, and spec 08 §Release step 3 allows
-a new index.
+**Propagated to:** none new. `release-manager` step 2 already describes the probe; verifying on the new index was
+the owner's choice for this release (spec 08 §Release step 3 requires a new index only when a version changes).
