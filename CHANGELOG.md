@@ -10,6 +10,30 @@ papers a query matches: a search record pins its `index_version`, `tokenizer_ver
 it with the same QUERY_VERSION; otherwise as `drifted`, naming what changed. Each release's Data section
 names the index it was verified on and which saved records still reproduce.
 
+## 0.7.0
+
+### Added
+
+- deploy: per-source connection and byte-rate limits in front of Caddy (TASK-067 AC #3) ([#212](https://github.com/uw-share-lab/openproceedings/pull/212))
+- eval: author-check the aaai_library differs texts and audit AIES 2026 (TASK-250) ([#211](https://github.com/uw-share-lab/openproceedings/pull/211))
+- ICML 2026 from PMLR v306; crawl venues under placeholder groups (TASK-191) ([#213](https://github.com/uw-share-lab/openproceedings/pull/213))
+
+### Changed
+
+- name FAccT in the package docstring and spec 00's venue list ([#208](https://github.com/uw-share-lab/openproceedings/pull/208))
+
+### Internal
+
+- deps: close TASK-278 (braces advisory withdrawn); dev-only undici and zod fixes ([#209](https://github.com/uw-share-lab/openproceedings/pull/209))
+- backlog: fold TASK-256 into TASK-067; lift TASK-250's OpenAlex hold ([#210](https://github.com/uw-share-lab/openproceedings/pull/210))
+
+### Data
+
+- index_version `d9355590c4c8`, snapshot `d4f4688715d09a8b34ce6605442e5790fa25b2d148d50b237be628b8a4bc5d2a`
+- TOKENIZER_VERSION 3 · SCHEMA_VERSION 4 · Tantivy 0.26.2 · QUERY_VERSION 2
+- Search records saved under 0.3.0 to 0.6.0 replay as `reproduced` on the index_version they pin, while it is kept and supported and QUERY_VERSION matches. Earlier records also require a supported retained pin and matching QUERY_VERSION; release tables alone do not determine replay status.
+- Verified on a new index, d9355590c4c8 of the 173,981-paper snapshot of 2026-10-28 (record schema 10), with the same tokenizer, schema, query and Tantivy versions as 0.6.0. The snapshot adds ICML 2026 main from PMLR v306 and the papers of venues crawled under placeholder groups (TASK-191); its coverage report still passes the M4 gate, 81 of 82 gated cells. It is the first snapshot built with the author and keyword caps (decision-054) and the native-id bounds (decision-055). Serving it is a separate index promotion (spec 08 §Deploy); 78d2e70310f3 stays retained, so search records pinned to it still replay as reproduced while it is kept. The question of OpenAlex's terms (TASK-135) is still open: it has yet to go to the university copyright office, and the public launch waits on its answer. Merging this release into main changes no served index or snapshot.
+
 ## 0.6.0
 
 ### Added
