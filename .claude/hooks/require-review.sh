@@ -11,9 +11,9 @@
 #    no refspec is given, and every local branch for --all / --mirror; `--tags`, glob refspecs and the
 #    matching refspec `:` / `+:` are refused outright; in the `--git-dir`/`GIT_DIR=` repo (an `export`ed or
 #    `set -a` one too) when one is named. A refspec-less push whose `git -c` settings choose what is pushed
-#    (remote.<name>.push or .mirror, push.default, remote.pushDefault, push.followTags), whose repo config
-#    does (any remote.<name>.push but HEAD, a true remote.<name>.mirror or push.followTags unless
-#    --no-follow-tags, push.default=matching:
+#    (remote.<name>.push or .mirror, push.default, remote.pushDefault), whose repo config does (any
+#    remote.<name>.push but HEAD, a true remote.<name>.mirror, push.default=matching; push.followTags is not
+#    refused, since its tags point into the commits pushed, which a named refspec pushes too: owner, 2026-10-28):
 #    read with `git config -z --get-regexp`), or under config this gate can't read (--config-env, -c
 #    include.path, GIT_CONFIG_*, GIT_COMMON_DIR, HOME), is blocked. Aliases are expanded, braces and `$'…'`
 #    decoded, and abbreviated options written out first (cmdparse); an alias under unreadable config, a git
@@ -64,14 +64,14 @@ IFS= read -r -d '' PROG <<'PY' || true
 import glob, os, re, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
 from cmdparse import (ASSIGNMENT, FailClosed, ParseError, expand_known, expand_word, gh_subcommand, git, git_anchored,
-                      git_bool, git_config, git_config_opaque, git_dir, git_subcommand, join_continuations, opt_value,
+                      git_config, git_config_opaque, git_dir, git_subcommand, join_continuations, opt_value,
                       opt_values, push_config, push_config_risk, push_positionals, read_payload, tokenize, walk,
                       xargs_hides_args)
 from cmdparse import payload as hook_payload
 
 ENTRY_NAME = re.compile(r"^\.claude/learnings/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$")  # same rule as learnings_index.py
 # `git -c` keys (lower-cased) that decide what a refspec-less `git push` sends and where
-PUSH_TARGET_CONFIG = re.compile(r"remote\..+\.push|remote\..+\.mirror|push\.default|remote\.pushdefault|push\.followtags")
+PUSH_TARGET_CONFIG = re.compile(r"remote\..+\.push|remote\..+\.mirror|push\.default|remote\.pushdefault")
 
 def review_status(directory, sha):
     common = git(directory, "rev-parse", "--path-format=absolute", "--git-common-dir")
@@ -313,14 +313,12 @@ def main():
                        "unchecked. Push each reviewed branch by name."])
             if not refspecs:
                 # `git -c remote.origin.push=other:other push origin` pushes `other`, not HEAD (TASK-067), and so
-                # does the same setting in the repo's config (review gate round 2); `--no-follow-tags` overrides
-                # push.followTags, as it does for git (TASK-285)
-                repo_cfg = push_config(argv, d)
-                follow = "--no-follow-tags" not in flags and git_bool(repo_cfg.get("push.followtags", "false"))
+                # does the same setting in the repo's config (review gate round 2). push.followTags is not read:
+                # the tags it adds point into the commits pushed, as with a named refspec (owner, 2026-10-28)
                 if (git_config_opaque(argv) or any(PUSH_TARGET_CONFIG.fullmatch(k) for k in git_config(argv))
-                        or push_config_risk(repo_cfg) or follow):
+                        or push_config_risk(push_config(argv, d))):
                     block(["Review gate: this `git push` names no refspec, and its config chooses what is pushed",
-                           "(remote.<name>.push / .mirror, push.default=matching, push.followTags, a `git -c` push",
+                           "(remote.<name>.push / .mirror, push.default=matching, a `git -c` push",
                            "setting, or settings this gate can't read: GIT_CONFIG_*, GIT_COMMON_DIR, --config-env,",
                            "include.path). Name the refspec."])
                 pushed = ["HEAD"]

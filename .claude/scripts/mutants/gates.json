@@ -1892,12 +1892,6 @@
   "new": "remote\\..+\\.push|push\\.default"
  },
  {
-  "label": "require-review: -c push.followTags not a push target",
-  "file": ".claude/hooks/require-review.sh",
-  "old": "|push\\.followtags\")",
-  "new": "\")"
- },
- {
   "label": "require-review: refspec-less push under unreadable config allowed",
   "file": ".claude/hooks/require-review.sh",
   "old": "            if (git_config_opaque(argv) or any(",
@@ -2280,14 +2274,8 @@
  {
   "label": "require-review: repo push config not read",
   "file": ".claude/hooks/require-review.sh",
-  "old": "                        or push_config_risk(repo_cfg) or follow):",
-  "new": "                        or follow):"
- },
- {
-  "label": "require-review: repo push.followTags not read",
-  "file": ".claude/hooks/require-review.sh",
-  "old": "follow = \"--no-follow-tags\" not in flags and git_bool(",
-  "new": "follow = False and git_bool("
+  "old": "                        or push_config_risk(push_config(argv, d))):",
+  "new": "                        or False):"
  },
  {
   "label": "cmdparse: a remote.<name>.push HEAD hides another value",
@@ -2318,12 +2306,6 @@
   "file": ".claude/hooks/enforce-pr-workflow.sh",
   "old": "    positionals = push_positionals(args)  #",
   "new": "    positionals = [a for a in args if not a.startswith(\"-\")]  #"
- },
- {
-  "label": "require-review: --no-follow-tags not honoured",
-  "file": ".claude/hooks/require-review.sh",
-  "old": "follow = \"--no-follow-tags\" not in flags and ",
-  "new": "follow = "
  },
  {
   "label": "require-review: matching refspec ':' allowed",

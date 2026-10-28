@@ -2653,7 +2653,7 @@ GIT_FALSE = re.compile(r"false|no|off|[ \t\n\v\f\r]*[+-]?(?:0x0+|0+)[kmg]?")
 def git_bool(value: str) -> bool:
     """git's reading of a boolean config value, failing toward true: false only for what git reads as false.
     `1k`, `0x1` and `+1` are true to git, so reading only digits as a number under-read them and let a
-    `remote.<name>.mirror` or `push.followTags` push through unreviewed (TASK-282). '' is true: `push_config`
+    `remote.<name>.mirror` push through unreviewed (TASK-282). '' is true: `push_config`
     gives '' for a key with no value (true to git) and for one set to '' (false to git), and reading both as true
     only ever refuses. Nothing is stripped, and a non-ASCII value is true: Python's `strip()` and `lower()` would
     turn ' false', '0 ' and '0' + KELVIN SIGN, which git refuses, into false."""
