@@ -4,7 +4,7 @@ title: 'Decide: a per-client connection or upload cap in front of the proxy'
 status: To Do
 assignee: []
 created_date: '2026-10-16 23:07'
-updated_date: '2026-10-24 08:27'
+updated_date: '2026-10-28 03:59'
 labels:
   - ops
   - security
@@ -35,4 +35,6 @@ Options from TASK-183's author (2026-10-16): (a) a custom Caddy build (xcaddy) w
 Owner decision 2026-10-17 (about 03:21 EDT): option (c). The per-client cap will be a per-source connection limit in front of Caddy at the host (for example nftables connlimit on 443), set once TASK-064 chooses a host. No custom Caddy build now (option (a) declined), and request buffering stays (option (b) declined, decision-035). Recorded in spec 08 §Deploy and deploy/README.md §Comparisons. AC #2 waits on the host: build it there and measure with smoke-test.sh --compare.
 
 2026-10-24 (TASK-257): HTTP/3 is now on with comparisons on, so the per-source limit at the host must cover UDP 443 (QUIC) as well as TCP 443.
+
+2026-10-28: folded into TASK-067 (its build-and-measure criterion is now TASK-067's last AC) and archived, at the owner's direction.
 <!-- SECTION:NOTES:END -->

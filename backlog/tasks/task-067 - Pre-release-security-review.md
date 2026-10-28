@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-10-16 15:37'
+updated_date: '2026-10-28 03:59'
 labels:
   - ops
   - security
@@ -25,6 +25,7 @@ Full-tree security-reviewer pass before going public with an instance.
 <!-- AC:BEGIN -->
 - [x] #1 No open Must/Should findings
 - [ ] #2 Rate limits and CORS verified on the deployed instance
+- [ ] #3 On the chosen host, a per-source connection limit in front of Caddy (e.g. nftables connlimit) covers TCP and UDP 443 (QUIC), caps one client's concurrent compare uploads below the OOM point, is measured with deploy/smoke-test.sh --compare, and is described in spec 08 §Deploy and deploy/README.md §Comparisons (from TASK-256; owner decision 2026-10-17, option (c))
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -53,4 +54,6 @@ Full-tree security-reviewer pass before going public with an instance.
 2026-10-03 code-only main promotion: fresh whole-application security review of main 0b31ebc425c3b27611550c116f1e3907330ff878 to dev 07fe70f0fb6b18202f819149088cfcc54b75ef00 approved with no Must/Should/Nit findings. Fresh make tooling exited 0 and 404 focused security tests passed. The report is summarized in docs/results/2026-10-03-release-preparation.md; full local report and raw evidence are /tmp/main-promotion-security-review.md and /tmp/main-promotion-security-{tooling,tests}.log. This refreshes AC#1 evidence only: AC#2 remains unchecked until rate limits and CORS are verified on an actual deployed instance. No public instance or tag was created.
 
 2026-10-16: AC#2 (rate limits and CORS on the deployed instance) is all that is left; it waits on hosting (TASK-064) and then a deployment. Not added as a dependency: the CLI refuses a list holding the completed TASK-065.
+
+2026-10-28: TASK-256 folded in (owner, 2026-10-28: fewer standalone tasks). Its decision (option (c): a per-source limit at the host, set once TASK-064 picks one; no custom Caddy build, request buffering kept) stays recorded in spec 08 §Deploy and deploy/README.md §Comparisons; its remaining build-and-measure criterion is this task's new last AC.
 <!-- SECTION:NOTES:END -->
