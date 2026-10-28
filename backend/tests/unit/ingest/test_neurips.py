@@ -789,3 +789,24 @@ def test_a_listing_counts_the_abstracts_that_lost_a_control_character(
     seed_2013(plain)
     [clean] = mine(plain, 2013).reports
     assert clean.abstract_control_characters == 0 and "abstract_control_characters" not in clean.to_manifest()
+
+
+@pytest.mark.parametrize(
+    ("count", "stated"), [("1,234", 1234), ("9" * 16, int("9" * 16)), ("9" * 17, None), ("9" * 5_000, None)]
+)
+def test_a_stated_count_past_sixteen_characters_states_none(count: str, stated: int | None) -> None:
+    # never `int` past Python's 4,300-digit limit: a count that long is no count, so the listing is checked without one
+    page = f"<span class='paper-count'>{count} papers</span><ul class='paper-list'></ul>"
+    assert (
+        neurips.parse_year_index(page, "https://proceedings.neurips.cc/paper_files/paper/2025/").stated
+        == stated
+    )
+
+
+def test_a_link_urljoin_refuses_is_no_link_never_a_bare_value_error() -> None:
+    # an unclosed IPv6 host (`http://[x`) makes `urljoin` raise: that paper is unlinked, and that see-also is kept as
+    # written, so the crawl still reports it unfollowed
+    page = """<span class='paper-count'>1 paper</span><p class='book-see-also'><a href='http://[x/'>x</a></p>
+    <ul class='paper-list'><li><a href='http://[x/hash-Abstract-Conference.html'>T</a></li></ul>"""
+    parsed = neurips.parse_year_index(page, "https://proceedings.neurips.cc/paper_files/paper/2025/")
+    assert (parsed.entries, parsed.unlinked, parsed.see_also) == ([], 1, ["http://[x/"])

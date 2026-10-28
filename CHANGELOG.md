@@ -10,6 +10,31 @@ papers a query matches: a search record pins its `index_version`, `tokenizer_ver
 it with the same QUERY_VERSION; otherwise as `drifted`, naming what changed. Each release's Data section
 names the index it was verified on and which saved records still reproduce.
 
+## 0.6.0
+
+### Added
+
+- ingest: cap author and keyword counts, bound native ids (TASK-280, TASK-281) ([#195](https://github.com/uw-share-lab/openproceedings/pull/195))
+
+### Fixed
+
+- read digits only as ASCII in crawl headers, dblp years and the review gate's git config ([#197](https://github.com/uw-share-lab/openproceedings/pull/197))
+- linear log scrubbing and author split; scrub bare, encoded and quoted secrets (TASK-275, TASK-276, TASK-283) ([#198](https://github.com/uw-share-lab/openproceedings/pull/198))
+- hardening batch (TASK-284, 266, 269, 267, 268, 255, 259, 257, 273) ([#202](https://github.com/uw-share-lab/openproceedings/pull/202))
+- hooks: know git 2.56's new branch options; revive the env - mutant ([#204](https://github.com/uw-share-lab/openproceedings/pull/204))
+
+### Internal
+
+- backlog: complete TASK-280 and TASK-281, file TASK-282 ([#196](https://github.com/uw-share-lab/openproceedings/pull/196))
+- backlog: TASK-285, review cmdparse's git config reading in the accident scope ([#203](https://github.com/uw-share-lab/openproceedings/pull/203))
+
+### Data
+
+- index_version `78d2e70310f3`, snapshot `03eab0ef56c4d768ca25c1942207d1c9eaf14a1d852bd276a05e013ae17210c7`
+- TOKENIZER_VERSION 3 · SCHEMA_VERSION 4 · Tantivy 0.26.2 · QUERY_VERSION 2
+- Search records saved under 0.3.0 to 0.5.0 replay as `reproduced` on the index_version they pin, while it is kept and supported and QUERY_VERSION matches. Earlier records also require a supported retained pin and matching QUERY_VERSION; release tables alone do not determine replay status.
+- Verified on the same served index as 0.5.0, 78d2e70310f3 of the 173,518-paper snapshot of 2026-10-16, with the same tokenizer, schema, query and Tantivy versions, so search records saved on a retained supported index still replay as reproduced. The new caps on how many authors and keywords a record keeps (decision-054) and the native-id bounds (record schema 10, decision-055) apply from the next snapshot build; they change no record of the current snapshot, so the served index is unchanged. The question of OpenAlex's terms (TASK-135) is still open: it has yet to go to the university copyright office, the public launch waits on its answer, and the OpenAlex abstract fill is unchanged until then. Merging this release into main changes no served index or snapshot.
+
 ## 0.5.0
 
 ### Added

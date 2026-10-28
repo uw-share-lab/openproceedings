@@ -59,6 +59,7 @@ from pydantic import ValidationError
 from openproceedings.ingest import urls
 from openproceedings.ingest.ojs_table import TABLE, Table
 from openproceedings.ingest.record import (
+    MAX_NATIVE_DIGITS,
     Claim,
     ClaimField,
     ClaimValue,
@@ -223,6 +224,19 @@ def _token(listing: ET.Element) -> Token | None:
     return Token(token, stated)
 
 
+def _number(digits: str, what: str) -> int:
+    """`digits` (a run of ASCII digits) as an int, when it holds at most `MAX_NATIVE_DIGITS` past leading zeros
+    (decision-055, as `urls` reads the same number from a URL): an article id longer than that could be no record's
+    `ojs-` id (a volume is held to the same bound), and past Python's 4,300-digit limit `int` would raise a bare
+    ValueError that aborts the harvest unexplained. A longer one is a CrawlError, `oai_unreadable`, as a header with
+    no article id is."""
+    significant = digits.lstrip("0") or "0"
+    if len(significant) > MAX_NATIVE_DIGITS:
+        raise CrawlError(f"an OAI-PMH record's {what} has {len(significant):,} digits, more than the {MAX_NATIVE_DIGITS} "
+                         f"a native id's number may hold (decision-055): {significant[:20]}…", reason="oai_unreadable")  # fmt: skip
+    return int(significant)
+
+
 def _header(header: ET.Element | None) -> OaiRecord:
     """The article id, deletion and set of a record's header (no metadata)."""
     ident = header.findtext(f"{_OAI}identifier", "") if header is not None else ""
@@ -233,7 +247,7 @@ def _header(header: ET.Element | None) -> OaiRecord:
         raise CrawlError(f"an OAI-PMH record has no ojs.aaai.org article id ({ident[:80]!r})",
                          reason="oai_unreadable")  # fmt: skip
     set_spec = (header.findtext(f"{_OAI}setSpec") or "").strip()
-    return OaiRecord(int(m.group(1)), header.get("status") == "deleted", set_spec)
+    return OaiRecord(_number(m.group(1), "article id"), header.get("status") == "deleted", set_spec)
 
 
 def _oai_record(rec: ET.Element) -> OaiRecord:
@@ -254,7 +268,7 @@ def _oai_record(rec: ET.Element) -> OaiRecord:
         doi=next((i for i in idents if _DOI.fullmatch(i)), None),
         article_url=next((i for i in idents if i.startswith(f"https://{HOST}/") and "/article/view/" in i), None),
         pdf_url=next((r for r in relations if r.startswith(f"https://{HOST}/") and "/article/view/" in r), None),
-        volume=int(volume.group(1)) if volume else None,
+        volume=_number(volume.group(1), "volume") if volume else None,
     )  # fmt: skip
 
 

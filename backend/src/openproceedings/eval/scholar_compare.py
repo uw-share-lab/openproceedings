@@ -134,6 +134,18 @@ _DOI = re.compile(
 _DOI_LINK = re.compile(r"(?:https?://)?(?:www\.|dx\.)?doi\.org/", re.IGNORECASE)
 _DOI_LABEL = re.compile(r"doi(?::\s*|\s+)", re.IGNORECASE)
 _TRAILING = ".,;)"  # punctuation a sentence or a list puts after a DOI (a `)` only when unbalanced)
+# a link's path ends at its query or fragment
+_LINK_END = re.compile(r"[?#]")
+_SPACES = re.compile(r"\s*+")  # what `str.strip()` strips: `\s` is `str.isspace`
+# the `_TRAILING` run at the end of a link's path, percent-encoded or not, matched on the path reversed (one pass
+# from the end; a `%HH` is always an escape, since `%` is no hex digit) so that the run is never unquoted
+_ENCODED_RUN = re.compile(r"(?:[.,;)]|[eEcC]2%|92%|[bB]3%)*+")
+_RUN = re.compile(r"[.,;)]*+")  # the `_TRAILING` run, read forward in place
+_CLOSES = re.compile(r"\)*+")  # its leading `)`s
+_ENCODED_CLOSES = re.compile(r"(?:\)|%29)*+")  # the run's leading `)`s, read forward
+# the longest link path that can unquote to `caps.MAX_DOI` characters: a character is at most four UTF-8 bytes
+# (an invalid run at most three, one U+FFFD), each byte at most three characters (`%HH`)
+_MAX_ENCODED_DOI = 12 * caps.MAX_DOI
 _YEAR = re.compile(r"\s*([0-9]{4})(?![0-9])")
 _QUERY_DATE = re.compile(r"Query date: (.+)")  # Publish or Perish: one per Scholar search
 _OPENREVIEW_PATHS = frozenset({"/forum", "/pdf"})
@@ -165,23 +177,53 @@ class RisRecord:
     dois: tuple[str, ...] = ()  # the DOIs it carries (`DO`, or a doi.org link), as `doi_key` writes them
 
 
+def _run_end(pattern: re.Pattern[str], text: str, pos: int = 0, endpos: int | None = None) -> int:
+    """Where a match of `pattern`, which can be empty, ends: it always matches."""
+    m = pattern.match(text, pos, len(text) if endpos is None else endpos)
+    assert m is not None  # every pattern passed here matches the empty string
+    return m.end()
+
+
 def doi_key(text: str) -> str | None:
     """A DOI as matching compares it, lower-cased (DOIs are case-insensitive): without a `doi:`/`DOI ` label, then
     without a doi.org link's prefix (`https://`, `www.`/`dx.` optional) and its query and fragment, and without the
     `.`, `,`, `;` or unbalanced `)` a sentence leaves after it. None for anything that is no DOI
-    (`10.<registrant>/<suffix>`, no whitespace, control or bidi format character in the suffix, once unquoted)."""
-    v = text.strip()
-    if label := _DOI_LABEL.match(v):  # `DOI https://doi.org/…` too: the label, then the link
-        v = v[label.end() :]
-    if link := _DOI_LINK.match(v):
-        v = unquote(re.split(r"[?#]", v[link.end() :], maxsplit=1)[0])
+    (`10.<registrant>/<suffix>`, no whitespace, control or bidi format character in the suffix, once unquoted), and
+    for one longer than `caps.MAX_DOI` characters, the ingest cap on `urls.doi` (decision-053): it names no record.
+    A link's path is unquoted only up to the trailing run, and not at all when longer than `_MAX_ENCODED_DOI`
+    characters: unquote holds ~20 bytes per character (TASK-273). Read in place, by position: a long link's one
+    whole copy is its path reversed (its unquoted slice holds at most `_MAX_ENCODED_DOI` characters), and a value
+    that is no link is never copied whole (each of its slices holds at most `caps.MAX_DOI` characters)."""
+    lo = _run_end(_SPACES, text)  # `text.strip()`'s start; its end is found where each branch reads
+    if label := _DOI_LABEL.match(text, lo):  # `DOI https://doi.org/…` too: the label, then the link
+        lo = label.end()
     # one pass each, never a character at a time (a hostile file must not defeat /compare's time cap): strip the
     # trailing run, then give back the run's leading `)`s that close a `(` the DOI opened
-    kept = v.rstrip(_TRAILING)
-    tail = v[len(kept) :]
-    closes = min(len(tail) - len(tail.lstrip(")")), max(kept.count("(") - kept.count(")"), 0))
-    v = kept + ")" * closes
-    return v.lower() if _DOI.fullmatch(v) else None
+    if link := _DOI_LINK.match(text, lo):
+        start = link.end()  # at least `doi.org/`'s 8 characters in, so `start - 1` is no negative index
+        query = _LINK_END.search(text, start)
+        end = query.start() if query else len(text)
+        back = text[end - 1 : start - 1 : -1]
+        spaces = 0 if query else _run_end(_SPACES, back)  # whitespace before a query is the path's
+        cut = end - _run_end(_ENCODED_RUN, back, spaces)
+        if cut - start > _MAX_ENCODED_DOI:
+            return None
+        kept = unquote(text[start:cut])  # ends in no `_TRAILING` character: the run took every one
+        closes = _run_end(_ENCODED_CLOSES, text, cut, end - spaces)
+        tail_closes = text.count(")", cut, closes) + text.count("%29", cut, closes)
+    else:
+        # past `caps.MAX_DOI` characters only the trailing run and whitespace may follow, or the key is too long:
+        # read the rest in place, and trim the bounded head
+        head = min(len(text), lo + caps.MAX_DOI)
+        run = _run_end(_RUN, text, head)
+        if _run_end(_SPACES, text, run) < len(text):
+            return None
+        hi = run if run > head else lo + len(text[lo:head].rstrip())  # where the trimmed value ends
+        kept = text[lo : min(hi, head)].rstrip(_TRAILING)
+        start = lo + len(kept)
+        tail_closes = _run_end(_CLOSES, text, start, hi) - start
+    v = kept + ")" * min(tail_closes, max(kept.count("(") - kept.count(")"), 0))
+    return v.lower() if len(v) <= caps.MAX_DOI and _DOI.fullmatch(v) else None
 
 
 def openreview_id(url: str) -> str | None:

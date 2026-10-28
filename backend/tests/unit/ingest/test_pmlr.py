@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from openproceedings.ingest import urls, volumes
 from openproceedings.ingest.dedup import dedup
+from openproceedings.ingest.record import MAX_NATIVE_KEY
 from openproceedings.ingest.sources import pmlr
 from openproceedings.ingest.sources.common import MinerError
 from openproceedings.ingest.sources.crawl import ingest_pmlr, load_crawls
@@ -513,3 +514,46 @@ def test_icml_is_untouched() -> None:
 def test_a_malformed_non_icml_row_is_refused(row: str, error: str) -> None:
     with pytest.raises(ValueError, match=error):
         load(row)
+
+
+@pytest.mark.parametrize(("extra", "built"), [(0, True), (1, False)])
+def test_a_key_past_the_native_id_bound_is_skipped_and_counted_as_invalid(
+    tmp_path: Path, extra: int, built: bool
+) -> None:
+    """decision-055: a key of at most 200 characters (`record.MAX_NATIVE_KEY`). One past it makes no valid record, so
+    the miner skips the entry and counts it as it counts any invalid one; at the bound it is a record."""
+    key = "s" * (MAX_NATIVE_KEY + extra)
+    seed_fixture(tmp_path, "pmlr", V28, edit=lambda t: t.replace("sznitman13", key))
+    seed_fixture(tmp_path, "pmlr", "pmlr/v28/paper.json")
+    for k in (key, "boots13"):
+        seed(tmp_path, "pmlr", f"https://proceedings.mlr.press/v28/{k}.html", "", status=404)
+    result = mine(tmp_path, 28)
+    assert result.report.skipped["invalid"] == (0 if built else 1)
+    assert (f"op:icml:2013:pmlr-v28-{key}" in {r.id for r in result.records}) is built
+
+
+@pytest.mark.parametrize(
+    ("number", "read"),
+    [("9" * 12, int("9" * 12)), ("0" * 5_000 + "235", 235), ("9" * 13, None), ("9" * 5_000, None)],
+)
+def test_a_volume_heading_reads_at_most_twelve_digits(number: str, read: int | None) -> None:
+    # decision-055: a volume number past 12 digits (leading zeros aside) is no heading, so `mine_volume` reports
+    # `heading_mismatch`, never a bare ValueError from `int` past Python's 4,300-digit limit
+    found = pmlr.heading(f"<h1>Volume {number}: International Conference</h1>")
+    assert found == (None if read is None else (read, "International Conference"))
+    # the first `Volume N:` heading decides: one past the bound is never passed over for a later one
+    later = pmlr.heading(f"<h1>Volume {number}: Bogus</h1><h2>Volume 235: International Conference</h2>")
+    assert later == (None if read is None else (read, "Bogus"))
+
+
+def test_a_link_urljoin_refuses_is_no_link_never_a_bare_value_error() -> None:
+    # an unclosed IPv6 host (`http://[x`) makes `urljoin` raise; such a link names nothing, so the block is unlinked
+    page = """<div class='paper'><p class='title'>T</p><p class='links'>[<a href='http://[x/v235/a24a.html'>abs</a>]</p></div>"""
+    assert pmlr.parse_volume_index(page, "https://proceedings.mlr.press/v235/") == ([], 1)
+
+
+def test_a_block_with_any_link_urljoin_refuses_is_unlinked() -> None:
+    # the refused link could be its forum link (or a second one), so the block is not half-read without it
+    page = """<div class='paper'><p class='title'>T</p><p class='links'>[<a href='a24a.html'>abs</a>]
+      [<a href='http://[x/forum?id=9U29U3cDKq'>OpenReview</a>]</p></div>"""
+    assert pmlr.parse_volume_index(page, "https://proceedings.mlr.press/v235/") == ([], 1)

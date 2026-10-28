@@ -22,7 +22,7 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
 1. **Release (spec 08 §Release, decision-023).** Run its checklist, steps 1 to 9, in order, pasting each
    command's result into the promotion PR (step 6's tag-ruleset check as a comment on it, since the
    promotion has merged by then); stop and list blockers at the first step that fails. In short:
-   readiness on `dev` (required checks, `e2e`, `bench`, the latest `web-image` run, a nightly from the last day that tested `dev`'s head (dispatched with `--ref dev`, or a scheduled run whose summary names that sha), the M4 gate, no open
+   readiness on `dev` (required checks, `e2e`, `bench`, the latest `web-image` run, a nightly from the last day that tested `dev`'s head (dispatched with `--ref dev`, or a scheduled run whose summary names that sha, only while `main`'s and `dev`'s `nightly.yml` are the same: a schedule runs `main`'s copy, 2026-10-27), the M4 gate, no open
    Must); the security gate (`/security-review` over `origin/main...origin/dev`; TASK-067 Done before the
    first release a public instance serves; a reviewer run in parallel reads other trees with `git show <ref>:<path>`,
    `git diff` or its own `git worktree add --detach`, never a checkout in the shared one, 2026-10-22); verify the index (the served one, or a new one when
@@ -47,9 +47,11 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    or the index manifest. It does not refuse a PATCH that carries a new feature: choose the number from the
    release's Added section (or the PR titles in the merge commits' bodies, `git log --first-parent --format=%b
    origin/main..origin/dev`); a `feat` means at least MINOR (spec 08 §Release, Versioning; 2026-10-22).
-   The combined-snapshot golden includes the manifest's app version. After an app-version bump, if that
-   golden fails, prove that reverting only `openproceedings_version` in memory restores the exact prior
-   whole-directory hash before updating its expected hash. To do that, use a throwaway test that
+   The combined-snapshot golden includes the manifest's app version. After an app-version bump, run `uv sync
+   --locked` in the worktree first: `__version__` is read from the installed package's metadata, so until then
+   the golden still passes on the old version (2026-10-27). If that golden then fails, prove that reverting only
+   `openproceedings_version` in memory restores the exact prior whole-directory hash before updating its
+   expected hash. To do that, use a throwaway test that
    monkeypatches `openproceedings.ingest.snapshot.__version__` (the name the module bound at import) to the old
    version. Put it under `backend/tests/` in a `git archive HEAD backend pyproject.toml` copy in a mktemp
    directory, and run it from the copy's root with the worktree's `.venv` python: the copy is its own rootdir, so

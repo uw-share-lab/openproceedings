@@ -27,9 +27,10 @@ import shutil
 import tempfile
 import time
 import unicodedata
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Iterator, Mapping
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
@@ -193,10 +194,12 @@ def record_of(stored: bytes) -> dict[str, Any]:
 
 
 PROGRESS_EVERY = 10_000  # documents between index_build_progress lines
-PARALLEL_FROM = 2_000  # below this many records, normalizing in one process is faster than starting workers
-# records normalized and added per step (never all at once). Must be ≥ PARALLEL_FROM, so a first chunk
-# smaller than PARALLEL_FROM is the whole corpus.
-CHUNK = 4_096
+# a corpus of fewer records (the snapshot manifest's `record_count`, read before the first chunk) is normalized in
+# this process. Starting 8 spawn workers costs ~1.7 s CPU and ~0.3 s wall, repaid from ~1,500 records of 120-250-word
+# abstracts but only ~10,000 of the 5k fixture's 8-60 words: below this, a pool saves under 2 s at most and costs
+# its CPU every time (TASK-284, docs/results/2026-10-24-parallel-normalize-crossover.md). Chunks no longer decide it
+PARALLEL_FROM = 10_000
+CHUNK = 4_096  # records normalized and added per step (never all at once)
 
 
 def _normalize_pair(pair: tuple[str, str], tokenizer: str) -> tuple[list[str], list[str]]:
@@ -230,7 +233,8 @@ def _document(
 
 
 def _check_tokens(r: PaperRecord, fields: dict[str, list[str]], exact: tantivy.TextAnalyzer) -> None:
-    if len(r.id.encode("utf-8")) > MAX_TOKEN_BYTES:  # the `raw` id is one term (a pmlr key is unbounded)
+    # the `raw` id is one term; ingest bounds every native id (decision-055), and this guard stays for any id it misses
+    if len(r.id.encode("utf-8")) > MAX_TOKEN_BYTES:
         raise IndexBuildError(
             f"{r.id[:80]}…: the id is over {MAX_TOKEN_BYTES} bytes, which Tantivy would drop"
         )
@@ -331,19 +335,45 @@ def _title_ranks(snapshot: Path) -> dict[str, int]:
     return {rid: rank for rank, (_, rid) in enumerate(sorted(keys))}
 
 
+def pooled(snapshot: Path, workers: int) -> bool:
+    """Whether `normalized` spreads the snapshot over `workers` processes: more than one, and the manifest's
+    `record_count` at least PARALLEL_FROM. A manifest that can't be read is refused by `iter_records` anyway; a
+    readable one whose `record_count` is missing or not a whole number counts as 0 (logged, once, with the
+    value's type, or `missing` when there is none, a manifest that is no JSON object included): the snapshot builds
+    serially. Either way it normalizes alike, so a wrong count costs time, never a different index."""
+    if workers <= 1:
+        return False
+    try:
+        manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    held = isinstance(manifest, dict) and "record_count" in manifest
+    count = manifest["record_count"] if held else None
+    if not isinstance(count, int) or isinstance(count, bool):
+        log.warning(
+            "snapshot_record_count_unreadable",
+            extra={"snapshot": snapshot.name, "error": type(count).__name__ if held else "missing"},
+        )
+        return False
+    return count >= PARALLEL_FROM
+
+
 def normalized(
-    snapshot: Path, workers: int, tokenizer: str = TOKENIZER_VERSION
-) -> Iterator[tuple[PaperRecord, dict[str, list[str]]]]:
+    snapshot: Path, workers: int, tokenizer: str = TOKENIZER_VERSION, parallel: bool | None = None
+) -> Generator[tuple[PaperRecord, dict[str, list[str]]]]:
     """The snapshot's records (in id order, verified), each with its `normalize()`d title and abstract (a
     missing abstract is ""; by tokenizer version `tokenizer`), a chunk at a time, across `workers` processes
-    once the corpus is big enough to repay starting them. Shared by the build and the parity check, so both
-    normalize alike."""
+    when `parallel` (by default `pooled`: enough records to repay starting them). Shared by the build and the
+    parity check, so both normalize alike; each logs `parallel` and `workers`. Both close it
+    (`contextlib.closing`), so a loop that stops early shuts the pool down at once, never only when the
+    generator is collected (TASK-284)."""
     pool = None
     each = partial(_normalize_pair, tokenizer=tokenizer)
+    parallel = pooled(snapshot, workers) if parallel is None else parallel
     try:
         for chunk in _chunks(iter_records(snapshot)):
             pairs = [(r.title, r.abstract or "") for r in chunk]
-            if pool is None and workers > 1 and len(pairs) >= PARALLEL_FROM:
+            if pool is None and parallel:
                 pool = ProcessPoolExecutor(
                     max_workers=workers, mp_context=multiprocessing.get_context("spawn")
                 )
@@ -367,30 +397,36 @@ def _add_all(
     form: SchemaForm,
     commit_every: int | None = None,
     tokenizer: str = TOKENIZER_VERSION,
+    parallel: bool | None = None,
 ) -> int:
     """Stream the snapshot's records through normalize() into the writer, as documents of schema `form`."""
     ranks = _title_ranks(snapshot)
     added = 0
     started = time.perf_counter()
-    for r, fields in normalized(snapshot, workers, tokenizer):
-        if not form.abstract_kind and r.abstract_kind == "openalex":
-            # a schema-3 index could neither filter nor label it, and its display derives the kind from the
-            # stored abstract (`TantivyEngine._display`), which is exact only while no schema-3 index holds one
-            raise IndexBuildError(f"{r.id}: an OpenAlex abstract needs index schema 4 (schema 3 can't filter or "
-                                  "label it): build at the current schema")  # fmt: skip
-        _check_tokens(r, fields, exact)
-        if r.id not in ranks:  # can't happen for a valid line; refuse rather than guess a rank
-            raise IndexBuildError(f"{r.id}: no title rank (the snapshot's lines didn't read the same twice)")
-        writer.add_document(_document(r, fields, added, ranks[r.id], form))
-        if commit_every and (added + 1) % commit_every == 0:
-            writer.commit()  # tests: several segments
-        ids.write(r.id + "\n")
-        added += 1
-        if added % PROGRESS_EVERY == 0:  # a long build says it's alive (logging-standards: at most every 10k)
-            log.info(
-                "index_build_progress",
-                extra={"docs": added, "ms": elapsed_ms(started)},
-            )
+    # closed when the loop stops, a refusal included: its worker pool shuts down then, not when collected
+    with closing(normalized(snapshot, workers, tokenizer, parallel)) as rows:
+        for r, fields in rows:
+            if not form.abstract_kind and r.abstract_kind == "openalex":
+                # a schema-3 index could neither filter nor label it, and its display derives the kind from the
+                # stored abstract (`TantivyEngine._display`), which is exact only while no schema-3 index holds one
+                raise IndexBuildError(f"{r.id}: an OpenAlex abstract needs index schema 4 (schema 3 can't filter or "
+                                      "label it): build at the current schema")  # fmt: skip
+            _check_tokens(r, fields, exact)
+            if r.id not in ranks:  # can't happen for a valid line; refuse rather than guess a rank
+                raise IndexBuildError(
+                    f"{r.id}: no title rank (the snapshot's lines didn't read the same twice)"
+                )
+            writer.add_document(_document(r, fields, added, ranks[r.id], form))
+            if commit_every and (added + 1) % commit_every == 0:
+                writer.commit()  # tests: several segments
+            ids.write(r.id + "\n")
+            added += 1
+            # a long build says it's alive (logging-standards: at most every 10k)
+            if added % PROGRESS_EVERY == 0:
+                log.info(
+                    "index_build_progress",
+                    extra={"docs": added, "ms": elapsed_ms(started)},
+                )
     return added
 
 
@@ -445,7 +481,13 @@ def build_index(
             _seal(target)  # a crash between placing and sealing left it writable
             log.info("index_exists", extra={"index_version": version_id})
             return IndexBuildResult(target, version_id, created=False)
-        log.info("index_build_started", extra={"index_version": version_id, "snapshot_hash": snapshot_hash})
+        workers = workers if workers is not None else _cpus()
+        parallel = pooled(snapshot, workers)
+        log.info(
+            "index_build_started",
+            extra={"index_version": version_id, "snapshot_hash": snapshot_hash, "workers": workers,
+                   "parallel": parallel},
+        )  # fmt: skip
         tmp = Path(tempfile.mkdtemp(dir=indexes, prefix=storage.TMP))
         index: tantivy.Index | None = None
         writer: Any = None
@@ -460,11 +502,12 @@ def build_index(
                     snapshot,
                     writer,
                     exact,
-                    workers if workers is not None else _cpus(),
+                    workers,
                     ids,
                     SERVED_SCHEMAS[schema_version],
                     commit_every,
                     tokenizer,
+                    parallel,
                 )
             writer.commit()
             writer.wait_merging_threads()

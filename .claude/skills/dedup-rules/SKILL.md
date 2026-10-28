@@ -21,7 +21,7 @@ over-merge silently deletes a paper from someone's systematic review.
    decision-053): its `id` cut short could be another paper's. The same holds for proceedings ids and Creative AI
    evidence (a cut venue id counts against Creative AI), and `resolve` takes no `urls` slot or `venue_id_raw` from
    any cut DOI, URL or venue id (`caps.cut_identifier`). A URL the record's own id was read from becomes an address of that
-   id's page, so the record still names itself; an `iclr_archive` record whose own target was cut stands for itself
+   id's page, so the record still names itself (the native-id bounds, decision-055, keep it within the cap); an `iclr_archive` record whose own target was cut stands for itself
    (`dedup._archive_target_cut`, only by the crawler's own claim), and its own id stays among its cluster's proceedings
    ids. PMLR's index links each paper's forum from ICML 2023 (recorded for
    v202, v235 and v267; v28 has no link). Clusters that share a forum id

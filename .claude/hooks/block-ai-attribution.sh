@@ -19,7 +19,9 @@
 # `printf '…' > f`, `tee f <<< '…'`, no unknown variable) is scanned as that text, and the file is read too when it
 # exists (the write may append, not run, or run alongside); anything else (`cp`, `jq … > f`, `… | tee f`, a group's
 # `{ …; } > f`) or a write target it can't resolve is refused. So is a writer file option with no value after it (`--body-file <(…)`),
-# and a command it can't parse that names gh or git and a message-file option or a reader (the file can't be read). When a
+# and a command it can't parse that names gh or git and a message-file option or a reader (the file can't be read), or
+# that may be a writer at all: git and a message verb, gh pr/issue/release and a write verb, or gh api (TASK-266),
+# read as written, without quotes or `$'`, and as tokenize's words, names case-blind (`GIT` runs git on macOS). When a
 # gh writer reads its text from a pipe (`--body-file -`, `--input -`, `-F body=@-`, with no `<`, `<<` or `<<<` of its
 # own), any other program in the call but gh run on a file is refused, as in a `$(…)`. gh's -R/--repo is skipped
 # between group and verb too (`gh pr --repo o/r comment`). Known limitations (TASK-243; CI's attribution check on
@@ -36,7 +38,8 @@
 # (cmdparse.join_continuations: `Cl\<newline>aude` in an unquoted heredoc is `Claude`, TASK-164). `git commit`
 # with no message opens an editor; that path is covered by .githooks/commit-msg (scripts/setup-dev.sh installs
 # it) and CI (pr-gates.yml).
-# A command it can't parse is scanned as raw text; one it can't check at all (an internal error) is blocked.
+# A command it can't parse is scanned as raw text, and refused if it may be a writer; one it can't check at all (an
+# internal error) is blocked.
 # Exit 2 blocks the call and feeds stderr back to the agent.
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 # The program goes to Python as an argument and the payload on stdin, never in an environment variable: past
@@ -44,8 +47,8 @@ HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 IFS= read -r -d '' PROG <<'PY' || true
 import glob, os, re, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
-from cmdparse import (ParseError, expand_known, expand_word, gh_subcommand, git_subcommand, join_continuations,
-                      heredoc_quoting, opt_values, read_payload, tokenize, walk)
+from cmdparse import (ParseError, _ansi_c, expand_known, expand_word, gh_subcommand, git_subcommand,
+                      join_continuations, heredoc_quoting, opt_values, read_payload, strip_prefixes, tokenize, walk)
 
 PATTERN = re.compile(
     r"co-authored-by[:=].*(claude|anthropic)|generated[ -](with|by):? +[`*_[]*((an?|the) +)?((github|microsoft|google) +)?(claude|(anthropic|openai|(chat)?gpt(-?[0-9][0-9a-z.]*)?|copilot|gemini|bard|codex|llm|ai)([^a-zA-Z0-9]|$))|🤖 generated|noreply@anthropic\.com",
@@ -248,6 +251,62 @@ def unreadable(word):
           "for AI attribution. Write the file in an earlier call, then send it.", file=sys.stderr)
     sys.exit(2)
 
+def decode_ansi_c(text):
+    """`text` with each `$'…'` span decoded as bash does (cmdparse._ansi_c), line by line: an unclosed one runs to
+    the end of its line."""
+    lines = []
+    for line in text.split("\n"):
+        parts, i = [], 0
+        while (k := line.find("$'", i)) != -1:
+            value, end, _ = _ansi_c(line, k + 2)
+            parts += [line[i:k], value]
+            i = end
+        lines.append("".join(parts) + line[i:])
+    return "\n".join(lines)
+
+FIND_EXEC = {"-exec", "-execdir", "-ok", "-okdir"}
+
+def find_commands(argv):
+    """The commands a `find` runs on what it finds (`-exec git commit -F msg.txt ;`), each read as a command of its
+    own, with the walk's context (review round 3)."""
+    out, k = [], 1
+    while k < len(argv):
+        if argv[k] in FIND_EXEC:
+            j = k + 1
+            while j < len(argv) and argv[j] not in (";", "+"):
+                j += 1
+            inner = strip_prefixes(argv[k + 1 : j])
+            if inner:
+                for attr in ("shell_vars", "olddir", "dir_unknown", "env_empty", "in_subst", "cd_stayed"):
+                    setattr(inner, attr, getattr(argv, attr))
+                inner.assigns = {**argv.assigns, **inner.assigns}
+                inner.from_find = True  # its `{}` is each file find finds (`reader_words`)
+                out.append(inner)
+            k = j
+        k += 1
+    return out
+
+def named(names, text):
+    """Is one of `names` a word of `text`, in any case (`GIT` runs git on a case-blind filesystem)?"""
+    return re.search(r"\b(" + "|".join(map(re.escape, sorted(names))) + r")\b", text, re.IGNORECASE) is not None
+
+def may_write(text):
+    """Text the walk couldn't parse, so couldn't split into commands: does it name, anywhere, a writer main() checks?
+    git with a message verb, gh pr or issue with a write verb (`new` too), gh release create/edit, or any gh api (its
+    method and fields can't be read, so a read isn't told from a write) (TASK-266)."""
+    if named({"git"}, text) and named(GIT_MSG, text):
+        return True
+    if not named({"gh"}, text):
+        return False
+    return (named({"api"}, text) or named({"pr", "issue"}, text) and named(GH_PR_WRITE | GH_ISSUE_WRITE | {"new"}, text)
+            or named({"release"}, text) and named(GH_RELEASE_WRITE, text))
+
+def unparsed_writer():
+    print("Blocked: this command can't be parsed, and it may write a commit, tag, PR, issue or release, or send a gh api "
+          "write, whose text and files can't then be checked for AI attribution. Fix its quoting, or write it more "
+          "plainly (one command per call, options named outright), and retry.", file=sys.stderr)
+    sys.exit(2)
+
 def blocked():
     print("Blocked: commits, PRs and releases in openproceedings carry no AI authorship.", file=sys.stderr)
     print("Remove the 'Co-Authored-By: Claude …' trailer / the 'Generated with' or 'Generated by' footer naming an AI "
@@ -257,17 +316,26 @@ def blocked():
 
 CMD = [""]  # the raw command, for inline_stdin
 
+def with_find(walked):
+    """The walk with each command a `find -exec` runs placed right after the find, in the find's directory."""
+    out = []
+    for argv, d, redirects in walked:
+        out.append((argv, d, redirects))
+        if argv and argv[0] == "find":
+            out += [(inner, d, []) for inner in find_commands(argv)]
+    return out
+
 def main():
     cmd, cwd = read_payload()
     CMD[0] = cmd
     if not cmd:  # no raw-text prefilter: `gi\<newline>t push` only becomes `git` after parsing (review round 6)
         sys.exit(0)
     try:
-        walked = list(walk(cmd, cwd))
+        walked = with_find(walk(cmd, cwd))
         first = len(walked)  # the walks are compared each on its own: the second starts here
         if "~" in cmd or "$" in cmd:
             # and with HOME/TMPDIR/USER read as '', which the agent's shell may have: `cd ~` then stays put (TASK-156)
-            walked += walk(cmd, cwd, env_empty=True)
+            walked += with_find(walk(cmd, cwd, env_empty=True))
     except ParseError:
         # unbalanced quotes: bash won't run it, but don't let it look approved; read with its line continuations
         # joined (every one, when it can't be scanned: TASK-164), then its quotes and backslashes gone, which keeps
@@ -282,10 +350,27 @@ def main():
         # the file scan (TASK-243) can't run on a command it can't parse: one that may send a message file is
         # refused before this early exit, rather than let that file through unread
         raw = join_continuations(cmd)
-        if re.search(r"\b(gh|git)\b", raw) and re.search(r"--body-file|--notes-file|--input|--file|--field|=@|(^|\s)-[A-Za-z]*F|\b(cat|head|tail|sed)\b|\$\(\s*<", raw):
-            unreadable("a message file in a command this gate can't parse")
+        # read three ways: as written, with its quotes, backslashes and the `$` of `$'…'`/`$"…"` gone (`g''it`,
+        # `g$''it`), and as the words tokenize makes when it can (`$'\x67'it` is `git`) (TASK-266 review)
+        readings = [raw, re.sub(r"\$?[\"'\\]", "", raw)]
+        # and with each `$'…'` decoded first, for text tokenize can't read either (`$'\x67'it commit` on a line bash
+        # runs before an unclosed quote on a later one: review round 3)
+        readings.append(re.sub(r"\$?[\"'\\]", "", decode_ansi_c(raw)))
+        try:
+            readings.append(" ".join(tokenize(cmd)))
+        except ParseError:
+            pass
+        for text in readings:
+            # `GIT` runs git on a case-blind filesystem (macOS): the names are read case-blind (TASK-266 review)
+            if re.search(r"\b(gh|git)\b", text, re.IGNORECASE) and re.search(r"--body-file|--notes-file|--input|--file|--field|=@|(^|\s)-[A-Za-z]*F|\b(cat|head|tail|sed)\b|\$\(\s*<", text):
+                unreadable("a message file in a command this gate can't parse")
+        # nor can a writer's options be read (a file option held in a variable, say): one that may be a gh or git
+        # writer is refused, with or without a file option the text shows (TASK-266)
+        if any(may_write(text) for text in readings[1:]):
+            unparsed_writer()
         sys.exit(0)
 
+    # command names come case-folded from the walk (`GIT commit`, `Gh pr create`: cmdparse.fold, TASK-269 review)
     commands = [(argv, d) for argv, d, _ in walked if argv]
     # (file word, argv, directory): files the command reads into a message, read whole once it is relevant (`file_text`)
     sent, writers = [], set()
@@ -327,10 +412,16 @@ def main():
         for op, target in redirects:
             if reads_in(op, target) and not op.startswith("<<"):
                 sent.append((target, argv, d))
+    # a writer that reads its text from stdin (`-F -`, `--body-file -`): what a find's reader prints may be it
+    stdin_sent = any(word == "-" for word, _, _ in sent)
     for argv, d in commands:
         # a cat, head, tail or sed anywhere, in a `$(…)` or backquotes too: the walk reads the bodies
         if argv[0] in READERS:
-            sent += [(a, argv, d) for a in reader_files(argv)]
+            # a find's `{}` is what find finds, not a message file, unless what the reader prints may be sent (a pipe
+            # into a writer reading stdin, or a substitution): `find … -exec head -1 {} + && git commit -m …` (closing
+            # review)
+            skip_found = getattr(argv, "from_find", False) and not (stdin_sent or argv.in_subst)
+            sent += [(a, argv, d) for a in reader_files(argv) if not (skip_found and a == "{}")]
         elif (argv.in_subst or stdin_writer and argv[0] != "gh") and reads_unmodeled_file(argv, d):
             unresolved(" ".join(argv[:3]))
     # A file the call writes before it sends it is read here as it was before the call. When what writes it is

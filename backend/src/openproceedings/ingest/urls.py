@@ -15,7 +15,7 @@ from openproceedings.ingest import acm_table
 from openproceedings.ingest import volumes as _volumes
 from openproceedings.ingest.classify import NEURIPS_DB_2021_HOST, NEURIPS_DB_2021_ROUNDS
 from openproceedings.ingest.ojs_table import TABLE as OJS_TABLE
-from openproceedings.ingest.record import FORUM_ID
+from openproceedings.ingest.record import FORUM_ID, MAX_NATIVE_DIGITS
 
 _PROCEEDINGS_HOSTS = {
     "proceedings.neurips.cc": "NeurIPS",
@@ -30,8 +30,11 @@ _PROCEEDINGS_PATH = re.compile(
     r"(?:/paper_files)?/paper/([0-9]{4})/(?:hash|file)/([0-9a-fA-F]+)-(?:Abstract|Paper)(?:-([A-Za-z0-9_]+))?\.(?:html|pdf)"
 )
 _PMLR_HOSTS = {"proceedings.mlr.press", "mlr.press"}
-_PMLR_PATH = re.compile(r"/v([0-9]+)/([A-Za-z0-9_-]+?)(?:\.html|\.pdf|/.*)?")
-_PMLR_GITHUB_PATH = re.compile(r"/mlresearch/v([0-9]+)/[^/]+/assets/([A-Za-z0-9_-]+)/.*")
+# a volume or article number: at most `MAX_NATIVE_DIGITS` digits after any leading zeros (decision-055), so `int` never
+# meets Python's 4,300-digit limit and a URL never names a number no record id can hold
+_NUMBER = rf"0*([0-9]{{1,{MAX_NATIVE_DIGITS}}})"
+_PMLR_PATH = re.compile(rf"/v{_NUMBER}/([A-Za-z0-9_-]+?)(?:\.html|\.pdf|/.*)?")
+_PMLR_GITHUB_PATH = re.compile(rf"/mlresearch/v{_NUMBER}/[^/]+/assets/([A-Za-z0-9_-]+)/.*")
 PREFIX = {"NeurIPS": "nips", "ICLR": "iclr"}
 
 
@@ -146,8 +149,11 @@ def acm_doi(url: str) -> str | None:
 _OJS_HOST = "ojs.aaai.org"
 # the journals are the table's (`ojs_sections.toml`), so a journal added there is a journal whose URLs name articles
 _OJS_PATH = re.compile(
-    r"/index\.php/(?:" + "|".join(map(re.escape, sorted(OJS_TABLE.journals))) + r")/article/view/([0-9]+)"
-    r"(?:/[0-9]+)?/?"
+    r"/index\.php/(?:"
+    + "|".join(map(re.escape, sorted(OJS_TABLE.journals)))
+    + r")/article/view/"
+    + _NUMBER
+    + r"(?:/[0-9]+)?/?"
 )
 
 

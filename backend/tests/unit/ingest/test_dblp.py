@@ -10,13 +10,14 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
 import pytest
 from openproceedings.ingest import dblp_table
 from openproceedings.ingest.dedup import dedup
-from openproceedings.ingest.record import DERIVED, PaperRecord
+from openproceedings.ingest.record import DERIVED, MAX_NATIVE_KEY, PaperRecord
 from openproceedings.ingest.sources import dblp, dblp_xml, icml_sites
 from openproceedings.ingest.sources.common import CrawlError
 from openproceedings.ingest.sources.http import CacheMiss
@@ -289,6 +290,20 @@ def test_a_table_year_the_release_dates_otherwise_or_a_later_icml_key_are_judged
     assert e.value.reason == "table_mismatch"
 
 
+# superscript two; Arabic-Indic 1990 and 2025; five digits; past int()'s 4,300-digit limit
+@pytest.mark.parametrize("raw", ["²", "١٩٩٠", "٢٠٢٥", "10000", "9" * 5000])
+def test_a_year_not_of_at_most_four_ascii_digits_is_no_year(tmp_path: Path, raw: str) -> None:
+    """TASK-282: `isdigit()` is true for each, but `int('²')` raises, `int('٢٠٢٥')` reads 2025 (out of range:
+    ignored), `int('10000')` would be ignored too and 5,000 digits raise. A year is at most four ASCII digits, so
+    an unlisted record dated otherwise is refused as having no year."""
+    extract = prepared(tmp_path)
+    odd = dblp_xml.DblpEntry("proceedings", "conf/icml/odd", "2025-07-01", None, {"year": raw}, {})
+    with pytest.raises(CrawlError, match=r"conf/icml/odd \(no year\)") as e:
+        dblp.check_extract(dblp.Extract(extract.doi, extract.sha256, extract.fetched_at,
+                                        (*extract.entries, odd)), TABLE)  # fmt: skip
+    assert e.value.reason == "unlisted_proceedings"
+
+
 def test_an_informal_or_repeated_paper_is_counted_never_a_record(tmp_path: Path) -> None:
     extract = prepared(tmp_path)
     [paper] = [e for e in extract.entries if e.key == "conf/icml/Synthetic90"]
@@ -426,3 +441,19 @@ def test_reading_the_release_says_when_it_starts_and_how_far_it_has_got(
     events = [r.getMessage() for r in caplog.records]
     assert events[0] == "dblp_extract_started" and events[-1] == "dblp_extract_written"
     assert "dblp_extract_progress" in events
+
+
+@pytest.mark.parametrize(("length", "built"), [(MAX_NATIVE_KEY, True), (MAX_NATIVE_KEY + 1, False)])
+def test_a_key_past_the_native_id_bound_is_skipped_and_counted_as_invalid(
+    tmp_path: Path, length: int, built: bool
+) -> None:
+    """decision-055: a dblp key of at most 200 characters (`record.MAX_NATIVE_KEY`). One past it makes no valid
+    record, so the year's mine skips the entry and counts it as any invalid one; at the bound it is a record."""
+    extract = prepared(tmp_path)
+    key = "S" * length
+    entries = tuple(
+        replace(e, key=f"conf/icml/{key}") if e.key == "conf/icml/Synthetic90" else e for e in extract.entries
+    )
+    result = dblp.mine_year(1990, replace(extract, entries=entries), table=TABLE)
+    assert [r.id for r in result.records] == ([f"op:icml:1990:dblp-{key}"] if built else [])
+    assert result.reports[0].skipped["invalid"] == (0 if built else 1)

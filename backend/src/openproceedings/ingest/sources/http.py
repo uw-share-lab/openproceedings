@@ -229,8 +229,11 @@ def canonical(url: str, *, keep_query: bool = False) -> str:
 
 
 def _seconds(raw: str | None) -> float | None:
+    """A header's seconds: ASCII digits with at most one '.', else None. Headers arrive decoded as latin-1, so a
+    byte 0xB2 is '²': a digit to `isdigit()` that `float()` refuses (TASK-282)."""
     text = (raw or "").strip()
-    return float(text) if text.replace(".", "", 1).isdigit() else None
+    digits = text.replace(".", "", 1)
+    return float(text) if digits.isascii() and digits.isdigit() else None
 
 
 def retry_after(headers: Mapping[str, str], now: datetime) -> float | None:
@@ -242,7 +245,7 @@ def retry_after(headers: Mapping[str, str], now: datetime) -> float | None:
     if raw:
         try:
             when = email.utils.parsedate_to_datetime(raw)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):  # a year or offset past what C can hold: OverflowError
             when = None
         if when is not None:
             return max(0.0, (when if when.tzinfo else when.replace(tzinfo=UTC)).timestamp() - now.timestamp())

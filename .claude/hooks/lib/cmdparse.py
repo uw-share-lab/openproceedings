@@ -21,13 +21,17 @@ matter to a gate:
     the getopt ones (`env`, `sudo`, `nice`, `timeout`, `doas`, `caffeinate`, `flock`) with every option they take:
     short groups (`sudo -nu root`), attached values (`flock -w5`) and unique long prefixes (`--wai`) read as getopt
     reads them, and an option this parser can't place a ParseError (TASK-253);
+    `sudo -e`/`--edit` and `sudoedit` run no command and edit each file after their options, a `>>` redirect of its
+    own, and with `-R`/`--chroot` are a ParseError, since the files are inside the chroot (TASK-269);
     `env -S '…'` is split, `env -C`/`sudo -D` move the directory of the command they run (`Argv.chdir`) and no
     later one, with its redirects still opened where the shell is; `arch -e NAME=value`/`-d NAME` set and unset as
     env does; flock's lock file is a `>>` redirect of its own, in the directory flock runs in (flock creates it;
     `flock N` alone is a descriptor), its `-c`/`--command '…'` is a `sh -c`, and another option after the lock file
     a ParseError;
     the argv comes back as an `Argv` that records the `VAR=val` words and whether xargs runs it;
-  * command names compare by basename (`/usr/bin/git` is `git`);
+  * command names compare by basename (`/usr/bin/git` is `git`), case-folded (`GIT`, `RM`: macOS's filesystem finds
+    them) except the builtins that act on the shell itself
+    (`CASE_SENSITIVE_NAMES`) and keywords (`RESERVED`), which match only as spelled (`fold`);
   * redirections leave argv as (operator, target) pairs (`walk` yields them);
   * `cd`, `pushd` and `popd` are tracked (targets through `expand_word`, `-P` physically; one it can't resolve,
     one that doesn't exist, a relative one under CDPATH, or `cd -` back to an unknown one marks the directory
@@ -107,6 +111,10 @@ WRAPPER_VALUE_OPTS: dict[str, set[str]] = {
     "xcrun": {"-sdk", "--sdk", "-toolchain", "--toolchain"},
     "arch": {"-arch", "-d", "-e"},
     "unbuffer": set(),
+    # zsh's precommand modifiers (the Bash tool's shell may be zsh): each runs what follows (review round 3)
+    "noglob": set(),
+    "nocorrect": set(),
+    "-": set(),
 }
 # Getopt wrappers, with every option each takes (GNU's and BSD's), so a short group (`sudo -nu root`, `flock -nw5`)
 # and a long option's unique prefix (`flock --wai 5`) are read as the wrapper reads them (TASK-253). Short options
@@ -249,10 +257,10 @@ GIT_LONG_OPTS: dict[str, frozenset[str]] = {
             "verbose quiet track set-upstream set-upstream-to unset-upstream color remotes contains "
             "no-contains with without abbrev all delete move omit-empty copy list show-current "
             "create-reflog edit-description force merged no-merged column sort points-at ignore-case "
-            "recurse-submodules format no-verbose no-quiet no-track no-set-upstream no-set-upstream-to "
+            "recurse-submodules format dry-run delete-merged forked no-verbose no-quiet no-track no-set-upstream no-set-upstream-to "
             "no-unset-upstream no-color no-abbrev no-delete no-move no-omit-empty no-copy no-list "
             "no-show-current no-create-reflog no-edit-description no-force no-column no-sort no-points-at "
-            "no-ignore-case no-recurse-submodules no-format"
+            "no-ignore-case no-recurse-submodules no-format no-dry-run"  # dry-run, delete-merged, forked: git 2.56
         ),
         "checkout": (
             "guess overlay quiet recurse-submodules progress merge conflict detach track force orphan "
@@ -502,13 +510,18 @@ class Argv(list):
     in_subst: bool = False
     # `cd_stayed`: the directory is where it is because a `cd ~/…` failed in the HOME '' reading (`_change_dir`)
     cd_stayed: bool = False
-    # `creates`: (directory, file) for each file a stripped wrapper itself creates (flock's lock file), in the
-    # directory the wrapper ran in; the walk yields each as a `>>` redirect
+    # `creates`: (directory, file) for each file a stripped wrapper itself creates or edits (flock's lock file, each
+    # file `sudo -e`/`sudoedit` edits), in the directory the wrapper ran in; the walk yields each as a `>>` redirect
     creates: list[tuple[str, str]]
     # `chdir`: the directory `env -C` / `sudo -D` run it in, for it alone (TASK-253); None: where the shell is.
     # `chdir_unknown`: one this parser can't resolve (`env -C "$X"`): `chdir` stays where it was, marked unknown
     chdir: str | None = None
     chdir_unknown: bool = False
+    # `external`: it runs as a program of its own, in a child process, so a `cd`/`pushd`/`popd` or an assignment,
+    # `export` or `unset` it names leaves the shell as it was: after any wrapper but `command`, `builtin` or `time`
+    # spelled exactly (`env cd`, `COMMAND cd`, `nohup export`), or named by a path or another case (`/usr/bin/cd`)
+    # (TASK-269 review round 3)
+    external: bool = False
 
     def __init__(self, words: list[str], via_xargs: bool = False, assigns: dict[str, str] | None = None):
         super().__init__(words)
@@ -1372,6 +1385,78 @@ def base(word: str) -> str:
     return os.path.basename(word) if "/" in word else word
 
 
+# The builtins that act on the shell itself match only as spelled: `CD /tmp` is no `cd` (it runs an external `cd`, or
+# nothing), so folding them would move this parser's directory, or set variables, where bash doesn't (an allow;
+# TASK-269 review). `command` and `time` aren't here: `COMMAND git push` and `TIME rm` run git and rm (macOS's
+# /usr/bin/command and /usr/bin/time), but in a child process, so a builtin after them (`COMMAND cd`) changes nothing:
+# the walk reads that from `Argv.external`.
+CASE_SENSITIVE_NAMES = {
+    ".",
+    ":",
+    "alias",
+    "bg",
+    "bind",
+    "break",
+    "builtin",
+    "caller",
+    "cd",
+    "compgen",
+    "complete",
+    "compopt",
+    "continue",
+    "declare",
+    "dirs",
+    "disown",
+    "enable",
+    "eval",
+    "exec",
+    "exit",
+    "export",
+    "fc",
+    "fg",
+    "getopts",
+    "hash",
+    "history",
+    "jobs",
+    "let",
+    "local",
+    "logout",
+    "mapfile",
+    "popd",
+    "pushd",
+    "read",
+    "readarray",
+    "readonly",
+    "return",
+    "set",
+    "shift",
+    "shopt",
+    "source",
+    "suspend",
+    "times",
+    "trap",
+    "type",
+    "typeset",
+    "ulimit",
+    "umask",
+    "unalias",
+    "unset",
+    "wait",
+}
+
+
+def fold(word: str) -> str:
+    """A command's name as the system runs it: its basename, case-folded, since macOS's filesystem finds `GIT`, `RM`
+    or `/usr/bin/Env` as git, rm and env; a builtin's or keyword's spelling (CASE_SENSITIVE_NAMES) is kept, since
+    bash matches those exactly (TASK-269 review). A wrapper it makes known runs what follows as a program of its
+    own, never as a builtin (`COMMAND cd /tmp` moves nothing): `_strip_prefixes` marks that `Argv.external`."""
+    name = base(word)
+    # an unresolved `$X` stays as written: `$x` would be another variable (round 3)
+    if re.search(r"[$`]", name):
+        return name
+    return name if name.lower() in CASE_SENSITIVE_NAMES else name.lower()
+
+
 def strip_prefixes(argv: list[str], state: dict | None = None) -> Argv:
     """Drop leading reserved words, `VAR=val` and wrappers (with their option values). `env -S 'cmd'`
     splits its string into the command; `env -C dir` / `sudo -D dir` set `Argv.chdir`, the command's own directory.
@@ -1461,11 +1546,18 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                 out.assigns[name] = value
             i += 1
         elif (
-            base(a) in GETOPT_WRAPPERS
+            fold(a) in GETOPT_WRAPPERS or fold(a) == "sudoedit"
         ):  # env -i, nice -n 5, sudo -nu x, timeout -s KILL, flock -nw5 (TASK-253)
-            name = base(a)
+            name = fold(a)
+            out.external = True  # each runs what follows as a program of its own (round 3)
+            # sudoedit is `sudo -e`, with sudo's options (TASK-269)
+            edit = name == "sudoedit"
+            name = "sudo" if edit else name
             opts, i = _getopt(name, argv, i + 1)
+            chroot = False
             for opt, value, after in opts:
+                edit = edit or (name == "sudo" and opt == "-e")
+                chroot = chroot or (name == "sudo" and opt == "-R")
                 if name == "env" and opt == "-S" and value is not None:
                     # env reads the split words as its own: options first, then the command (GNU env)
                     return _strip_prefixes(["env", *tokenize(value), *argv[after:]], state, out)
@@ -1480,6 +1572,17 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                     unknown = bool(re.search(r"[$`~]", value))
                     out.chdir = here if unknown else _resolve(value, here)
                     out.chdir_unknown = out.chdir_unknown or unknown
+            if edit and chroot:
+                # `-R`/`--chroot` opens each file inside that root: which file it edits isn't told here
+                raise ParseError("sudo -e with -R: the files are read inside a chroot")
+            if edit:
+                # `sudo -e`/`sudoedit` runs no command: every word after its options is a file it edits, written as
+                # a `>>` writes one (TASK-269); with `-D` each is read from both directories, since which one sudo
+                # opens a relative file from isn't told here
+                here = state["dir"] if state is not None else ""
+                for d in dict.fromkeys([here, out.chdir or here]):
+                    out.creates += [(d, f) for f in argv[i:]]
+                i = len(argv)
             if name == "timeout" and i < len(argv):  # the duration
                 i += 1
             if name == "flock" and i < len(argv):  # the lock file, which flock creates where it runs
@@ -1491,8 +1594,10 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                     if argv[i] not in ("-c", "--command") or i + 1 >= len(argv):
                         raise ParseError(f"flock: {argv[i]} after the lock file")
                     argv = [*argv[:i], "sh", "-c", *argv[i + 1 :]]
-        elif base(a) in WRAPPERS:
-            name = base(a)
+        elif fold(a) in WRAPPERS:
+            name = fold(a)
+            # only `command`, `builtin` and `time` spelled exactly run a builtin in this shell (round 3)
+            out.external = out.external or a not in ("command", "builtin", "time")
             out.via_xargs = out.via_xargs or name == "xargs"
             i += 1
             while i < len(argv) and argv[i].startswith("-"):  # xargs -n 1, stdbuf -o L, watch -n 2
@@ -1509,13 +1614,60 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
         else:
             break
     rest = argv[i:]
+    if rest and re.search(r"[$`]", base(rest[0])):
+        # a command name made by an expansion the walk can resolve to a plain name is read as that name (`X=git; $X
+        # push` runs git); any other is read as written (review round 3)
+        st = state or {}
+        value = _default_name(rest[0], st)  # `"${PYTHON:-python3}" -m pytest` (closing review)
+        if value is None:
+            value = expand_word(
+                rest[0], st.get("dir"), st.get("vars", {}), env_empty=st.get("env_empty", False)
+            )
+        if value and not re.search(r"[$`]", base(value)):
+            rest = [value, *rest[1:]]
     out.head_word = rest[0] if rest else ""
-    name = base(rest[0]) if rest else ""
+    name = fold(rest[0]) if rest else ""
+    # `/usr/bin/cd` and `Cd` are programs, never the builtin (round 3)
+    out.external = out.external or (bool(rest) and ("/" in rest[0] or base(rest[0]) != name))
     if name.startswith("git-") and len(name) > 4:  # `$(git --exec-path)/git-push` is `git push` (TASK-067)
         out[:] = ["git", name[4:], *rest[1:]]
     else:
         out[:] = [name, *rest[1:]] if rest else []
     return out
+
+
+# Variables the shell sets itself, which this hook's environment may not show (closing review)
+SHELL_SET_NAME = re.compile(
+    r"(BASH|ZSH|PS)\w*|SHELL|PWD|OLDPWD|HOME|USER|LOGNAME|PATH|IFS|RANDOM|SECONDS|LINENO|PPID|UID|EUID|HOSTNAME"
+    r"|OSTYPE|MACHTYPE|TERM|_"
+)
+DEFAULT_REF = re.compile(r"\$\{(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?P<op>:?-)(?P<word>[^$`{}]*)\}")
+
+
+def _default_name(word: str, state: dict) -> str | None:
+    """A command name written `${X:-word}` or `${X-word}`, with X's value as far as it is known: set or unset earlier in
+    the command (the walk's), else this hook's environment (HOME/TMPDIR/USER also as '' in that reading), else unset.
+    `word` when X is unset (`:-`: or empty), X's value when set; None (left as written) for a variable the shell sets
+    itself that this hook can't see (`${SHELL:-ls}`) and for any other form (closing review: `"${PYTHON:-python3}"
+    -m pytest`)."""
+    m = DEFAULT_REF.fullmatch(word)
+    if not m:
+        return None
+    name, colon, default = m.group("name"), m.group("op") == ":-", m.group("word")
+    shell = state.get("vars", {})
+    if name in shell:
+        value = shell[name]
+    elif name in ENV_FALLBACK:
+        value = "" if state.get("env_empty") else os.environ.get(name, "")
+    elif name in os.environ:
+        value = os.environ[name]
+    elif SHELL_SET_NAME.fullmatch(name):
+        return None
+    else:
+        value = None
+    if value is None or (colon and value == ""):
+        return default
+    return value
 
 
 def note_exports(argv: Argv, state: dict) -> bool:
@@ -1527,6 +1679,8 @@ def note_exports(argv: Argv, state: dict) -> bool:
     never falls back to this hook's environment for it (review gate round 3). True when `argv` was one of
     these, or `set`, which run nothing a gate checks."""
     exports, shell = state.setdefault("exports", {}), state.setdefault("vars", {})
+    if argv.external:  # `env D=x`, `COMMAND export D=x`: set in a child process, not here (round 3)
+        return False
     if not argv:
         for name, value in argv.assigns.items():
             shell[name] = value
@@ -2173,7 +2327,8 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
                     state["upstream_written"] = state.get("upstream_written") or creates_with_upstream(*g)
                 yield _context(expanded, state), d, redirects
             continue
-        if head in ("cd", "pushd", "popd"):
+        # `env cd /tmp` moves only a child (round 3)
+        if head in ("cd", "pushd", "popd") and not argv.external:
             _change_dir(head, argv[1:], state, getattr(argv, "assigns", {}))
             continue
         if head in SHELLS:
@@ -2446,22 +2601,39 @@ PUSH_CONFIG = r"^(remote\..*\.(push|mirror)|push\.(default|followtags)|remote\.p
 
 def push_config(argv: list[str], directory: str) -> dict[str, str]:
     """The repo's effective push config for a `git ...` argv (local, global and system files, of its -C /
-    --git-dir / GIT_DIR repo), keys lower-cased; a key set without a value is ''. A refspec-less push reads it
+    --git-dir / GIT_DIR repo), keys as git prints them (section and variable lower-case, the remote name as
+    written: `remote.Origin` and `remote.origin` are two remotes, so folding them let one hide the other's mirror,
+    TASK-282); a key set without a value is ''. A refspec-less push reads it
     (TASK-067 review gate: `git config remote.origin.push x:refs/heads/dev`, then `git push origin`). Config
-    this can't read (GIT_COMMON_DIR, GIT_CONFIG_*, …) is `git_config_opaque`, which the gates refuse first."""
+    this can't read (GIT_COMMON_DIR, GIT_CONFIG_*, …) is `git_config_opaque`, which the gates refuse first.
+    Read with `-z` (records end in NUL, the key ends at the first newline): a value may hold a newline and a remote
+    name a space, so splitting lines on the first space let a value forge a key, or hid a remote's key (TASK-282)."""
     _, eff, _, gitdir, _ = _git_options(argv, directory)
-    out = git(eff, *(["--git-dir", gitdir] if gitdir else []), "config", "--get-regexp", PUSH_CONFIG)
+    out = git(eff, *(["--git-dir", gitdir] if gitdir else []), "config", "-z", "--get-regexp", PUSH_CONFIG)
     found = {}
-    for line in out.splitlines():
-        key, _, value = line.partition(" ")
-        found[key.lower()] = value
+    for record in out.split("\0"):
+        if record:
+            key, _, value = record.partition("\n")
+            found[key] = value
     return found
 
 
+# git reads these as false (git 2.42): the words as written, and a zero in strtoimax's forms (the leading whitespace
+# it skips, a sign, 0x, octal zeros) with a k/m/g unit. Every other value is true or one git refuses (' false',
+# '0 '), so the gate reads it as true (TASK-282).
+GIT_FALSE = re.compile(r"false|no|off|[ \t\n\v\f\r]*[+-]?(?:0x0+|0+)[kmg]?")
+
+
 def git_bool(value: str) -> bool:
-    """git's reading of a boolean config value ('' is a key set with no value: true)."""
-    v = value.strip().lower()
-    return v in ("", "true", "yes", "on") or (v.lstrip("-").isdigit() and int(v) != 0)
+    """git's reading of a boolean config value, failing toward true: false only for what git reads as false.
+    `1k`, `0x1` and `+1` are true to git, so reading only digits as a number under-read them and let a
+    `remote.<name>.mirror` or `push.followTags` push through unreviewed (TASK-282). '' is true: `push_config`
+    gives '' for a key with no value (true to git) and for one set to '' (false to git), and reading both as true
+    only ever refuses. Nothing is stripped, and a non-ASCII value is true: Python's `strip()` and `lower()` would
+    turn ' false', '0 ' and '0' + KELVIN SIGN, which git refuses, into false."""
+    if not value.isascii():
+        return True
+    return not GIT_FALSE.fullmatch(value.lower())
 
 
 def push_config_risk(config: dict[str, str]) -> str | None:

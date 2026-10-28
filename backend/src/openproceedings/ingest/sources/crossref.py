@@ -318,7 +318,8 @@ def mine_proceedings(
                 continue
             if acm_table.paper_doi(w.doi) is None:
                 raise CrawlError(f"Crossref {venue} {year}: DOI {w.doi!r} extends {row.doi} but is not "
-                                 f"{row.doi}.<digits>: check it before it is indexed", reason="odd_doi")  # fmt: skip
+                                 f"{row.doi}.<digits> (at most {acm_table.DOI_DIGITS}): check it before it is "
+                                 "indexed", reason="odd_doi")  # fmt: skip
             if w.doi in seen:
                 if seen[w.doi][1] != w:
                     raise CrawlError(f"Crossref {venue} {year}: {w.doi} is listed twice with different "

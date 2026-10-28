@@ -253,7 +253,9 @@ def check_extract(extract: Extract, table: Table = TABLE) -> None:
     the table names is in the release with the table's year: otherwise the table is stale (`CrawlError`)."""
     proceedings = {e.key: e for e in extract.entries if e.type == "proceedings"}
     for key, e in sorted(proceedings.items()):
-        year = int(e.fields["year"]) if e.fields.get("year", "").isdigit() else None
+        raw = e.fields.get("year", "")
+        # ASCII digits, at most four: '²', '١٩٨٠' or 5,000 digits is no year (TASK-282)
+        year = int(raw) if raw.isascii() and raw.isdigit() and len(raw) <= 4 else None
         in_range = year is None or FIRST_YEAR <= year <= LAST_YEAR  # no readable year: it may be in range
         if in_range and table.main_key(key) is None and key not in table.excluded:
             raise CrawlError(f"dblp proceedings {key} ({year or 'no year'}) is neither a main conference nor "
@@ -382,7 +384,10 @@ def mine_year(
             record = _record(year, tail, e, extract, table, found)
         except (ValidationError, ValueError) as err:
             report.skipped["invalid"] += 1
-            log.debug("dblp_record_invalid", extra={"year": year, "key": e.key, "error": type(err).__name__})
+            # a key past its bound (decision-055) can be any length, so the line carries its start
+            log.debug(
+                "dblp_record_invalid", extra={"year": year, "key": e.key[:80], "error": type(err).__name__}
+            )
             continue
         records.append(record)
         report.count(record, None if record.abstract else "no_abstract", found.spaced if found else 0,

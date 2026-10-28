@@ -55,6 +55,12 @@ description: The backend Python standard for openproceedings — Python 3.12 wit
 - Never bare `except:` or `except Exception: pass`. Catch the narrowest type, add context, re-raise or
   convert to a Diagnostic. A swallowed error in ingestion becomes a silent coverage gap.
 - Unknown values stay `unknown` and are logged; never guessed (01 §Error handling).
+- A digit check before `int()` or `float()` on outside text (a header, a crawled page, a file) is
+  `s.isascii() and s.isdigit()`, never `isdigit()` alone: that is true for '²' (which `int()` refuses) and for
+  '١٩٨٠' (which `int()` reads as 1980). urllib decodes headers as latin-1, so a 0xB2 byte arrives as '²'
+  (TASK-282). Bound the digits too (`int()` raises past 4,300), and catch every exception a parser of outside
+  text documents (`parsedate_to_datetime` raises `OverflowError`, not only `ValueError`). The tokenizer's own
+  digit rules (`query/lexer.py`, `query/normalize.py`) are the token contract, not this rule.
 
 ## Logging
 Follow `.claude/skills/logging-standards/SKILL.md`. In short: stdlib `logging` with one JSON formatter,

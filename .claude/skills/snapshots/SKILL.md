@@ -75,8 +75,11 @@ carries the note `trimmed at ingest (decision-026): …`, after any source evide
 strings have length caps too (decision-053, TASK-279; record-schema skill §The ingest caps): a DOI 1,000, a URL and a
 claim's url 2,048, an author name 1,000, a keyword 2,000, `venue_id_raw` and an `invitation` 500, a claim's evidence
 4,000; trimmed and flagged `trimmed at ingest (decision-053): …`, last; a cut DOI, URL or venue id never fills a `urls` slot or `venue_id_raw`
-and a cut claim url is dropped. None trims a record of snapshot 2026-10-16-03eab0ef56c4. The manifest's
-`trimmed` lists, sorted, the records with any trimmed claim (either note) left after withholding. The key is
+and a cut claim url is dropped. A record keeps its first 500 authors and first 200 keywords (decision-054, TASK-280;
+`trimmed at ingest (decision-054): kept the first <n> of <m> values`, before any decision-053 note). None trims a
+record of snapshot 2026-10-16-03eab0ef56c4. The manifest's `trimmed` lists, sorted, the records with any trimmed claim
+(any of the three notes) left after withholding. Since record schema 10 (decision-055) every native id is bounded,
+which changed only the manifest's `record_schema_version`. The key is
 written only when there is one, so a corpus within the caps has the manifest and `records.jsonl` it had.
 `snapshot_built` / `snapshot_exists` carry the `trimmed` count, and a non-zero count adds one WARNING
 `snapshot_trimmed`. **Takedowns** (TASK-136, decision-022): `build` withholds every

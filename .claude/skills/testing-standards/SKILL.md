@@ -29,6 +29,16 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
   Real-corpus checks (tokenizer parity, task-029) run locally against the maintainer's snapshot, never in
   CI: the real corpus is never committed (decision-004). Decision-018 (00 open question 1, closed) lets a
   public instance serve abstracts; it does not put real abstracts in git or in CI fixtures.
+- **Index builds in tests run in one process.** `conftest.py` sets `engine.index.PARALLEL_FROM` past any
+  corpus, so a build or parity check never starts the spawn pool the product starts from 10,000 records.
+  When that was 2,000, about 60 builds of the 5k fixture a run each started `os.cpu_count()` interpreters inside
+  every xdist worker: at 5,000 fixture records a pool takes 0.45 s against 0.33 s serial, and 2.17 s of CPU
+  against 0.33 s (`docs/results/2026-10-24-parallel-normalize-crossover.md`, TASK-284). A test of the parallel path
+  sets `PARALLEL_FROM` itself (`test_index.py`'s parallel rows compare it with the serial one: guarantee 4);
+  `test_index.py` fails if a default build of 10,000 records starts a pool.
+- **A test still running after 20 minutes dumps every thread's stack** (`faulthandler_timeout = 1200` in
+  `pyproject.toml`), once, and carries on, so a stall leaves a trace. The 50,000-example nightly steps turn it
+  off (`-o faulthandler_timeout=0`).
 - Recorded HTTP fixtures (VCR-style) for each crawler source and year schema (01 §Testing), scrubbed of
   real text (decision-004). Tests never
   hit the network, and it is **enforced**: `backend/tests/conftest.py` makes every non-loopback socket
@@ -87,6 +97,20 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
    fails at a run's first character fails at every later one too: true of `(\\*)X`, whose repeat can stop at
    any length of the run, false of a parity pattern such as `(?:\\\\)*@`, which stops only at even lengths and anchored misses the match in `\\\@` (three backslashes). Show it with an
    exhaustive comparison of the matches over every short string of the characters it reads (TASK-274).
+   A run that must hold a word and then end at a delimiter (`[?&][a-z0-9_]*?(?:token|key)[a-z0-9_]*=`) reads the
+   rest of the run once for every place the word appears in it; check the word with a lookahead and take the run
+   once, possessive (`[?&](?=[a-z0-9_]*(?:token|key))[a-z0-9_]*+=`, simplified from TASK-275's `_SECRET_QUERY`). When one pattern is found quadratic,
+   time every pattern beside it that the same text reaches on the same hostile shapes: TASK-275 and TASK-276 each
+   named one, and the function holding it had a second (`scrub`'s query pattern, `_split_entry`'s separator).
+   One character per class proves output for the class, not cost for each member: a growth case runs every
+   character a lookbehind must refuse (each of `+.-`, each kind of whitespace `\s` reads), or a narrower
+   lookbehind (`(?<![ \n])`) passes it and is quadratic on a tab run. A difference only a string past the
+   exhaustive length shows (`.a://b@`, 7 characters) gets a named example.
+   Several substitutions applied in turn can hide input from each other (one pass's value eating the quote the
+   next one needs): run every pattern on the text as given and replace the union of their spans, and compare the
+   whole function with the whole old one, over joins of the multi-character pieces where they differ (TASK-283).
+   A mutation loop runs with `PYTHONDONTWRITEBYTECODE=1`: two same-size mutants written in one second share an
+   mtime, and Python reuses the first one's `.pyc`.
 8. **A failure that appears in one checkout only is a stored example.** The `.hypothesis` database holds an input
    no `@example` covers. Extract the falsifying input and pin it as an `@example` before bisecting or calling it
    pre-existing (a database copied between checkouts stores choice sequences, so the bisect proves nothing; the
@@ -135,7 +159,10 @@ assuming the row still kills it.
 
 Case tables must also parse on the developer platform's Bash. Stock macOS Bash 3.2 can misparse a
 case-pattern `)` inside command substitution; compute the case result in a variable outside `$(...)`
-and keep the same assertion. Run the table with stock Bash as well as the CI version when available.
+and keep the same assertion. It also misparses a heredoc inside `$(...)` whose body has a `(`: read the
+program into a variable first (`IFS= read -r -d '' PROG <<'PY' || true`), then run `$(python3 -c "$PROG" …)`
+(TASK-267). `make tooling` checks every script with `/bin/bash -n` when /bin/bash is 3.x (`check_old_bash.py`). Run the table with stock Bash as well as the CI
+version when available.
 Capture controlled runner output on the line before a `check` call and pass the variable as data;
 `lint_probes.py` forbids command substitutions inside assertion arguments even for tooling tables.
 

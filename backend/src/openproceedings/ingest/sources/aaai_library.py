@@ -300,15 +300,19 @@ def _page_of(url: str) -> tuple[str, str, str] | None:
 def same_capture(location: str, row: Row) -> str | None:
     """The archive URL a redirect's `location` names (resolved against the row's capture) when it is another `id_`
     capture of the row's own page: `https://web.archive.org/web/<14 digits>id_/<url>`, the original the row's `url`
-    up to http/https, `www.` and a default port, with the same path and no query or fragment; else None."""
+    up to http/https, `www.` and a default port, with the same path and no query or fragment; else None. A location
+    `urljoin` or `urlparse` refuses (`http://[x`) names no capture: None, never a bare ValueError."""
     if not location:
         return None
-    target = urllib.parse.urljoin(row.capture, location.strip())
-    p = urllib.parse.urlparse(target)
-    if p.scheme not in ("http", "https") or p.netloc.lower() != HOST or p.params or p.query or p.fragment:
-        return None
-    m = _CAPTURE_PATH.fullmatch(p.path)
-    if m is None or _page_of(m.group(1)) != _page_of(row.url):
+    try:
+        target = urllib.parse.urljoin(row.capture, location.strip())
+        p = urllib.parse.urlparse(target)
+        if p.scheme not in ("http", "https") or p.netloc.lower() != HOST or p.params or p.query or p.fragment:
+            return None
+        m = _CAPTURE_PATH.fullmatch(p.path)
+        if m is None or _page_of(m.group(1)) != _page_of(row.url):
+            return None
+    except ValueError:
         return None
     return target
 

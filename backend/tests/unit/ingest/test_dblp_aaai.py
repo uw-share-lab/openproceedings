@@ -6,11 +6,13 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from openproceedings.ingest import dblp_aaai_table, urls
 from openproceedings.ingest.dedup import dedup
+from openproceedings.ingest.record import MAX_NATIVE_KEY
 from openproceedings.ingest.sources import crawl, dblp, dblp_aaai
 from openproceedings.ingest.sources.common import CrawlError
 from openproceedings.ingest.statuses import statuses_indexed
@@ -76,6 +78,27 @@ def test_a_record_that_will_not_build_stops_the_crawl_naming_the_key(tmp_path: P
     assert caught.value.reason == "invalid_record"
 
 
+@pytest.mark.parametrize(("length", "built"), [(MAX_NATIVE_KEY, True), (MAX_NATIVE_KEY + 1, False)])
+def test_a_key_past_the_native_id_bound_stops_the_crawl_naming_it(
+    tmp_path: Path, length: int, built: bool
+) -> None:
+    """decision-055: a dblp key of at most 200 characters (`record.MAX_NATIVE_KEY`). One past it makes no valid record,
+    and an AAAI record that won't build stops the year (`invalid_record`), as any other; at the bound it is a record."""
+    _table, aaai, extract = setup(tmp_path)
+    key = "S" * length
+    entries = tuple(
+        replace(e, key=f"conf/aaai/{key}") if e.key == "conf/aaai/Synthetic86a" else e
+        for e in extract.entries
+    )
+    if built:
+        ids = {r.id for r in dblp_aaai.mine_year(1986, replace(extract, entries=entries), table=aaai).records}
+        assert f"op:aaai:1986:dblp-{key}" in ids
+        return
+    with pytest.raises(CrawlError, match=r"conf/aaai/S{20}") as caught:
+        dblp_aaai.mine_year(1986, replace(extract, entries=entries), table=aaai)
+    assert caught.value.reason == "invalid_record"
+
+
 def test_a_workshop_key_gives_track_workshop(tmp_path: Path) -> None:
     _t, aaai, extract = setup(tmp_path)
     tracks = {r.native: r.track for r in dblp_aaai.mine_year(2006, extract, table=aaai).records}
@@ -120,6 +143,20 @@ def test_2010_on_is_never_read(tmp_path: Path) -> None:
     dblp_aaai.check_extract(extract, aaai)  # conf/aaai/2024 is in the extract and unlisted: ignored
     with pytest.raises(CrawlError):
         dblp_aaai.mine_year(2024, extract, table=aaai)
+
+
+# superscript two; Arabic-Indic 1986 and 2024; five digits; past int()'s 4,300-digit limit
+@pytest.mark.parametrize("raw", ["²", "١٩٨٦", "٢٠٢٤", "10000", "9" * 5000])
+def test_a_year_not_of_at_most_four_ascii_digits_is_no_year(tmp_path: Path, raw: str) -> None:
+    """TASK-282: `isdigit()` is true for each, but `int('²')` raises, `int('٢٠٢٤')` reads 2024 (past 2009:
+    ignored), `int('10000')` would be ignored too and 5,000 digits raise. A year is at most four ASCII digits, so
+    the unlisted conf/aaai/2024 dated otherwise is refused as having none."""
+    _t, aaai, extract = setup(tmp_path)
+    entries = tuple(replace(e, fields=e.fields | {"year": raw}) if e.key == "conf/aaai/2024" else e
+                    for e in extract.entries)  # fmt: skip
+    with pytest.raises(CrawlError, match=r"conf/aaai/2024 \(no year\)") as e:
+        dblp_aaai.check_extract(replace(extract, entries=entries), aaai)
+    assert e.value.reason == "unlisted_proceedings"
 
 
 def test_an_aaai_dblp_record_names_itself_and_passes_dedup(tmp_path: Path) -> None:

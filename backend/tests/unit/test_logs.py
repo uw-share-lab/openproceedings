@@ -4,9 +4,14 @@ redaction of query text and secrets, bound request context."""
 import io
 import json
 import logging
+import random
+import re
+from itertools import product
 
 import pytest
 from openproceedings import logs
+
+from tests.timing import assert_near_linear, growth
 
 
 @pytest.fixture
@@ -277,3 +282,552 @@ def test_prefix_rule_still_spares_ordinary_fields(stream: io.StringIO, field: st
     logging.getLogger("openproceedings.x").info("e", extra={field: "v"})
     (rec,) = lines(stream)
     assert rec[field] == "v"
+
+
+# --- scrub in linear time (TASK-275) ---------------------------------------------------------------------------
+
+# scrub's two patterns as they were before TASK-275 (origin/dev at 88df9322), frozen here as the reference
+_PRE275_USERINFO = re.compile(r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s@]+@")
+_PRE275_QUERY = re.compile(
+    r"(?P<k>[?&](?:[a-z0-9_]*?(?:token|key|secret|password|passwd|auth|sig|signature)[a-z0-9_]*))=[^&\s#]*",
+    re.IGNORECASE,
+)
+_QUERY = logs._SCRUBS["parameter"]
+
+
+def _strings(alphabet: str, longest: int) -> list[str]:
+    return ["".join(chars) for n in range(longest + 1) for chars in product(alphabet, repeat=n)]
+
+
+# every character the userinfo pattern reads: a letter, a digit, `.` for the other scheme punctuation, `:/@`, a
+# space, and `#`; no other pattern can match these strings (no secret word, quote, `%` or `bearer`)
+def test_userinfo_is_redacted_as_before_on_every_short_string() -> None:
+    """Every string up to 6 characters (299,593): the same text out. A difference first shown at 7 characters
+    (`.a://b@`, a scheme after punctuation) is a named example. Once, not in CI: the pattern alone over every
+    string up to 7 (2.4M) showed no difference."""
+    for text in _strings("a1.:/@ #", 6):
+        assert logs.scrub(text) == _PRE275_USERINFO.sub(r"\g<scheme>[redacted]@", text), text
+
+
+def _redacted(spans: list[tuple[int, int]]) -> set[int]:
+    return {i for a, b in spans for i in range(a, b)}
+
+
+# `?&=` and `sig` (a secret word whose letters are also name characters), `#`, which ends a value and now starts a
+# name, and a space. Since TASK-275 a name starts after any character that is not a name character, so the
+# query pattern redacts more than it did (a bare `sig=`); it must still redact every character it did.
+def test_every_query_value_redacted_before_is_redacted_on_every_short_string() -> None:
+    """Every string up to 6 characters (299,593): each character the old pattern redacted falls in a value the
+    new one redacts, and a value it redacted empty (`?sig=`) is still matched."""
+    for text in _strings("?&=sig #", 6):
+        old = [(m.end("k") + 1, m.end()) for m in _PRE275_QUERY.finditer(text)]
+        new = [m.span("v") for m in _QUERY.finditer(text)]
+        assert _redacted(old) <= _redacted(new), text
+        assert {b for a, b in old if a == b} <= {b for a, b in new}, text
+
+
+def _pre275_secrets(text: str) -> tuple[set[int], set[int]]:
+    """What origin/dev's scrub redacted in `text`, by position in `text`: its two passes in order, each secret
+    replaced by as many NULs (like `[redacted]`, a NUL is no name character and no delimiter to either old
+    pattern, so the old matches are unchanged), so positions survive; and the points where it inserted REDACTED
+    for an empty secret."""
+    out = _PRE275_USERINFO.sub(
+        lambda m: m.group("scheme") + "\0" * (m.end() - m.end("scheme") - 1) + "@", text
+    )
+    empty = {m.end() for m in _PRE275_QUERY.finditer(out) if m.end("k") + 1 == m.end()}
+    out = _PRE275_QUERY.sub(lambda m: m.group("k") + "=" + "\0" * (m.end() - m.end("k") - 1), out)
+    return {i for i, c in enumerate(out) if c == "\0"}, empty
+
+
+# the pieces where the patterns differ: schemes plain and encoded, `@` and `%40`, the separators, quotes, `%`, `;`,
+# name characters, secret words
+_PIECES = [
+    "a://",
+    "%3A%2F%2F",
+    "x",
+    "%40",
+    "@",
+    ":",
+    "/",
+    '"',
+    "'",
+    "%",
+    ";",
+    "_",
+    "token",
+    "sig",
+    "?",
+    "&",
+    "=",
+    "#",
+    " ",
+    "%3F",
+    "%3D",
+    "%26",
+    "1",
+    "-",
+    "bearer ",
+]
+
+
+def _assert_superset(text: str) -> None:
+    old, empty = _pre275_secrets(text)
+    spans = logs.secret_spans(text)
+    assert old <= _redacted(spans), text
+    assert all(any(a <= e <= b for a, b in spans) for e in empty), text
+
+
+def test_scrub_redacts_everything_it_did_before_on_every_short_join_of_pieces() -> None:
+    """The whole scrub against origin/dev's: every join of up to 3 pieces (16,276), then 30,000 seeded random joins
+    of 4 to 12. Each character the old scrub redacted, after both of its passes, is inside a span the new one
+    redacts (reviewers found a pass order that broke this: one pattern rewriting text another needed)."""
+    for n in range(4):
+        for parts in product(_PIECES, repeat=n):
+            _assert_superset("".join(parts))
+    rng = random.Random(275)
+    for _ in range(30_000):
+        _assert_superset("".join(rng.choice(_PIECES) for _ in range(rng.randint(4, 12))))
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("1a://u:p@h", "1a://[redacted]@h"),  # a scheme after digits still loses its userinfo
+        ("x+1a://u@h", "x+1a://[redacted]@h"),
+        (".a://u@h", ".a://[redacted]@h"),  # past the exhaustive length: the gap first shows at 7 (`.a://b@`)
+        ("-a://u@h", "-a://[redacted]@h"),
+        ("+a://u@h", "+a://[redacted]@h"),
+        ("see https://u@h and ftp://v@g", "see https://[redacted]@h and ftp://[redacted]@g"),
+        ("https://h/x?an_Auth_code=1&sig=2", "https://h/x?an_Auth_code=[redacted]&sig=[redacted]"),
+        (
+            "?\u017fig=1",
+            "?\u017fig=[redacted]",
+        ),  # long s folds to `s` under IGNORECASE, in the word and the name
+        ("?\u212aey=1", "?\u212aey=[redacted]"),  # Kelvin sign folds to `k`
+        ("https://s3/x?X-Amz-Signature=ab&p=1", "https://s3/x?X-Amz-Signature=[redacted]&p=1"),
+        ("https://h/x?api-key=ab", "https://h/x?api-key=[redacted]"),
+        ("https://h/x?api%5Fkey=ab", "https://h/x?api%5Fkey=[redacted]"),
+        ("https://h/x?auth.v2=ab", "https://h/x?auth.v2=[redacted]"),
+        ("https://h/x?client.secret=ab", "https://h/x?client.secret=[redacted]"),  # the word after a `.`
+        ("https://h/x?sig=a#b", "https://h/x?sig=[redacted]#b"),  # `#` ends a value
+        ("https://h/cb#access_token=ab&x=1", "https://h/cb#access_token=[redacted]&x=1"),  # a fragment
+        ("https://h/x?a=1;token=2", "https://h/x?a=1;token=[redacted]"),
+        ("Authorization: Bearer ab.c-d", "Authorization: Bearer [redacted]"),
+        ('{"authorization": "bearer ab"}', '{"authorization": "[redacted]"}'),  # `auth` in the key: all of it
+        ('{"h": "bearer ab"}', '{"h": "bearer [redacted]"}'),
+        ("a bearer of news", "a bearer [redacted] news"),  # a backstop: an ordinary `bearer` loses a word
+        ("a forbearer of x", "a forbearer of x"),  # `bearer` only as a whole word
+        ('\\"Bearer ab\\"', '\\"Bearer [redacted]\\"'),  # JSON-escaped: the escape stays
+        ("Bearer\u00a0ab", "Bearer\u00a0[redacted]"),  # any whitespace that is no line break
+        ("Bearer\nab", "Bearer\nab"),
+        ("Bearer\u2028ab", "Bearer\u2028ab"),
+        ("Bearer\x85ab", "Bearer\x85ab"),
+        ("Bearer\vab", "Bearer\vab"),
+        ("Bearer\fab", "Bearer\fab"),
+        ("Bearer\x1dab", "Bearer\x1dab"),
+        (
+            '{"h": "Bearer ab\\/cd+ef=="}',
+            '{"h": "Bearer [redacted]"}',
+        ),  # an escape inside the token is the token
+        ("Bearer ab\\u002Fcd", "Bearer [redacted]"),
+        # TASK-283: a bare parameter, wherever its name starts
+        ("access_token=abc page=2", "access_token=[redacted] page=2"),
+        ("retry with token=abc", "retry with token=[redacted]"),
+        ("page=2 count=3 size=4", "page=2 count=3 size=4"),  # no secret word: untouched
+        ("monkey=1", "monkey=[redacted]"),  # a backstop: a word inside a name counts, as `?designer=` did
+        # TASK-283: percent-encoded in a value (a redirect target)
+        (
+            "https://h/x?next=https%3A%2F%2Fh%2F%3Ftoken%3Dabc%26p%3D1",
+            "https://h/x?next=https%3A%2F%2Fh%2F%3Ftoken%3D[redacted]%26p%3D1",
+        ),
+        ("?next=%2F%3Fa%3D1%26API%5FKEY%3Dz%23f", "?next=%2F%3Fa%3D1%26API%5FKEY%3D[redacted]%23f"),
+        ("?next=https%3A%2F%2Fu%3Ap%40h%2Fz", "?next=https%3A%2F%2F[redacted]%40h%2Fz"),
+        ("?n=%22https%3A%2F%2Fu%3Ap%40h", "?n=%22https%3A%2F%2F[redacted]%40h"),  # right after another escape
+        (
+            "?n=%2Chttps%3A%2F%2Fu%40h %20ftp%3A%2F%2Fv%40g",
+            "?n=%2Chttps%3A%2F%2F[redacted]%40h %20ftp%3A%2F%2F[redacted]%40g",
+        ),
+        ("?n=%2F%3Ftoken%3Dab!c*d(e)/f:g&x=1", "?n=%2F%3Ftoken%3D[redacted]&x=1"),  # every value character
+        ('{"u": "%2F%3Ftoken%3Dab", "x": 1}', '{"u": "%2F%3Ftoken%3D[redacted]", "x": 1}'),  # a quote ends it
+        (
+            "?r=%2Fcb%23access_token%3Dab%26x%3D1",
+            "?r=%2Fcb%23access_token%3D[redacted]%26x%3D1",
+        ),  # `#`, encoded
+        ("?r=%2Fx%3Ba%3D1%3Btoken%3Dab", "?r=%2Fx%3Ba%3D1%3Btoken%3D[redacted]"),  # `;`, encoded
+        ("?next=%2F%3Fpage%3D2", "?next=%2F%3Fpage%3D2"),
+        # TASK-283: a quoted key and its quoted value (JSON, a dict's repr)
+        ('{"access_token": "abc", "n": 1}', '{"access_token": "[redacted]", "n": 1}'),
+        ("{'client_secret': 'a\\'b', 'x': 'y'}", "{'client_secret': '[redacted]', 'x': 'y'}"),
+        ('{"token":"a\\"b"}', '{"token":"[redacted]"}'),  # an escaped quote stays inside the value
+        ('{"token": \'ab"c\'}', "{\"token\": '[redacted]'}"),  # the value's own quote
+        ("{'token': b'ab'}", "{'token': b'[redacted]'}"),  # a bytes value
+        ('{"tokens": 3, "page": "2"}', '{"tokens": 3, "page": "2"}'),  # a value that is not quoted is left
+        # round 5: one pattern must not rewrite text another needs (scrub redacts the union of their spans)
+        ('{"password": "hunter2 key=1"}', '{"password": "[redacted]'),  # spans merge: the quote goes too
+        ('{"client_secret": "abc;sig=x"}', '{"client_secret": "[redacted]'),
+        ("Authorization=Bearer SECRET", "Authorization=[redacted] [redacted]"),
+        ("token=Bearer SECRET", "token=[redacted] [redacted]"),
+        (
+            "{'token_url': 'https://h/t?x=1&key=abc', 'password': 'SECRET2'}",
+            "{'token_url': '[redacted] 'password': '[redacted]'}",  # `token` in the key: its value too
+        ),
+        (
+            "https://h/login?next=https%3A%2F%2Fh2&password=p%40ssw0rd",
+            "https://h/login?next=https%3A%2F%2F[redacted]",
+        ),
+        ('{"n":"https%3A%2F%2Fh","password":"p%40ss"}', '{"n":"https%3A%2F%2F[redacted]"}'),
+        (
+            '{"u":"a://x","password":"p@ss"}',
+            '{"u":"a://[redacted]"}',
+        ),  # a URL's userinfo may hold `"`: all of it
+        # round 5: every secret word and name character, plain and encoded
+        ("?password=a&passwd=b", "?password=[redacted]&passwd=[redacted]"),
+        ("?n=%3Fpassword%3Da%26passwd%3Db", "?n=%3Fpassword%3D[redacted]%26passwd%3D[redacted]"),
+        ("{'cookie': 'sid=abc; x=1'}", "{'cookie': '[redacted]'}"),
+        ('{"credentials": "u:p"}', '{"credentials": "[redacted]"}'),
+        ("?bearer=x", "?bearer=[redacted]"),
+        ("?token%5Fid=x&token-id=y", "?token%5Fid=[redacted]&token-id=[redacted]"),
+        ("?n=%3Ftoken%2Did%3Dx%26a%2Etoken%3Dy", "?n=%3Ftoken%2Did%3D[redacted]%26a%2Etoken%3D[redacted]"),
+        (
+            "?state=token%3DSECRET",
+            "?state=token%3D[redacted]",
+        ),  # an encoded name starts where a plain one would
+        ("?next=%2Ftoken%3DSECRET", "?next=%2Ftoken%3D[redacted]"),
+        ("token%3dSECRET", "token%3d[redacted]"),
+        ("?n=%3Chttps%3A%2F%2Fu%3Ap%40h%3E", "?n=%3Chttps%3A%2F%2F[redacted]%40h%3E"),
+        ("?n=https%3A%2F%2Fu%3Ap'q%40h", "?n=https%3A%2F%2F[redacted]%40h"),  # raw sub-delims in a password
+        ("?n=https%3A%2F%2Fu%3Aa=b;c&d%40h", "?n=https%3A%2F%2F[redacted]%40h"),
+        ("?n=%3Ftoken%3Dab%25cd", "?n=%3Ftoken%3D[redacted]"),  # `%25` is part of the value
+        ("{'u': '%3Ftoken%3Dab', 'x': 1}", "{'u': '%3Ftoken%3D[redacted]', 'x': 1}"),  # `'` ends it
+        ("token='abc def', x=1", "token=[redacted] x=1"),  # a quoted value whole
+        ("Bearer\rab", "Bearer\rab"),
+        ("?h=Bearer%20abc", "?h=Bearer%20[redacted]"),
+        ("Bearer+abc", "Bearer+[redacted]"),
+        ("token=%3Ftoken%3D", "token=[redacted]"),  # touching spans (an empty one at another's end) are one
+        # round 6
+        (
+            "?token=a://x#y@SECRET",
+            "?token=[redacted]",
+        ),  # a userinfo inside a value: origin/dev ran on past `@`
+        ("https://h/?token=x://y&z@SECRETTAIL", "https://h/?token=[redacted]"),
+        ("?token=abc://def#ghi@jkl&p=1", "?token=[redacted]&p=1"),
+        ("?token='a://b'#y@SECRET", "?token=[redacted]"),  # quoted: origin/dev's two passes, replayed
+        # every word origin/dev knew, any case, after `&` too: the replay must keep each
+        ("?key='a://b'#y@SECRET", "?key=[redacted]"),
+        ("?secret='a://b'#y@SECRET", "?secret=[redacted]"),
+        ("?password='a://b'#y@SECRET", "?password=[redacted]"),
+        ("?passwd='a://b'#y@SECRET", "?passwd=[redacted]"),
+        ("?auth='a://b'#y@SECRET", "?auth=[redacted]"),
+        ("?signature='a://b'#y@SECRET", "?signature=[redacted]"),
+        ("?TOKEN='a://b'#y@SECRET", "?TOKEN=[redacted]"),
+        ("&sig='a://b'#y@SECRET", "&sig=[redacted]"),
+        # the parameter pattern alone (no `?`/`&` before the name, so no replay)
+        ("token=a://x#y@SECRET", "token=[redacted]"),
+        ("x;token=a://x&y@SECRET", "x;token=[redacted]"),
+        ("token=ab;SECRET", "token=[redacted]"),
+        ("token=ab%SECRET", "token=[redacted]"),
+        # bearer separators of both kinds, mixed; a token that starts with `bearer`; JSON `\\r`, and `\\n` no separator
+        ("Authorization: Bearer\\t SECRET", "Authorization: Bearer\\t [redacted]"),
+        ("Bearer+ SECRET", "Bearer+ [redacted]"),
+        ("Bearer%20 SECRET", "Bearer%20 [redacted]"),
+        ("Authorization: Bearer bearerSECRET", "Authorization: Bearer [redacted]"),
+        ("\\rBearer SECRET", "\\rBearer [redacted]"),
+        ("Bearer\\nSECRET", "Bearer\\nSECRET"),
+        ('{"token" : "SECRET"}', '{"token" : "[redacted]"}'),  # whitespace around the colon
+        ('?token="https://u:p"&x@SECRET', "?token=[redacted]"),
+        (
+            "Authorization: Bearer Bearer SECRET",
+            "Authorization: Bearer Bearer [redacted]",
+        ),  # never `bearer` itself
+        ("x%3ABearer Bearer SECRET", "x%3ABearer Bearer [redacted]"),
+        ("\\tBearer\\tSECRET", "\\tBearer\\t[redacted]"),  # JSON escapes around it
+        ("\\nBearer SECRET", "\\nBearer [redacted]"),
+        # a token ends before another `bearer` match would start (matches don't overlap)
+        ("Bearer A\\nBearer SECRET", "Bearer [redacted]\\nBearer [redacted]"),
+        ("Bearer A\\fbearer+SECRET", "Bearer [redacted]"),  # no match starts after `\\f`: one token
+        ("Bearer A\\xbearer%20SECRET", "Bearer [redacted]"),
+        ("Bearer A%bearer SECRET", "Bearer [redacted]%bearer [redacted]"),  # one starts after a bare `%`
+        ("Bearer%20%20%20SECRET", "Bearer%20%20%20[redacted]"),  # a separator of any length
+        ("Bearer A/bearer bearerSECRET", "Bearer [redacted]/bearer [redacted]"),  # the stop's own refusal
+        ("Bearer A/bearer bearer+SECRET", "Bearer [redacted] bearer+[redacted]"),
+        ("Bearer %20", "Bearer %20"),  # a separator with no token after it
+        ("Bearer \\/bearer \\'", "Bearer [redacted] \\'"),  # an escaped quote ends a token
+        ("Bearer -bearer+SECRET", "Bearer -bearer+[redacted]"),  # a token's own `-bearer+` ends it early
+        ("Bearer a;b", "Bearer [redacted];b"),  # where a token ends
+        ("{'h': 'Bearer ab'}", "{'h': 'Bearer [redacted]'}"),
+        ("Bearer\u2029SECRET", "Bearer\u2029SECRET"),  # a line break is no separator
+        ("Bearer\\rSECRET", "Bearer\\rSECRET"),
+        ("\\xBearer SECRET", "\\xBearer SECRET"),  # no start after an escape ending in a letter (documented)
+        ("Bearer A_bearer x", "Bearer [redacted] x"),  # `_` is a word character: one token
+        ("Bearer A\\%0ABearer SECRET", "Bearer [redacted]\\%0ABearer [redacted]"),  # an escape after a `\\`
+        (
+            "Bearer A/Bearer Bearer SECRET",
+            "Bearer [redacted] Bearer [redacted]",
+        ),  # no stop before a doubled one
+        ("Bearer A\\/Bearer SECRET", "Bearer [redacted]\\/Bearer [redacted]"),
+        ("Bearer A\\Bearer SECRET", "Bearer [redacted]\\Bearer [redacted]"),
+        ("Bearer A%0ABearer SECRET", "Bearer [redacted]%0ABearer [redacted]"),
+        ("Bearer A/Bearer SECRET", "Bearer [redacted]/Bearer [redacted]"),
+        ("Authorization: Bearer \\tBearer SECRET", "Authorization: Bearer \\tBearer [redacted]"),  # mixed
+        ("Bearer \\tSECRET", "Bearer \\t[redacted]"),  # a space and a JSON tab are one separator
+        (  # a value that looks like a quoted key must not hide the real one after it
+            """{'note': "'token': '", 'password': 'SECRETX'}""",
+            """{'note': "'token': '[redacted]'password': '[redacted]'}""",
+        ),
+        (
+            "?h=Authorization%3A%20Bearer%20abc",
+            "?h=Authorization%3A%20Bearer%20[redacted]",
+        ),  # after an escape
+        ("?h=%22Bearer%20abc", "?h=%22Bearer%20[redacted]"),
+        ("Bearer%09abc", "Bearer%09[redacted]"),
+        ("?h=Bearer%20abc%2Bdef%3D%3D", "?h=Bearer%20[redacted]"),  # escapes inside the token are the token
+        ("a ébearer x", "a ébearer x"),  # `bearer` only as a whole word, Unicode letters included
+        ("?n=%7Btoken%3Dabc", "?n=%7Btoken%3D[redacted]"),  # after any escape that is no name character
+        ("100%token%3Dabc", "100%token%3D[redacted]"),  # after a `%` that starts no escape
+        ("100%ftoken%3Dabc", "100%ftoken%3D[redacted]"),  # a hex digit after it, but no escape
+        ("?h=%0ABearer%20abc", "?h=%0ABearer%20[redacted]"),  # after any escape
+        ("?h=%5BBearer%20abc", "?h=%5BBearer%20[redacted]"),
+        ("token='a\nb', x", "token=[redacted] x"),  # a raw line break inside a quoted value
+        ("token='ab\"cd ef', x", "token=[redacted] x"),  # the other quote inside a quoted value
+        ("token='a\\' b', x", "token=[redacted] x"),  # an escaped quote inside it
+        ("token='a\\\nb c', x", "token=[redacted] x"),  # a backslash before a line break
+        ("{'token': 'ab\\\ncd'}", "{'token': '[redacted]'}"),
+        (
+            "https://h/x?designer=1",
+            "https://h/x?designer=[redacted]",
+        ),  # `sig` anywhere in the name, as before
+    ],
+)
+def test_scrub_examples(value: str, expected: str) -> None:
+    assert logs.scrub(value) == expected
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda n: "a" * n,  # a scheme tried at every letter
+        lambda n: "x a://" + "b" * n,
+        lambda n: "?" + "token" * (n // 5),  # a secret word found again at every repeat
+        lambda n: "a1." * (n // 3),  # a scheme tried at every third character
+        lambda n: "a+" * (n // 2),  # each scheme punctuation character the lookbehind must read
+        lambda n: "a-" * (n // 2),
+        lambda n: "?" + "-token" * (n // 6),  # the word again after each added name character
+        lambda n: "?" + ".key" * (n // 4),
+        lambda n: "?" + "%sig" * (n // 4),
+        lambda n: "#" * n,
+        lambda n: "bearer" + " " * n,
+        lambda n: "bearer " * (n // 7),
+        lambda n: "bearer " + "\\" * n,
+        lambda n: "a=" * (n // 2),  # TASK-283: a name may start at every other character
+        lambda n: "token" * (n // 5),
+        lambda n: "%3Ftoken" * (n // 8),
+        lambda n: "%3F" + "%5F" * (n // 3),
+        lambda n: "%3Ftoken%3D" + "%41" * (n // 3),
+        lambda n: "a%3A%2F%2F" * (n // 10),
+        lambda n: "https%3A%2F%2F" + "u" * n,
+        lambda n: "'token':'" * (n // 9),
+        lambda n: '"' * n,
+        lambda n: "'" + "a" * n,
+        lambda n: "'token': '" + "\\a" * (n // 2),
+        lambda n: ('"token": "' + "a" * 50) * (n // 60),
+        lambda n: "%22h%3A" * (n // 7),  # an encoded scheme tried after every escape
+        lambda n: "%3Ftoken%3D" + "!" * n,
+        lambda n: "'token': b'" * (n // 11),
+        lambda n: '"token": \'' + "a" * n,
+        lambda n: "%3F" + "%2D" * (n // 3),  # each encoded name character the encoded start must refuse
+        lambda n: "%3F" + "%2E" * (n // 3),
+        lambda n: "_" * n,
+        lambda n: "x://" * (n // 4),  # a userinfo tried after every `://` in a value
+        lambda n: "token=" + "a://" + "b" * n,
+        lambda n: 'token="' + "a" * n,  # a quoted value that never closes
+        lambda n: ("token=\"a token='a ") * (n // 18),
+        lambda n: "%" * n + "token%3D",
+        lambda n: "%41bearer%20" * (n // 12),
+        lambda n: "bearer " * (n // 7) + "x",  # each `bearer` refused as the token by the next
+        lambda n: "bearer a" + "/bearer " * (n // 8),  # a token ended early before every next `bearer`
+        lambda n: "bearer " + "a\\nbearer " * (n // 10),
+        lambda n: "\\tbearer\\t" * (n // 10),
+        lambda n: "'token': '" + "'token': " * (n // 10),  # a quoted key tried inside every value
+    ],
+)
+def test_scrub_is_linear_on_a_long_run(build: object) -> None:
+    """About 20k characters took 97-760 ms before TASK-275 by shape (292 ms on a run of letters, 758 ms on
+    `?` + `token` x 4,000), 16 times 5k's: crawled text reaching a log line. The `-.%`, `#` and `bearer` shapes
+    guard what TASK-275 added (the old patterns didn't read them), the shapes after `bearer` what TASK-283 added."""
+    assert_near_linear(logs.scrub, build, 5_000)  # type: ignore[arg-type]
+
+
+def test_a_url_used_as_a_key_loses_its_credentials(stream: io.StringIO) -> None:
+    """Keys are scrubbed at any depth, top-level `extra` keys included."""
+    logging.getLogger("openproceedings.x").info(
+        "e", extra={"https://u:p@h/?token=t": 1, "m": {"https://v:q@g": [{"a://w@f": 2}]}}
+    )
+    (rec,) = lines(stream)
+    assert rec["https://[redacted]@h/?token=[redacted]"] == 1
+    assert rec["m"] == {"https://[redacted]@g": [{"a://[redacted]@f": 2}]}
+    assert "p@" not in json.dumps(rec) and "q@" not in json.dumps(rec)
+
+
+def test_a_secret_named_url_key_is_judged_on_its_own_name(stream: io.StringIO) -> None:
+    """`_sensitive` reads the key as given: its value is redacted, and its name is scrubbed."""
+    logging.getLogger("openproceedings.x").info("e", extra={"m": {"https://u@h/?x=1_token": "v"}})
+    (rec,) = lines(stream)
+    assert rec["m"] == {"https://[redacted]@h/?x=1_token": "[redacted]"}
+
+
+def test_two_keys_that_scrub_alike_are_both_kept(stream: io.StringIO) -> None:
+    logging.getLogger("openproceedings.x").info(
+        "e",
+        extra={
+            "https://a:1@h": "A",
+            "https://b:2@h": "B",
+            "m": {"https://a@h": 1, "https://b@h": 2, "https://[redacted]@h": 3},
+        },
+    )
+    (rec,) = lines(stream)
+    assert rec["https://[redacted]@h"] == "A" and rec["https://[redacted]@h#2"] == "B"
+    assert rec["m"] == {"https://[redacted]@h": 1, "https://[redacted]@h#2": 2, "https://[redacted]@h#3": 3}
+
+
+def test_text_format_escapes_a_key_so_a_newline_cannot_fake_a_line() -> None:
+    buf = io.StringIO()
+    logs.configure_logging("INFO", "text", stream=buf)
+    logging.getLogger("openproceedings.x").info("e", extra={"x\nINFO forged": 1, "plain_name": 2})
+    out = buf.getvalue().strip()
+    assert len(out.splitlines()) == 1
+    assert '"x\\nINFO forged"=1' in out and " plain_name=2" in out
+
+
+@pytest.mark.parametrize("brk", ["\n", "\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029"])
+def test_text_format_escapes_every_line_break_in_keys_values_and_the_message(brk: str) -> None:
+    """Every character `str.splitlines` breaks at, in a key, a value or a %-formatted message (banned, but a
+    backstop), stays on one line."""
+    buf = io.StringIO()
+    logs.configure_logging("INFO", "text", stream=buf)
+    logging.getLogger("openproceedings.x").info("e %s", f"m{brk}INFO forged", extra={f"k{brk}x": f"v{brk}y"})
+    assert len(buf.getvalue().splitlines()) == 1
+
+
+def test_many_keys_that_scrub_alike_are_all_kept_in_linear_time() -> None:
+    """Each name's last suffix is remembered, so n colliding keys cost n steps, not n²/2."""
+
+    def build(n: int) -> dict[str, int]:
+        return {f"https://u{i}@h": i for i in range(n)}
+
+    out = logs._clean(build(1000), log_query_text=False)
+    assert isinstance(out, dict) and len(out) == 1000 and out["https://[redacted]@h#1000"] == 999
+    small, large = build(2_000), build(8_000)
+    ratio, pairs = growth(lambda: logs._clean(small, False), lambda: logs._clean(large, False))
+    assert ratio < 8, (ratio, pairs)
+
+
+def test_a_real_suffixed_key_is_kept_when_keys_collide_after_it() -> None:
+    out = logs._clean(
+        {"https://[redacted]@h#2": "real", "https://a@h": 1, "https://b@h": 2}, log_query_text=False
+    )
+    assert out == {"https://[redacted]@h#2": "real", "https://[redacted]@h": 1, "https://[redacted]@h#3": 2}
+
+
+@pytest.mark.parametrize("brk", ["\x85", "\u2028", "\u2029"])
+def test_a_json_line_is_one_line_to_any_reader(stream: io.StringIO, brk: str) -> None:
+    """json.dumps leaves these as they are; escaped, `str.splitlines` keeps the line whole and it parses the same."""
+    logging.getLogger("openproceedings.x").info(f"e{brk}", extra={f"k{brk}": f"v{brk}"})
+    (line,) = stream.getvalue().splitlines()
+    rec = json.loads(line)
+    assert rec["event"] == f"e{brk}" and rec[f"k{brk}"] == f"v{brk}"
+
+
+@pytest.mark.parametrize("ctl", ["\x1b[2K", "\x08", "\x00", "\x7f", "\x9b", "\t"])
+def test_text_format_escapes_control_characters(ctl: str) -> None:
+    """ESC, backspace and the other C0/C1 controls, in the message or a value, never reach the terminal raw."""
+    buf = io.StringIO()
+    logs.configure_logging("INFO", "text", stream=buf)
+    logging.getLogger("openproceedings.x").info("e %s", f"m{ctl}", extra={"k": f"v{ctl}"})
+    out = buf.getvalue().rstrip("\n")
+    assert not any(ord(c) < 0x20 or 0x7F <= ord(c) < 0xA0 for c in out), repr(out)
+
+
+def test_scrub_redacts_everything_it_did_before_where_a_userinfo_sits_in_a_value() -> None:
+    """origin/dev's userinfo pass took a `#` or `&` out of a URL's userinfo before its query pass read the value,
+    so the value ran on past the `@` (`?token=a://x#y@SECRET`); the shortest such string is 6 pieces (7 to leak a
+    character after the `@`), past the joins above. Every `?<word>=<s1>a://<s2><#|&><s3>@<s4>` over short parts,
+    quotes included (26,244)."""
+    parts = ["", "x", "#", "&", "@", "a://", " ", "'", '"']
+    for word in ("token", "sig"):
+        for sep in "#&":
+            for s1, s2, s3, s4 in product(parts, repeat=4):
+                _assert_superset(f"?{word}={s1}a://{s2}{sep}{s3}@{s4}")
+
+
+def test_the_replayed_query_pattern_is_origin_devs_on_every_short_string() -> None:
+    """`_legacy_spans` replays origin/dev with `_LEGACY_QUERY`: the same spans as the original quadratic pattern
+    over every string up to 6 characters of `?&=sig #`, `?&=key_` and `?&=sig;%` (299,593, 137,257 and 299,593)."""
+    for text in [*_strings("?&=sig #", 6), *_strings("?&=key_", 6), *_strings("?&=sig;%", 6)]:
+        old = [(m.end("k") + 1, m.end()) for m in _PRE275_QUERY.finditer(text)]
+        assert [m.span("v") for m in logs._LEGACY_QUERY.finditer(text)] == old, text
+
+
+# every place a `bearer` match may start, overlapping: the bearer pattern without its early stop, in a lookahead
+# (its separator written out, not taken from logs, so a separator mutant cannot change both sides)
+_SEP = r"(?:[^\S\n\r\v\f\x1c-\x1e\x85\u2028\u2029]|%20|%09|\\t|\+)++"
+_EVERY_BEARER = re.compile(
+    rf"(?=(?:(?<!\w)|(?<=%[0-9a-f]{{2}})|(?<=\\[nrt]))bearer{_SEP}(?!bearer{_SEP})"
+    r"(?P<v>(?:[^\s\"',;\\]|\\[^\s\"'\\])++))",
+    re.IGNORECASE,
+)
+# what may stay in clear before a later match: its start context exactly (`\%0A`, `%0A`, `\n`/`\/`, one character)
+_START_CONTEXT = re.compile(r"(?:\\%[0-9a-f]{2}|%[0-9a-f]{2}|\\[^\s]|[^\s])\Z", re.IGNORECASE)
+_BEARER_PIECES = [
+    "Bearer",
+    " ",
+    "A",
+    "\\n",
+    "\\f",
+    "\\x",
+    "\\/",
+    "\\",
+    "%0A",
+    "%",
+    "/",
+    "+",
+    "%20",
+    "\\t",
+    "\\r",
+    "x",
+    ",",
+]
+
+
+def _assert_every_bearer_token_redacted(text: str) -> None:
+    matches = list(_EVERY_BEARER.finditer(text))
+    # what may stay in clear: each later match's `bearer`, separator, and its start context
+    clear = set()
+    for n in matches:
+        context = _START_CONTEXT.search(text, 0, n.start())
+        clear |= set(range(context.start() if context else n.start(), n.start("v")))
+    redacted = _redacted(logs.secret_spans(text))
+    for m in matches:
+        assert set(range(*m.span("v"))) - clear <= redacted, text
+
+
+def test_every_bearer_token_is_redacted_where_another_bearer_follows() -> None:
+    """A token ends early before a `bearer` another match starts at (matches don't overlap), so that stop must
+    hold exactly where a match may start (`Bearer A\\fbearer+x` stopped where none could, leaking `x`): every
+    token any start finds is redacted, over every join of up to 4 pieces (88,741) and 20,000 seeded joins of 5-10."""
+    for n in range(5):
+        for parts in product(_BEARER_PIECES, repeat=n):
+            _assert_every_bearer_token_redacted("".join(parts))
+    rng = random.Random(283)
+    for _ in range(20_000):
+        _assert_every_bearer_token_redacted(
+            "".join(rng.choice(_BEARER_PIECES) for _ in range(rng.randint(5, 10)))
+        )
+
+
+def test_every_bearer_token_is_redacted_whatever_sits_between_two() -> None:
+    """`Bearer A<between>Bearer x` for every join of up to 3 pieces between and each kind of separator after (15,660): the shapes where a start hides
+    inside a two-character token unit (`A\\%0ABearer`, round 8) are 8 pieces in all, past the joins above."""
+    for n in range(4):
+        for parts in product(_BEARER_PIECES, repeat=n):
+            for sep in (" ", "+", "\\t"):  # each kind of separator after the second `bearer`
+                _assert_every_bearer_token_redacted("Bearer A" + "".join(parts) + "Bearer" + sep + "x")
