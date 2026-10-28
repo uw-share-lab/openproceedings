@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-10-28 03:59'
+updated_date: '2026-10-28 04:50'
 labels:
   - ops
   - security
@@ -56,4 +56,19 @@ Full-tree security-reviewer pass before going public with an instance.
 2026-10-16: AC#2 (rate limits and CORS on the deployed instance) is all that is left; it waits on hosting (TASK-064) and then a deployment. Not added as a dependency: the CLI refuses a list holding the completed TASK-065.
 
 2026-10-28: TASK-256 folded in (owner, 2026-10-28: fewer standalone tasks). Its decision (option (c): a per-source limit at the host, set once TASK-064 picks one; no custom Caddy build, request buffering kept) stays recorded in spec 08 §Deploy and deploy/README.md §Comparisons; its remaining build-and-measure criterion is this task's new last AC.
+
+2026-10-28 (AC #3, per-source limit): the ruleset is in place in deploy/connlimit.nft, run with deploy/connlimit.sh check|apply|show|remove.
+
+What it does: for each IPv4 address or IPv6 /64, TCP and UDP traffic to the host's port 443 is limited to 16 connections at once, and to 1 MiB/s after a 16 MiB burst. Past either limit, packets are dropped. It covers only packets addressed to the host (fib daddr type local). The chain is in prerouting at priority -150, after conntrack and before Docker's DNAT.
+
+Why the byte rate: the connection cap alone bounds uploads only over HTTP/1.1. Caddy 2.11.7 sets no HTTP/2 or HTTP/3 stream limit (Go's default is 250, quic-go's is 100) and has no setting for one. The byte rate bounds what one source can make the proxy buffer. By arithmetic that is about 3 x (16 + 60) MiB, some 230 MiB of the 1 GiB limit. That figure is not measured, and neither is the per-request overhead.
+
+Checked on 2026-10-28, between Docker Desktop containers (Linux 6.5, nftables 1.1.3), with the ruleset in the server's own network namespace and without the fib line, which LinuxKit lacks. Results are in docs/results/2026-10-28-connlimit-container-check.md:
+- the ruleset parses and loads, and loading it twice is idempotent;
+- 16 of 20 TCP and 16 of 20 UDP flows from one IPv4 address or one /64 got through;
+- one /64 shares the 16, and separate /64s don't;
+- 40 MiB took 23 s.
+backend/tests/deploy/test_connlimit.py pins the rules and numbers, and runs nft -c where it can.
+
+Not measured in front of Caddy, so this AC stays unchecked. That waits on a Linux host (TASK-064). Note for that measurement: deploy/smoke-test.sh --compare on the host must still pass, but the host's own traffic never passes prerouting. The limits themselves have to be measured from another machine, as deploy/README.md §Per-source limits on the host describes. That section, not §Comparisons, documents the limits.
 <!-- SECTION:NOTES:END -->
