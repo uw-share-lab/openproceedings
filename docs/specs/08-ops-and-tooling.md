@@ -630,7 +630,7 @@ Caddy as built limits neither connections nor uploads per client. The owner deci
 `connlimit`, on TCP and UDP 443 (QUIC: HTTP/3 is on, TASK-257), set once TASK-064 chooses the host; there is no
 custom Caddy build. It caps the connections one address holds, not its uploads (HTTP/2 and HTTP/3 carry many
 on one connection); many addresses together can still reach the memory limit, which then restarts the proxy as now. Until
-it is set it is not built, and TASK-256 stays open for it).
+it is set it is not built; TASK-067's last criterion builds and measures it).
 `deploy/smoke-test.sh --compare` checks all of this, and decision-035 makes passing it on the host a
 condition of any public instance enabling comparisons; it passed on Docker Desktop on 2026-10-16
 (`deploy/README.md` §Comparisons; the measurements are in `docs/results/2026-10-16-compare-proxy.md`), and the
