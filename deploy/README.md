@@ -16,6 +16,7 @@ that is TASK-064's decision. The requirements behind each setting are in
 | `caddy.Dockerfile` | Caddy with the Caddyfile, as user `caddy` (uid 10002) |
 | `index-permissions.sh` | gives `op-api` read access to one index version (§Permissions) |
 | `smoke-test.sh` | the whole stack over a throwaway fixture (§Trying it locally) |
+| `connlimit.nft`, `connlimit.sh` | the host's per-source connection and byte-rate limits on TCP and UDP 443 in front of Caddy, and the script that checks, loads, shows and removes them (§Per-source limits on the host) |
 | `smoke-h3.Dockerfile` | an HTTP/3 client (curl) that `smoke-test.sh --compare` builds and runs against the stack; never part of it. Its packages come from the Debian snapshot its base image was built from, curl at an exact version |
 
 Every base image is pinned by digest (`make tooling` checks it, and Dependabot bumps it). Every container
@@ -363,14 +364,10 @@ killed**: memory stays bounded, but Docker restarts the container (`restart: unl
 connection it held is dropped, searches included, for the few seconds it takes. With the 1 GiB default, 24
 uploads held at once reached its edge (peaks of 890 to 998 MiB) and 32 did not fit: somewhere between the two
 (400 to 540 MB of traffic, each upload faster than 2.24 Mbit/s to beat `read_body 60s`) is enough, from one
-address or many, and Caddy as built here limits
-neither connections nor uploads per client. That bound is not built here yet. The owner decided on 2026-10-17
-(TASK-256) where it goes: a per-source connection limit in front of Caddy at the host, for example nftables
-`connlimit`, on TCP and UDP 443 (QUIC: HTTP/3 is on, TASK-257), set once TASK-064 chooses the host. There will be
-no custom Caddy build. That caps the connections one address can hold, not its uploads: HTTP/2 and HTTP/3 carry
-many uploads on one connection. Many addresses together can still reach the memory limit, which then restarts
-the proxy as now.
-Until it is set, size `OP_CADDY_MEM_LIMIT` as above and expect a restart past it.
+address or many, unless the host limits each source: Caddy as built here limits neither connections nor
+uploads per client. The bound is on the host, in front of Caddy (owner decision
+2026-10-17, TASK-256 option (c): no custom Caddy build, and `request_buffers` stays, decision-035), in
+`deploy/connlimit.nft` (TASK-067). See §Per-source limits on the host, below.
 
 A stalled upload was cut by the proxy when `read_body` ran out (60 s after its request started, sending
 included) and never reached the API: with uploads stalled in the proxy, a whole 16 MiB comparison ran at once
@@ -459,6 +456,107 @@ underscores; the three costs are under `rate_limit.`). The caps are stated in `G
 | `--compare-upload-weight` | 4 (1 to 100) | how many times the file's upload time counts in the token debit and the pause (a stalled upload holds the slot and does no work) |
 | `--compare-token-ms` | 500 (at least 1) | one rate-limit token per this many ms a comparison held its slot; lower makes a comparison dearer in searches |
 
+### Per-source limits on the host
+
+`deploy/connlimit.nft` is an nftables ruleset that sets two limits for each source, either an IPv4 address or an
+IPv6 /64, on TCP and UDP 443 (QUIC: HTTP/3 is on, TASK-257):
+
+| Limit | Value | Past it |
+|---|---|---|
+| Connections held at once | 16 | the new connection's packets are dropped (a TCP client retries its SYN) |
+| Bytes a second sent to 443 | 1 MiB/s, after a burst of 16 MiB | the packets are dropped (TCP and QUIC slow down) |
+
+Both limits are the owner's: the connection limit is TASK-256's option (c) (2026-10-17), and the byte rate was
+added to it on 2026-10-28, once it was clear that connections don't bound multiplexed uploads. The byte rate is
+its own pair of rules (`update @bytes4`, `update @bytes6`, and their two sets): delete them and the connection
+limit stands alone. The connection limit on its own bounds uploads only over HTTP/1.1, where each
+upload has its own connection. HTTP/2 and HTTP/3 carry many uploads on one connection. Caddy 2.11.7 sets no
+stream limit of its own, so Go's HTTP/2 default of 250 and quic-go's HTTP/3 default of 100 apply, and it has no
+setting to lower them. So
+one connection could carry the 32 uploads that killed the proxy above. The byte rate covers that. The proxy
+buffers each upload whole and costs about three times what has arrived (measured for whole 16 MiB uploads),
+and `read_body` cuts an upload that is still arriving after 60 s. So, by that arithmetic, one source's
+buffered bodies cost the proxy at most about 3 × (16 MiB + 60 s × 1 MiB/s), some 230 MiB of the 1 GiB limit,
+however its uploads share connections. That figure is not yet measured in front of Caddy, and neither is the
+per-request overhead of many streams that each send little. A 16 MiB file needs 0.27 MiB/s to beat
+`read_body`, and a search sends a few KiB, so neither limit slows a reviewer.
+
+Sixteen connections leave room for a browser's six over HTTP/1.1 (Chrome may also open a QUIC flow beside
+them) and for some people behind one address. Carrier-grade, campus or corporate NAT can put many more there.
+Past the limit their new connections hang and retry (1, 3, 7 s) rather than getting an error. The byte rate is
+shared the same way: everyone behind one address (a university's NAT, say) shares 1 MiB/s to the site. A
+search sends a few KiB, but a 16 MiB comparison needs 0.27 MiB/s to beat `read_body`, so about three
+comparison uploads at once from one shared address fit, after the first 16 MiB burst. A fourth slows them
+all, and past that they are cut at `read_body` (60 s). Watch the
+`connections` drop counter in `deploy/connlimit.sh show`, and raise the limit if it climbs during ordinary use.
+Without the byte rate, sixteen HTTP/1.1 uploads held at once peaked at 804 MiB, about 80% of the limit, where
+24 reached its edge (above). `backend/tests/deploy/test_connlimit.py` checks the numbers against these bounds.
+It fails if `compare.yml`'s memory default changes, or if its `read_body` changes enough to break the bound.
+If you change `OP_READ_BODY` or `OP_CADDY_MEM_LIMIT`, work the bound out again.
+
+What it does not do:
+
+- **Many sources together** can still reach the memory limit (about five sources at their byte rate, by the
+  same arithmetic). The proxy is then killed and restarted as before. A /48 holds 65,536 /64s.
+- **A full set fails open.** Each limit keeps up to 262,144 sources, and nftables doesn't limit a new source
+  while the set is full. Real sources aren't needed to fill one: spoofed packets do it. A byte-rate entry
+  goes 20 s after a source's last packet, so it takes about 13,000 spoofed packets a second to keep a set full.
+  A spoofed SYN's source stays in a connection set while conntrack holds the half-open connection: about 3,000
+  to 4,400 a second keep one full (conntrack's 60 s, stretched to about 90 s by SYN-ACK retries without SYN
+  cookies).
+- **UDP flows linger.** conntrack keeps a QUIC flow after its last packet for `nf_conntrack_udp_timeout`
+  (30 s by default), or `nf_conntrack_udp_timeout_stream` (120 s, 180 s on older kernels) once traffic has
+  gone both ways. The flow counts against the 16 until then.
+- **The host's own traffic is not limited.** The chain hooks `prerouting`, which local traffic never passes, so
+  `deploy/smoke-test.sh` run on the host doesn't reach it. Measure from another machine.
+- **Behind a load balancer, CDN or TCP proxy, don't load it.** Every client would share the balancer's few
+  addresses, so the whole site would get 16 connections and 1 MiB/s. Set the per-client limit on the
+  balancer instead.
+- **Port 80 is not limited.** Caddy only redirects there and buffers no body.
+- **A reload resets the counts.** `apply` replaces the table: connections already open stop counting until
+  they close, and every source's byte budget starts full.
+
+The chain runs at priority -150. That is after conntrack (-200) and before Docker's DNAT (-100), so it sees
+the host's published port. It limits only packets addressed to the host itself (`fib daddr type local`,
+Docker's own test for a published port), never a container's HTTPS going out. That needs the kernel's
+`nft_fib_inet`, which stock Debian, Ubuntu and RHEL kernels build. `check` fails on a kernel without it. The
+port is `define https_port = 443` at the top of the file. If `deploy/.env` sets `OP_HTTPS_PORT`, make it
+that value's host port. Otherwise nothing matches, and nothing says so. As root on the host:
+
+```bash
+deploy/connlimit.sh check    # nft -c: parse it against this kernel without loading it
+deploy/connlimit.sh apply    # load it (replaces only the table inet openproceedings_limits)
+deploy/connlimit.sh show     # the table, its drop counters and the sources it is tracking
+deploy/connlimit.sh remove   # the limits are off
+```
+
+The ruleset is not persistent. Load it at boot too, for example from a systemd unit that runs
+`deploy/connlimit.sh apply` after `nftables.service`. Don't reload an `nftables.conf` that starts with
+`flush ruleset` while Docker runs: that also deletes Docker's tables. The file replaces only its own table, so
+`nft -f deploy/connlimit.nft` is safe to run again. To change a limit, edit the numbers in both rules of its
+pair (IPv4 and IPv6). nft's `define` can't name a rate.
+
+**Status (2026-10-28):** checked between containers on Docker Desktop (Linux 6.5, nftables 1.1.3), with the
+ruleset loaded in the server's own network namespace and without the `fib` line, which that kernel lacks.
+The file parses and loads, and reloads cleanly:
+
+- 16 of 20 TCP connections from one IPv4 address, or one IPv6 /64, connected, and 16 of 20 UDP flows were
+  answered.
+- Two addresses in one /64 shared the 16 (10, then 6). Two /64s got 10 each.
+- 40 MiB on one connection took 23 s: the 16 MiB burst, then 1 MiB/s.
+
+The raw output is in
+[`docs/results/2026-10-28-connlimit-container-check.md`](../docs/results/2026-10-28-connlimit-container-check.md).
+That check was not on a host in front of Caddy. The measurement still waits on the host (TASK-064, then
+TASK-067's last criterion). On the host, with comparisons on and the ruleset loaded, `deploy/smoke-test.sh
+--compare` must still pass, though its traffic is the host's own and passes the limits by. Then, from another
+machine:
+
+- Hold more than 16 uploads from one address over HTTP/1.1, and as many over HTTP/2 on one connection.
+- Open 16 HTTP/2 connections with 250 streams each, every stream sending a few KiB and then stalling.
+
+Each time, check the proxy's memory peak against the 230 MiB worked out above, with no kill.
+
 ## Backups
 
 `$OP_DATA_HOST/records/records.sqlite` holds the only copy of every saved search. Losing it also unpins
@@ -502,7 +600,7 @@ It checks what this runbook claims:
 - no query text in any log.
 
 `deploy/smoke-test.sh --compare` runs the same over `compose.yml` and `compare.yml`, and adds what §Comparisons
-claims: the overlay's `api` command, a 16 MiB comparison while uploads stalled in the proxy (`OP_SMOKE_STALLS`,
+claims (not §Per-source limits on the host, whose rules the host's own traffic never meets): the overlay's `api` command, a 16 MiB comparison while uploads stalled in the proxy (`OP_SMOKE_STALLS`,
 default 8) neither reach the API nor outlast `read_body`, then two batches as large over HTTP/3 (trickling a
 byte a second, from `smoke-h3.Dockerfile`'s curl on the stack's edge network) cut at `read_body` with none
 compared, the proxy's memory peak under its limit with no OOM kill and the second HTTP/3 batch raising it by
@@ -533,6 +631,8 @@ Linux host. No CI job runs it.
   rebuild (§Permissions).
 - Do the first start and its checks on the host: client addresses (First start, step 4), and the rate limit
   and CORS (TASK-067 AC #2).
+- Before comparisons are turned on: load `deploy/connlimit.nft` at boot, and measure it from another machine
+  (§Per-source limits on the host; TASK-067's last criterion).
 - Schedule the record-store backup (§Backups).
 - Alert on the rate of uvicorn's `Exceeded concurrency limit.` lines (spec 08 §Deploy): a burst means the
   API's 256 connections are full.

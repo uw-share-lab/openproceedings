@@ -624,17 +624,46 @@ buffering the file, a slow upload holds a proxy goroutine and about 50 MiB of it
 buffer doubles to 32 MiB to hold 16, plus the buffers it outgrew until Go collects them), never the API's
 comparison slot, and `read_body` cuts it; with no limit on how many arrive at once, the memory limit bounds
 the proxy, which past it is killed and restarted, dropping every connection it held, searches included, for a
-few seconds (24 uploads held at once reached the edge of 1 GiB, peaks 890 to 998 MiB, and 32 did not fit;
-Caddy as built limits neither connections nor uploads per client. The owner decided on 2026-10-17 (TASK-256, option
-(c)) that the cap will be a per-source connection limit in front of Caddy at the host, for example nftables
-`connlimit`, on TCP and UDP 443 (QUIC: HTTP/3 is on, TASK-257), set once TASK-064 chooses the host; there is no
-custom Caddy build. It caps the connections one address holds, not its uploads (HTTP/2 and HTTP/3 carry many
-on one connection); many addresses together can still reach the memory limit, which then restarts the proxy as now. Until
-it is set it is not built; TASK-067's last criterion builds and measures it).
-`deploy/smoke-test.sh --compare` checks all of this, and decision-035 makes passing it on the host a
-condition of any public instance enabling comparisons; it passed on Docker Desktop on 2026-10-16
+few seconds (24 uploads held at once reached the edge of 1 GiB, peaks 890 to 998 MiB, and 32 did not fit).
+`deploy/smoke-test.sh --compare` checks all of this (not the per-source limits below, which the host's own
+traffic never meets), and decision-035 makes passing it on the host a condition of any public instance
+enabling comparisons; it passed on Docker Desktop on 2026-10-16
 (`deploy/README.md` §Comparisons; the measurements are in `docs/results/2026-10-16-compare-proxy.md`), and the
 current test again on 2026-10-24 and 2026-10-25 (`docs/results/2026-10-24-proxy-body-limits.md`).
+
+Caddy as built limits neither connections nor uploads per client, so the host does (TASK-067). The owner
+decided this on 2026-10-17 (TASK-256, option (c)): no custom Caddy build, and `request_buffers` is kept. On
+2026-10-28 the owner added the byte rate to option (c), because a connection limit does not bound multiplexed
+uploads; it is its own pair of rules and can be dropped without touching the connection limit. The limit is
+`deploy/connlimit.nft`, loaded with `deploy/connlimit.sh apply` (`deploy/README.md` §Per-source limits on the host):
+
+| What | Value |
+|---|---|
+| Source | an IPv4 address, or an IPv6 /64 |
+| Traffic | TCP and UDP (QUIC: HTTP/3 is on, TASK-257) to the host's port 443 (`define https_port`), addressed to the host itself (`fib daddr type local`) |
+| Hook | `prerouting`, priority -150: after conntrack (-200), before Docker's DNAT (-100) |
+| Connections | at most 16 at once; a new one past it is dropped |
+| Bytes | at most 1 MiB/s after a 16 MiB burst; past it, packets are dropped |
+
+On its own, the connection limit bounds uploads only over HTTP/1.1. HTTP/2 and HTTP/3 carry up to 250 and 100
+uploads on one connection, because Caddy 2.11.7 sets no stream limit and has no setting for one. The byte rate
+bounds a source however its uploads share connections. By arithmetic (not yet measured), its buffered bodies
+cost the proxy at most about 3 × (16 + 60 × 1) MiB, some 230 MiB of the 1 GiB limit: three times what has
+arrived, until `read_body` cuts the upload. A per-request overhead comes on top and is not measured.
+`backend/tests/deploy/test_connlimit.py` keeps the numbers under these bounds. Stated limits:
+
+- Many sources together can still reach the memory limit, which then restarts the proxy as now.
+- A full set (262,144 sources) fails open, and spoofed packets can fill one.
+- Traffic from the host itself never passes `prerouting`.
+- Behind a load balancer the ruleset must not be loaded.
+- Everyone behind one address shares both limits: behind a NAT (a university, say), about three 16 MiB
+  comparison uploads at once fit in 1 MiB/s at the 0.27 MiB/s each needs to beat `read_body`; more slow them
+  all.
+
+On 2026-10-28 it parsed, and it behaved as specified between containers on Linux 6.5, without the `fib`
+line, which that kernel lacks (`docs/results/2026-10-28-connlimit-container-check.md`). It was not measured in
+front of Caddy: that waits on the host (TASK-064; TASK-067's last criterion).
+
 Swagger UI (`/api/v1/docs`, scripts from a
 CDN) is off on a non-loopback `--host` unless `--docs` is passed; leave it off in production. `api` mounts `snapshots/` and `takedowns/` read-only, the
 search records' directory `records/` read-write (a host directory, 0700 and owned by the API's uid, 10001 by default; `records.sqlite` and
