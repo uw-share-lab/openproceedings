@@ -36,3 +36,9 @@ File a task for the five high `npm audit` findings on `dev` after #178, assumed 
 - Skill / agent / CLAUDE.md updated? — no: `/dependabot-review` already runs `npm audit --omit=dev` for what ships;
   this is a filing check, recorded here.
 - Test or hook added? — no (nothing to enforce until a fix exists).
+
+## Addendum (2026-10-28)
+GitHub withdrew GHSA-vfj7-8cjw-p6xm on 2026-10-23 without a braces release, so `npm audit` stopped
+flagging braces 3.0.3 and TASK-278 closed with no dependency change for it. A task that waits on an upstream
+fix should also check `gh api /advisories/<id> -q .withdrawn_at`: a withdrawal ends the wait as surely as
+a patch.
