@@ -49,6 +49,12 @@ and `classify_v1_venue` maps a v1 note's exact `content.venue` string to track a
 | `<Org>.cc/<Y>/Workshop/<name>` whose name looks like a status (`Rejected`, `Data_Submission`) | `workshop` | `accepted` (the segment after `Workshop` is always the name) | rule |
 | anything that does not match the grammar | `unknown` | `unknown` | log, show on coverage |
 
+A workshop can also put its venues one level under a group that is itself no venue (TASK-191, checked live
+2026-10-28): `ICLR.cc/2026/Workshop/Re-Align/Research` (67 accepted, `TuuyJZrDm5`) and `/Challenge` (5,
+`LzgOMc1Dp8`), and `NeurIPS.cc/2025/Workshop/DBM/Findings` (43). Rule 1 makes each `workshop` with the status
+of its suffix; the crawler finds them by listing the placeholder group's children (openreview-api skill). The
+same holds outside workshops: `NeurIPS.cc/2024/Competition/LMC` (9) is `other`, status `unknown` (a bare path is `accepted` only for a form in the table), as below.
+
 Workshop names contain hyphens and digits (`SCI-FM`, `CLRLC-LLMs`, `7HVU`, `NExT-Game`), and a name can end in
 `_Track` (`ICLR.cc/2026/Workshop/ML4RS_Main_Track`, 42 notes): rule 1 still makes it a workshop. A new form gets a live check
 (by forum id, authenticated), a recorded fixture, and a table-test row citing the checked id.

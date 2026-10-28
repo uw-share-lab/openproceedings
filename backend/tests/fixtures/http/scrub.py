@@ -523,7 +523,7 @@ def scrub_html(
         if url.rstrip("/").endswith("proceedings.mlr.press"):
             li = re.compile(r'<li><a href="v\d+"><b>Volume \d+</b></a>.*?</li>', re.S)
             wanted = re.compile(
-                r'"v(28|32|37|48|70|80|97|119|123|133|139|162|176|202|220|235|251|267|292|318)"'
+                r'"v(28|32|37|48|70|80|97|119|123|133|139|162|176|202|220|235|251|267|292|306|318)"'
             )
             first = page.find('<li><a href="v')
             blocks = list(li.finditer(page, max(first, 0)))

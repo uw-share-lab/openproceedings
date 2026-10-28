@@ -29,11 +29,12 @@ from tests.unit.ingest.proceedings_helpers import (
     seed_fixture,
 )
 
-V28, V202, V235, V267 = (
+V28, V202, V235, V267, V306 = (
     "pmlr/v28/volume-index.json",
     "pmlr/v202/volume-index.json",
     "pmlr/v235/volume-index.json",
     "pmlr/v267/volume-index.json",
+    "pmlr/v306/volume-index.json",
 )
 V28_KEYS = ("sznitman13", "muandet13", "boots13")
 V235_KEYS = ("abad-rocamora24a", "abe24a", "abhyankar24a")
@@ -43,21 +44,24 @@ V235_KEYS = ("abad-rocamora24a", "abe24a", "abhyankar24a")
 
 
 def test_every_row_has_a_source_and_a_verified_date() -> None:
-    for v in VOLUMES.values():  # the 2026-09-27 table, and v81 (FAccT 2018) from the census of 2026-10-10
-        assert v.source and v.verified == (date(2026, 10, 10) if v.number == 81 else date(2026, 9, 27)), (
-            v.number
-        )
+    # the 2026-09-27 table, v81 (FAccT 2018) from the census of 2026-10-10, v306 (ICML 2026) from TASK-191
+    later = {81: date(2026, 10, 10), 306: date(2026, 10, 28)}
+    for v in VOLUMES.values():
+        assert v.source and v.verified == later.get(v.number, date(2026, 9, 27)), v.number
 
 
 def test_the_icml_volumes_2013_on() -> None:
     assert {v.year: n for n, v in VOLUMES.items() if v.venue == "ICML" and v.ingested} == {
         2013: 28, 2014: 32, 2015: 37, 2016: 48, 2017: 70, 2018: 80, 2019: 97, 2020: 119, 2021: 139,
-        2022: 162, 2023: 202, 2024: 235, 2025: 267,
+        2022: 162, 2023: 202, 2024: 235, 2025: 267, 2026: 306,
     }  # fmt: skip
     assert {n: VOLUMES[n].role for n in ICML_PMLR_VOLUMES} == {
         n: "primary" if n <= 162 else "confirm" for n in ICML_PMLR_VOLUMES
     }
-    assert icml_volume(2026) is None  # not on PMLR on 2026-09-27: added when its index page appears
+    # ICML 2026 was not on PMLR on 2026-09-27; v306 was published by 2026-10-28 (TASK-191). Like v235 and v267 it
+    # mixes main and position papers, so its track is `unknown`
+    assert icml_volume(2026) == VOLUMES[306] and VOLUMES[306].track == "unknown"
+    assert icml_volume(2027) is None
 
 
 def test_competition_and_workshop_volumes_are_classified_and_never_ingested() -> None:
@@ -87,7 +91,7 @@ def test_the_table_agrees_with_the_recorded_pmlr_index() -> None:
 
 @pytest.mark.parametrize(
     ("rel", "number"),
-    [(V28, 28), (V202, 202), (V235, 235), (V267, 267), ("pmlr/v220/volume-index.json", 220),
+    [(V28, 28), (V202, 202), (V235, 235), (V267, 267), (V306, 306), ("pmlr/v220/volume-index.json", 220),
      ("pmlr/v81/volume-index.json", 81)],
 )  # fmt: skip
 def test_the_table_agrees_with_the_recorded_volume_headings(rel: str, number: int) -> None:
@@ -284,7 +288,7 @@ def test_ingest_by_year_marks_the_volume_and_the_snapshot_path_re_mines_it(tmp_p
     records, sources = load_crawls(tmp_path)
     assert len(records) == 3 and [lst["volume"] for lst in sources["pmlr"]["listings"]] == [28]
     with pytest.raises(MinerError, match="no verified PMLR volume"):
-        ingest_pmlr([2026], tmp_path, transport=t, min_interval=0)
+        ingest_pmlr([2027], tmp_path, transport=t, min_interval=0)
 
 
 def test_a_marked_crawl_whose_pages_are_gone_is_an_error(tmp_path: Path) -> None:
@@ -499,7 +503,7 @@ def test_a_not_paper_key_the_index_lacks_stops(tmp_path: Path, facct_table) -> N
 
 
 def test_icml_is_untouched() -> None:
-    assert set(volumes.ICML_PMLR_VOLUMES) == {28, 32, 37, 48, 70, 80, 97, 119, 139, 162, 202, 235, 267}
+    assert set(volumes.ICML_PMLR_VOLUMES) == {28, 32, 37, 48, 70, 80, 97, 119, 139, 162, 202, 235, 267, 306}
     assert volumes.icml_volume(2013).number == 28 and volumes.ingested_volume("ICML", 2013).number == 28
 
 

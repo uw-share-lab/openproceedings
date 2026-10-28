@@ -24,7 +24,7 @@ over-merge silently deletes a paper from someone's systematic review.
    id's page, so the record still names itself (the native-id bounds, decision-055, keep it within the cap); an `iclr_archive` record whose own target was cut stands for itself
    (`dedup._archive_target_cut`, only by the crawler's own claim), and its own id stays among its cluster's proceedings
    ids. PMLR's index links each paper's forum from ICML 2023 (recorded for
-   v202, v235 and v267; v28 has no link). Clusters that share a forum id
+   v202, v235, v267 and v306; v28 has no link). Clusters that share a forum id
    in the same venue and year merge **whatever their titles say**, before any title match. The link is
    refused (a `conflicts.csv` row with `field = forum_id`, never a merge) when the forum id's records are
    in different venue-years (`venue_year_not_merged`), when the group would hold two forum ids or two
@@ -173,7 +173,7 @@ safe direction.
   Proceedings never host workshop papers, tiny papers, blogposts or competition entries. A non-listing record
   with track `unknown` also stays apart until evidence arrives (a `track_not_merged` row to review). The one
   exemption is a listing's *own* `unknown`: a PMLR volume that holds both main and position papers (v235,
-  v267) can't say which track a paper is in, so it is `proceedings` family and merges with the OpenReview
+  v267, v306) can't say which track a paper is in, so it is `proceedings` family and merges with the OpenReview
   record, whose track wins by precedence. An `unknown` that an OpenReview track claim gives is never a listing's
   own, even in a cluster that is a listing only because a same-id RIS row, or the note itself, names a
   proceedings paper (TASK-174: the RIS row would otherwise bridge the note's `unknown` into the listing). A RIS
@@ -272,7 +272,7 @@ it needs to know which listings were crawled, and whether completely.
   an unfollowed volume may hold the paper, and with no stated count nothing says the page showed every entry
   (NeurIPS 2021's D&B page states none, so NeurIPS 2021 is not judged).
 - **Covered tracks**: `main`, `datasets_benchmarks` or `position` only, and only those the crawled listings'
-  records hold: a listing's own track claim, or, for a listing that can't say (`unknown`: PMLR v235/v267 mix main
+  records hold: a listing's own track claim, or, for a listing that can't say (`unknown`: PMLR v235/v267/v306 mix main
   and position papers), the track of the record it merged into. A track with no listing record (not published
   yet) is never judged.
 - **Unlisted**: status won by an OpenReview `accepted` claim, in a covered venue-year and track, not a listing
