@@ -1,7 +1,7 @@
 # OpenAlex fidelity audit (2026-10-28)
 
 - Snapshot: `2026-10-16-03eab0ef56c4`
-- Code: commit `afadf9a8cec1`
+- Code: commit `52fe3f767fe1`
 - Sample: seed 49; every record with an official abstract and a DOI of FAccT 2022, 2025, 2026; AIES 2024, 2025, 2026; and 1,000 of 25,124 such AAAI 2010+ records, sorted by id after a seeded draw. Title-route check: 19 attaches.
 - Date: 2026-10-28
 
@@ -142,15 +142,15 @@ Of the 1,131 records with both an `aaai_library` abstract and an OpenAlex text, 
 
 Each of the 123 `differs` attaches was checked against OpenAlex's authors for the work, as the title route's attaches are above (one request per 50 works, `select=id,authorships,biblio`):
 
-- **Genuinely different texts:** 122 (99.2%). The author lists share a surname, so the work is the same paper and the two texts differ. Of these, 63 open with the same 5 search tokens as AAAI's, and OpenAlex's text is at least 1.5× as long as AAAI's in 86 (median 2.4×).
-- **Wrong-paper attaches:** 1 (0.8%). OpenAlex lists authors and none of their surnames is any of ours, so the title route attached another paper with the same title key.
+- **Genuinely different texts:** 122 (99.2%). The author lists share a surname, so the work is the same paper and the two texts differ. Of these, 63 open with the same 5 search tokens as AAAI's, and OpenAlex's text is at least 1.5× as long as AAAI's in 86 (median 2.4×); 47 do both, the shape of a text that runs on past the abstract.
+- **Look like wrong-paper attaches:** 1 (0.8%). OpenAlex lists authors and none of their surnames is any of ours, so the title route may have attached another paper with the same title key.
 - **Can't be told:** 0 (0.0%; no authors on one side).
 
 | Record | OpenAlex work | Our first-author surname | OpenAlex's first-author surname | Near spelling |
 |---|---|---|---|---|
 | `op:aaai:1998:dblp-Pedersen98a` | `W2164604466` | pedersen | pederson | yes |
 
-1 of the 1 have a first-author surname close to ours (a character ratio of at least 0.75), by the look of them spelling or OCR variants of the same surname; if they are the same authors, 0 are wrong-paper attaches. A text that agrees (`exact` to `similar`) is the same paper, so of the 1,131 attaches compared, 1 (0.1%) look like another paper, or 0 (0.0%) without the near spellings.
+1 of the 1 have a first-author surname close to ours (a character ratio of at least 0.75), by the look of them spelling or OCR variants of the same surname; if they are the same authors, 0 are wrong-paper attaches. A text that agrees (`exact` to `similar`) is taken to be the same paper (not author-checked), so of the 1,131 attaches compared, 1 (0.1%) look like another paper, or 0 (0.0%) if the near spellings are the same authors.
 
 ## Caveats
 
