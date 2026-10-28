@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-16 22:50'
+updated_date: '2026-10-28 03:59'
 labels:
   - eval
   - new-venues
@@ -26,3 +27,9 @@ TASK-235 (PR #152, docs/results/2026-10-16-openalex-audit.md) compared OpenAlex 
 - [ ] #1 The author check runs on the 123 'differs' records and the report splits them into wrong-paper attaches and genuinely different texts, with tests
 - [ ] #2 op eval openalex covers AIES 2026, and the audit is re-run on the then-current snapshot and cited from spec 07 §G
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-28: the owner lifted the 2026-10-16 hold on new OpenAlex requests for this task, ahead of TASK-135's answer. Requests use a generic user agent and never send the owner's address (the polite-pool mailto is not used).
+<!-- SECTION:NOTES:END -->
