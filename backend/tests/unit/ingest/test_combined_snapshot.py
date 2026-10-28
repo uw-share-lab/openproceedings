@@ -48,7 +48,10 @@ BUILT = datetime(2026, 9, 28, tzinfo=UTC)
 # TASK-205/206 changed FILES_HASH: record schema v5 (the `dblp` and `icml_site` sources and the `dblp-<key>` native
 # id, decision-047) changed the manifest's record_schema_version, from e0caaefc…, and each proceedings listing's
 # report gained `abstract_short` (abstracts under 5 words: the scrubbed fixtures' synthetic ones); no record changed.
-SNAPSHOT_HASH = "94c07048e05de79db6c622f6e266195ef698d1ac6a82bc68aab9cd7213168bdd"
+# TASK-191 changed it: the v2 crawler lists the children of a group that is no venue (the world's Program_Chairs, which
+# has none), one more paced request, so every later fake fetch time moves by a second; with only `fetched_at` removed
+# the records are byte-identical to the 94c07048… build (checked 2026-10-28).
+SNAPSHOT_HASH = "d19780029938f348c587c2fd43bd8af95519335e05da48c16ecfffe87dc7325f"
 # Task 2 of the new-venues milestone changed FILES_HASH: record schema v6 (the `ojs` source, decision-049) changed the
 # manifest's record_schema_version, from 964d2bd7…; with it set back to "5" the files hash to that (checked 2026-10-09).
 # Task 1 of milestone B changed it again: record schema v7 (the `crossref` and `facct_site` sources); with the version
@@ -73,7 +76,8 @@ SNAPSHOT_HASH = "94c07048e05de79db6c622f6e266195ef698d1ac6a82bc68aab9cd7213168bd
 # the files hash to e6906934… (the value before; checked 2026-10-22). No record changed, so SNAPSHOT_HASH is unchanged.
 # Release 0.6.0 changed only openproceedings_version, "0.5.0" to "0.6.0": with it set back to "0.5.0" the files hash
 # to 4be40e62… (the value before; dev's CI at 0.5.0). SNAPSHOT_HASH is unchanged.
-FILES_HASH = "3aa99f9342f58373d0b49ef62dff4bb2553d627ea7ad37bb657532d750f00b75"
+# TASK-191 changed it with SNAPSHOT_HASH (the same fetch times; 3aa99f93… before).
+FILES_HASH = "87737125562cf8edea71e1a70663e229de7a851a9c35ae52b2dded33ead3e2eb"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:
