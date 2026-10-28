@@ -162,8 +162,14 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
 - `ingest/sources/openreview_v2.py`: `crawl` (groups → venueids → pages → records), `note_record` (the
   authority rule), `ingest` (writes `…/v2/crawls/<Venue>-<Year>.json` for a finished crawl) and `replay`
   (what `op snapshot build` calls). The group-tree enumeration (`?parent=` listings, containers, the
-  `proposal` skip) is built from the research run's description; no `?parent=` listing is recorded yet, so
-  record one per venue before the first full crawl.
+  `proposal` skip) is built from the research run's description; each 2026 venue-year's root `?parent=` listing
+  is recorded (§Fixtures). **A group that is no venue can hold venues** (TASK-191): ICLR 2026
+  `Workshop/Re-Align` is a placeholder (domain `OpenReview.net`, no content) whose children `/Research` (67
+  accepted) and `/Challenge` (5) are the v2 venues; NeurIPS 2025 `Workshop/DBM` holds `/Findings` (43) and
+  NeurIPS 2024 `Competition` holds `/LMC` (9). Until TASK-191 these groups were skipped as `not_a_v2_venue`
+  and their papers lost. `_child_venues` now lists such a group's children once, one level down (never
+  deeper), crawls the venues among them and reports the group as `container`; a child that is no venue is
+  reported `not_a_v2_venue` (fixtures `iclr-2026/group-re-align.json`, `groups-parent-re-align.json`).
 - Presentation (TASK-101; spec 01 §Presentation): `note_record` reads `content.venue` only for an accepted,
   non-workshop note, through `classify.classify_v2_presentation` (exact strings per venue-year in
   `classify.V2_PRESENTATION`, each with the track its venueid must give). An unlisted string is `null` and

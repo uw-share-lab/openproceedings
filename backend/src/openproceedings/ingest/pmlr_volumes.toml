@@ -184,6 +184,18 @@ index_title = "Proceedings of ICML 2025"
 verified = 2026-09-27
 source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (= OpenReview 3,257 main + 73 position)"
 
+[[volume]]
+number = 306
+venue = "ICML"
+year = 2026
+track = "unknown"
+role = "confirm"
+papers = 6552
+heading = "International Conference on Machine Learning"
+index_title = "Proceedings of ICML 2026"
+verified = 2026-10-28
+source = "docs/results/coverage-sources.md §Disagreements, ICML 2026 (TASK-191; = OpenReview 6,340 main + 212 position)"
+
 # --- FAccT 2018 (FAT*), primary (decision-049; FAccT 2019 on is in acm_proceedings.toml) --------------------
 
 [[volume]]

@@ -1,0 +1,36 @@
+{
+ "_recorded": {
+  "date": "2026-10-28",
+  "run": "TASK-191 authenticated live crawl cache (public projection), fetched 2026-10-28 UTC",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "group trimmed to its venueid, visibility and decision keys (web, members, invitations dropped)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/groups?id=ICLR.cc/2026/Workshop/Re-Align",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "700;w=3600",
+   "ratelimit-remaining": "651",
+   "ratelimit-reset": "3249"
+  },
+  "json": {
+   "count": 1,
+   "groups": [
+    {
+     "content": {},
+     "domain": "OpenReview.net",
+     "id": "ICLR.cc/2026/Workshop/Re-Align",
+     "parent": "ICLR.cc/2026/Workshop",
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

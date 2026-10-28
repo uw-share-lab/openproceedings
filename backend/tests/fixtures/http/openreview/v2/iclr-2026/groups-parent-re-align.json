@@ -1,0 +1,159 @@
+{
+ "_recorded": {
+  "date": "2026-10-28",
+  "run": "TASK-191 authenticated live crawl cache (public projection), fetched 2026-10-28 UTC",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "group trimmed to its venueid, visibility and decision keys (web, members, invitations dropped)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/groups?limit=1000&offset=0&parent=ICLR.cc/2026/Workshop/Re-Align",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "700;w=3600",
+   "ratelimit-remaining": "650",
+   "ratelimit-reset": "3248"
+  },
+  "json": {
+   "count": 2,
+   "groups": [
+    {
+     "content": {
+      "accept_decision_options": {
+       "value": [
+        "Accept (Talk)",
+        "Accept (Poster)",
+        "Accept"
+       ]
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "desk_rejected_submission_id": {
+       "value": "ICLR.cc/2026/Workshop/Re-Align/Research/-/Desk_Rejected_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "ICLR.cc/2026/Workshop/Re-Align/Research/Desk_Rejected_Submission"
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "rejected_venue_id": {
+       "value": "ICLR.cc/2026/Workshop/Re-Align/Research/Rejected_Submission"
+      },
+      "start_date": {
+       "value": "Apr 26 2026"
+      },
+      "submission_id": {
+       "value": "ICLR.cc/2026/Workshop/Re-Align/Research/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "ICLR.cc/2026/Workshop/Re-Align/Research/Submission"
+      },
+      "subtitle": {
+       "value": "ICLR 2026 Re-Align Workshop"
+      },
+      "title": {
+       "value": "ICLR 2026 Workshop on Representational Alignment (Re^4-Align)"
+      },
+      "website": {
+       "value": "https://representational-alignment.github.io/"
+      },
+      "withdrawn_submission_id": {
+       "value": "ICLR.cc/2026/Workshop/Re-Align/Research/-/Withdrawn_Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "ICLR.cc/2026/Workshop/Re-Align/Research/Withdrawn_Submission"
+      }
+     },
+     "domain": "ICLR.cc/2026/Workshop/Re-Align/Research",
+     "id": "ICLR.cc/2026/Workshop/Re-Align/Research",
+     "parent": "ICLR.cc/2026/Workshop/Re-Align",
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "accept_decision_options": {
+       "value": ""
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "desk_rejected_submission_id": {
+       "value": "ICLR.cc/2026/Workshop/Re-Align/Challenge/-/Desk_Rejected_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "ICLR.cc/2026/Workshop/Re-Align/Challenge/Desk_Rejected_Submission"
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "rejected_venue_id": {
+       "value": "ICLR.cc/2026/Workshop/Re-Align/Challenge/Rejected_Submission"
+      },
+      "start_date": {
+       "value": "Apr 26 2026"
+      },
+      "submission_id": {
+       "value": "ICLR.cc/2026/Workshop/Re-Align/Challenge/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "ICLR.cc/2026/Workshop/Re-Align/Challenge/Submission"
+      },
+      "subtitle": {
+       "value": "ICLR 2026 Re4-Align Challenge"
+      },
+      "title": {
+       "value": "ICLR 2026 Workshop on Representational Alignment (Re^4-Align) Challenge"
+      },
+      "website": {
+       "value": "https://representational-alignment.github.io/2026/#cfcr"
+      },
+      "withdrawn_submission_id": {
+       "value": "ICLR.cc/2026/Workshop/Re-Align/Challenge/-/Withdrawn_Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "ICLR.cc/2026/Workshop/Re-Align/Challenge/Withdrawn_Submission"
+      }
+     },
+     "domain": "ICLR.cc/2026/Workshop/Re-Align/Challenge",
+     "id": "ICLR.cc/2026/Workshop/Re-Align/Challenge",
+     "parent": "ICLR.cc/2026/Workshop/Re-Align",
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

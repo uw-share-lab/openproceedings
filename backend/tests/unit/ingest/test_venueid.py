@@ -128,6 +128,11 @@ LIVE: list[tuple[str, str | None, int | None, str, str]] = [
     ),  # 17; S8YlUOWpPz
     # a workshop whose name ends in `_Track` is still a workshop (42 notes; P39YgSzQwI)
     ("ICLR.cc/2026/Workshop/ML4RS_Main_Track", "ICLR", 2026, "workshop", "accepted"),
+    # TASK-191: a workshop's venues one level under a group that is no venue (Re-Align: 67 Research, TuuyJZrDm5,
+    # and 5 Challenge, LzgOMc1Dp8; DBM: 43 Findings), checked live 2026-10-28
+    ("ICLR.cc/2026/Workshop/Re-Align/Research", "ICLR", 2026, "workshop", "accepted"),
+    ("ICLR.cc/2026/Workshop/Re-Align/Challenge", "ICLR", 2026, "workshop", "accepted"),
+    ("NeurIPS.cc/2025/Workshop/DBM/Findings", "NeurIPS", 2025, "workshop", "accepted"),
 ]
 
 UNVERIFIED: list[tuple[str, str | None, int | None, str, str]] = [
@@ -434,6 +439,7 @@ V2_NOTES: list[tuple[str, str, str]] = [
     ("v2/icml-2026/notes-presentation-position-paper-track.json", "position", "accepted"),
     ("v2/icml-2026/notes-rejected.json", "main", "rejected"),  # `Submitted to ICML 2026`: an opt-in rejection
     ("v2/icml-2026/notes-workshop-submission.json", "workshop", "unknown"),  # `…/Workshop/GenBio/Submission`
+    ("v2/iclr-2026/notes-workshop-sub-venue.json", "workshop", "accepted"),  # `…/Workshop/Re-Align/Research`, TASK-191
 ]
 
 V2_VENUE_LABELS = [

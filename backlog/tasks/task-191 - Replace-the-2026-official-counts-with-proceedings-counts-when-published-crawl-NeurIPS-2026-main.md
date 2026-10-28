@@ -3,10 +3,10 @@ id: TASK-191
 title: >-
   Replace the 2026 official counts with proceedings counts when published; crawl
   NeurIPS 2026 main
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-05 08:39'
-updated_date: '2026-10-05 14:37'
+updated_date: '2026-10-28 04:10'
 labels:
   - ingest
   - eval
