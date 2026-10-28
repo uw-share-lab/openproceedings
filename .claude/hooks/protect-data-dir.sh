@@ -947,7 +947,7 @@ def backlog_guard(cmd, where, depth=0):
         try:
             walked = list(walk(cmd, where, env_empty))
         except Exception as exc:
-            refuse(f"Blocked: this command could not be parsed ({type(exc).__name__}), so what it does to data/ or "
+            refuse(f"Blocked: this command could not be parsed ({type(exc).__name__}: {exc}), so what it does to data/ or "
                    "backlog/ can't be checked — refusing rather than letting it through unexamined. Fix the quoting, "
                    "or write the command more plainly, and retry.")
         guard_walked(walked, where, depth)

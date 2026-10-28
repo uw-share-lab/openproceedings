@@ -229,7 +229,7 @@
  },
  {
   "label": "-o value not skipped",
-  "file": ".claude/hooks/require-review.sh",
+  "file": ".claude/hooks/lib/cmdparse.py",
   "old": "PUSH_VALUE_OPTS = {\"-o\", ",
   "new": "PUSH_VALUE_OPTS = {"
  },
@@ -1732,8 +1732,8 @@
  {
   "label": "PR gate: ambiguous option / unreadable alias not refused",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "    except FailClosed:\n        return \"unreadable\"",
-  "new": "    except FailClosed:\n        return \"parse-fail\""
+  "old": "    except FailClosed as exc:\n        # an ambiguous",
+  "new": "    except FailClosed as exc:\n        return \"parse-fail\"\n        # an ambiguous"
  },
  {
   "label": "PR gate: git branch not gated",
@@ -2148,8 +2148,8 @@
  {
   "label": "cmdparse: repo remote.<name>.push not a risk",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        if re.fullmatch(r\"remote\\..+\\.push\", key) or (",
-  "new": "        if ("
+  "old": "            re.fullmatch(r\"remote\\..+\\.push\", key)\n            and not all(",
+  "new": "            False\n            and not all("
  },
  {
   "label": "cmdparse: repo mirror=false read as a mirror",
@@ -2280,14 +2280,50 @@
  {
   "label": "require-review: repo push config not read",
   "file": ".claude/hooks/require-review.sh",
-  "old": "                    or push_config_risk(repo_cfg) or git_bool(",
-  "new": "                    or git_bool("
+  "old": "                        or push_config_risk(repo_cfg) or follow):",
+  "new": "                        or follow):"
  },
  {
   "label": "require-review: repo push.followTags not read",
   "file": ".claude/hooks/require-review.sh",
-  "old": " or git_bool(repo_cfg.get(\"push.followtags\", \"false\"))):",
-  "new": "):"
+  "old": "follow = \"--no-follow-tags\" not in flags and git_bool(",
+  "new": "follow = False and git_bool("
+ },
+ {
+  "label": "cmdparse: a remote.<name>.push HEAD hides another value",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "and not all(re.fullmatch(r\"\\+?HEAD\", v) for v",
+  "new": "and not any(re.fullmatch(r\"\\+?HEAD\", v) for v"
+ },
+ {
+  "label": "cmdparse: push_config keeps only the last remote.<name>.push",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if key in found and key.endswith(\".push\"):\n",
+  "new": "            if False:\n"
+ },
+ {
+  "label": "cmdparse: git branch -u not checked for an upstream",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(\"checkout\", \"switch\", \"worktree\", \"branch\")",
+  "new": "(\"checkout\", \"switch\", \"worktree\")"
+ },
+ {
+  "label": "enforce: push --branches not refused",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "(\"--mirror\", \"--all\", \"--branches\")",
+  "new": "(\"--mirror\", \"--all\")"
+ },
+ {
+  "label": "enforce: a push option's value read as the remote",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    positionals = push_positionals(args)  #",
+  "new": "    positionals = [a for a in args if not a.startswith(\"-\")]  #"
+ },
+ {
+  "label": "require-review: --no-follow-tags not honoured",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "follow = \"--no-follow-tags\" not in flags and ",
+  "new": "follow = "
  },
  {
   "label": "require-review: matching refspec ':' allowed",
@@ -2710,10 +2746,10 @@
   "new": "g[1][:1] == [\"set-branches\"]:\n        return False"
  },
  {
-  "label": "cmdparse: git branch -u not a config write",
+  "label": "cmdparse: git branch -u not an upstream write",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    if g is not None and g[0] == \"branch\":\n        return any(",
-  "new": "    if g is not None and g[0] == \"branch\":\n        return False and any("
+  "old": "    if sub == \"branch\":\n        return any(",
+  "new": "    if sub == \"branch\":\n        return False and any("
  },
  {
   "label": "cmdparse: branch.<b>.merge not a key that steers git",

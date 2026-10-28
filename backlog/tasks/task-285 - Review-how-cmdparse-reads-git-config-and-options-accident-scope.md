@@ -1,10 +1,10 @@
 ---
 id: TASK-285
 title: Review how cmdparse reads git config and options (accident scope)
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-26 20:37'
-updated_date: '2026-10-26 20:39'
+updated_date: '2026-10-28 03:53'
 labels:
   - tooling
   - hooks

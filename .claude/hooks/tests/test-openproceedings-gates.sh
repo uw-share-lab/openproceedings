@@ -1169,11 +1169,26 @@ g config --unset remote.origin.push
 g config remote.origin.mirror true
 check $R block "remote.origin.mirror set by an earlier call" "$(payload_bash 'git push origin')"
 g config --unset remote.origin.mirror
+# remote.<name>.push = HEAD pushes the current branch to its own name, as `git push origin HEAD` does; git pushes
+# every value of a key set twice, so a HEAD can't hide another refspec (TASK-285)
+g config remote.origin.push HEAD
+check $R allow "remote.origin.push=HEAD (HEAD approved)" "$(payload_bash 'git push origin')"
+g config --add remote.origin.push refs/heads/other2:refs/heads/other2
+check $R block "remote.origin.push=HEAD, then another refspec" "$(payload_bash 'git push origin')"
+g config --unset-all remote.origin.push
+g config remote.origin.push refs/heads/other2:refs/heads/other2
+g config --add remote.origin.push +HEAD
+check $R block "a refspec, then remote.origin.push=+HEAD" "$(payload_bash 'git push origin')"
+g config --unset-all remote.origin.push
+# setting an upstream steers only a later push: git's own advice when a pull has no upstream (TASK-285)
+check $R allow "git branch --set-upstream-to=… && git pull" "$(payload_bash 'git branch --set-upstream-to=origin/mut && git pull')"
+check $P allow "git branch --set-upstream-to=… && git pull" "$(payload_bash 'git branch --set-upstream-to=origin/mut && git pull')"
 g config push.default matching
 check $R block "push.default=matching in the repo"    "$(payload_bash 'git push origin')"
 g config --unset push.default
 g config push.followTags true
 check $R block "push.followTags in the repo"          "$(payload_bash 'git push origin')"
+check $R allow "push.followTags, --no-follow-tags overrides it (TASK-285)" "$(payload_bash 'git push --no-follow-tags origin')"
 # git_bool fails toward true: false only for what git 2.42 reads as false (TASK-282). git reads 1k, 0x1 and +1
 # as true, so a gate that read only digits as a number let these push every tag, or mirror every ref, unreviewed.
 for v in 1 1k 1K 1m 1g 0x1 0X1 +1 -1 010 ² --1 0x 1t; do
