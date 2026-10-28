@@ -130,14 +130,17 @@ release-branch summary: check `CITATION.cff`'s title, abstract and keywords, and
   combined-snapshot golden between releases (`3aa99f93…` → `87737125…`, with `SNAPSHOT_HASH`), so the probe asserts
   against the hash the test file holds at the branch point. With `__version__` patched to 0.6.0 the `git archive`
   copy hashed to `87737125…`, `SNAPSHOT_HASH` unchanged; with 0.7.0, `b4b700c1…`.
-- **A release can be verified on an index that isn't served yet.** 0.7.0 changes none of the four versions but ships
-  with a new snapshot (2026-10-28-d4f4688715d0, ICML 2026 from PMLR v306), so step 3 ran on its index
-  `d9355590c4c8` (parity 0 differences over 173,981 records; coverage `--check` M4 PASS, a report identical to the
-  committed 2026-10-28 one) and the data table names it. `data/indexes/current` still points at `78d2e70310f3`;
-  serving the new index is the §Deploy promotion, after the tag, and the old index stays for the records that pin it.
+- **A release that ships with a new snapshot is verified on both indexes.** 0.7.0 changes none of the four versions,
+  so spec 08 §Release step 3 asks for the served index, `78d2e70310f3` (`data/indexes/current`). But the owner wanted
+  its data table to name the new snapshot's index, `d9355590c4c8` (2026-10-28-d4f4688715d0, TASK-191), which the
+  §Deploy promotion serves after the tag. Step 3 ran on both with the release code (parity 0 differences on each;
+  coverage `--check` M4 PASS on each, the new index's report identical to the committed 2026-10-28 one). The table
+  names the new one, and its notes list both and the snapshot diff, removals included (+890, −427): a first reading
+  of TASK-191 called the change "ICML 2026 from PMLR v306", but ICML 2026 main was already indexed from OpenReview,
+  and v306 only confirms it. Take a data note's numbers from the snapshot diff (TASK-191's notes record it), not from a PR title.
 - **On a loaded machine, step 3 is the only local run worth paying for.** At load ~250 the golden and contract
   suites took 168 s with `-n 4`; the lockfile check, the snapshot golden and the probe ran in seconds; the full suite
   was left to CI's `test` job.
 
-**Propagated to:** none new. `release-manager` step 2 already describes the probe; verifying on the new index was
-the owner's choice for this release (spec 08 §Release step 3 requires a new index only when a version changes).
+**Propagated to:** none new. `release-manager` step 2 already describes the probe, and step 3's served-index run was
+kept; the run on the next index was in addition to it, at the owner's choice.
