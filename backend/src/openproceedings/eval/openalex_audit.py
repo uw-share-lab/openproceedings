@@ -554,8 +554,8 @@ def _library_section(check: LibraryCheck) -> list[str]:
 
 def _differs_authors(judged: Sequence[TitleAttach], shapes: Sequence[Shape], compared: int) -> list[str]:
     """The `differs` texts split by OpenAlex's authors for the work (TASK-250): what looks like another paper
-    attached by title (`wrong`), the same paper with a genuinely different text (`agree`), or can't be told (`unverifiable`); and
-    the shape of the genuinely different ones (`Shape`)."""
+    attached by title (`wrong`), the same paper with a genuinely different text (`agree`), or can't be told
+    (`unverifiable`); and the shape of the genuinely different ones (`Shape`)."""
     wrong = [a for a in judged if a.verdict == "wrong"]
     same = [s for a, s in zip(judged, shapes, strict=True) if a.verdict == "agree"]
     agree = len(same)
