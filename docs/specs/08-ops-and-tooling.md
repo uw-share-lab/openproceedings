@@ -625,12 +625,20 @@ buffer doubles to 32 MiB to hold 16, plus the buffers it outgrew until Go collec
 comparison slot, and `read_body` cuts it; with no limit on how many arrive at once, the memory limit bounds
 the proxy, which past it is killed and restarted, dropping every connection it held, searches included, for a
 few seconds (24 uploads held at once reached the edge of 1 GiB, peaks 890 to 998 MiB, and 32 did not fit;
-Caddy as built limits neither connections nor uploads per client. The owner decided on 2026-10-17 (TASK-256, option
-(c)) that the cap will be a per-source connection limit in front of Caddy at the host, for example nftables
-`connlimit`, on TCP and UDP 443 (QUIC: HTTP/3 is on, TASK-257), set once TASK-064 chooses the host; there is no
-custom Caddy build. It caps the connections one address holds, not its uploads (HTTP/2 and HTTP/3 carry many
-on one connection); many addresses together can still reach the memory limit, which then restarts the proxy as now. Until
-it is set it is not built; TASK-067's last criterion builds and measures it).
+Caddy as built limits neither connections nor uploads per client, so the host does: the owner decided on 2026-10-17
+(TASK-256, option (c); no custom Caddy build, `request_buffers` kept) on a per-source limit in front of Caddy,
+built as `deploy/connlimit.nft` (TASK-067), loaded with `deploy/connlimit.sh apply`. For each IPv4 address or IPv6
+/64, on TCP and UDP 443 (QUIC: HTTP/3 is on, TASK-257), in a `prerouting` chain at priority -150 (after
+conntrack, before Docker's DNAT): at most 16 connections at once, and at most 1 MiB/s to 443 after a 16 MiB
+burst, past which packets are dropped. The connection limit alone bounds uploads only over HTTP/1.1. HTTP/2 and
+HTTP/3 carry up to 250 and 100 on one connection: Caddy 2.11.7 sets no stream limit and has no setting for one.
+The byte rate bounds a source however its uploads share connections: at about three times what has arrived,
+until `read_body` cuts it, about 3 × (16 + 60 × 1) MiB, some 230 MiB of the 1 GiB limit
+(`backend/tests/deploy/test_connlimit.py` keeps the numbers under these bounds). Many sources together can
+still reach the memory limit, which then restarts the proxy as now. A full set (65,536 sources) fails open, and
+traffic from the host itself never passes `prerouting`. It parses and behaved as specified between containers
+on Linux 6.5 on 2026-10-28. It was not measured in front of Caddy: that waits on the host (TASK-064; TASK-067's
+last criterion).)
 `deploy/smoke-test.sh --compare` checks all of this, and decision-035 makes passing it on the host a
 condition of any public instance enabling comparisons; it passed on Docker Desktop on 2026-10-16
 (`deploy/README.md` §Comparisons; the measurements are in `docs/results/2026-10-16-compare-proxy.md`), and the

@@ -1,0 +1,58 @@
+#!/usr/sbin/nft -f
+# Per-source limits on the host, in front of Caddy (TASK-067; owner decision 2026-10-17, TASK-256 option (c);
+# deploy/README.md §Comparisons, spec 08 §Deploy). Load it with deploy/connlimit.sh apply, as root.
+#
+# Two limits for each source, an IPv4 address or an IPv6 /64, on TCP and UDP 443 (HTTP/3 is on: TASK-257):
+#   1. at most 16 connections at once; a new one past it is dropped (a TCP client retries its SYN);
+#   2. at most 1 MiB a second of packets to 443, after a burst of 16 MiB; past it, packets are dropped.
+# (nft's `define` can't name a rate, so the numbers are written in the rules below; change both rules of a pair.)
+# The first is the owner's choice. It bounds uploads over HTTP/1.1, one to a connection, but not over HTTP/2
+# or HTTP/3, which carry up to 250 and 100 uploads on one connection (Caddy 2.11.7 sets no stream limit and
+# has no setting for one). The second bounds those: the proxy buffers each upload whole (request_buffers,
+# decision-035) at about three times what has arrived, and read_body (60s) cuts an upload still arriving, so
+# one source holds at most about 3 x (16 MiB + 60 s x 1 MiB/s), some 230 MiB of the 1 GiB limit, however its
+# uploads share connections. A 16 MiB file needs 0.27 MiB/s to beat read_body; searches send a few KiB.
+#
+# The chain hooks prerouting at priority -150: after conntrack (-200), before Docker's DNAT (-100), so it sees
+# the published port as 443 whether Caddy runs in compose or on the host. Traffic from the host itself never
+# passes prerouting, so a test run on the host (deploy/smoke-test.sh) is not limited by it.
+# When a set is full (65,536 sources), a new source is not limited: nftables fails open there.
+
+# replace only this table: idempotent, and Docker's tables are left alone
+table inet openproceedings_limits
+delete table inet openproceedings_limits
+
+table inet openproceedings_limits {
+	set conns4 {
+		type ipv4_addr
+		size 65536
+		flags dynamic
+	}
+	set conns6 {
+		type ipv6_addr
+		size 65536
+		flags dynamic
+	}
+	set bytes4 {
+		type ipv4_addr
+		size 65536
+		flags dynamic,timeout
+		timeout 2m
+	}
+	set bytes6 {
+		type ipv6_addr
+		size 65536
+		flags dynamic,timeout
+		timeout 2m
+	}
+
+	chain prerouting {
+		type filter hook prerouting priority -150; policy accept;
+		meta l4proto != { tcp, udp } accept
+		th dport != 443 accept
+		ct state new add @conns4 { ip saddr ct count over 16 } counter drop comment "connections"
+		ct state new add @conns6 { ip6 saddr and ffff:ffff:ffff:ffff:: ct count over 16 } counter drop comment "connections"
+		update @bytes4 { ip saddr limit rate over 1 mbytes/second burst 16 mbytes } counter drop comment "bytes"
+		update @bytes6 { ip6 saddr and ffff:ffff:ffff:ffff:: limit rate over 1 mbytes/second burst 16 mbytes } counter drop comment "bytes"
+	}
+}
