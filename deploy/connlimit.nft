@@ -7,7 +7,9 @@
 #   1. at most 16 connections at once; a new one past it is dropped (a TCP client retries its SYN);
 #   2. at most 1 MiB a second of packets to 443, after a burst of 16 MiB; past it, packets are dropped.
 # (nft's `define` can't name a rate, so the numbers are written in the rules below; change both rules of a pair.)
-# The first is the owner's choice. It bounds uploads over HTTP/1.1, one to a connection, but not over HTTP/2
+# Both are the owner's: the first is TASK-256's option (c), the second was added to it on 2026-10-28. The second
+# is its own pair of rules and sets (bytes4, bytes6): delete those and the first stands alone.
+# The first bounds uploads over HTTP/1.1, one to a connection, but not over HTTP/2
 # or HTTP/3, which carry up to 250 and 100 uploads on one connection (Caddy 2.11.7 sets no stream limit and
 # has no setting for one). The second bounds those: the proxy buffers each upload whole (request_buffers,
 # decision-035) at about three times what has arrived, and read_body (60s) cuts an upload still arriving, so

@@ -466,7 +466,10 @@ IPv6 /64, on TCP and UDP 443 (QUIC: HTTP/3 is on, TASK-257):
 | Connections held at once | 16 | the new connection's packets are dropped (a TCP client retries its SYN) |
 | Bytes a second sent to 443 | 1 MiB/s, after a burst of 16 MiB | the packets are dropped (TCP and QUIC slow down) |
 
-The connection limit is the owner's choice. On its own it bounds uploads only over HTTP/1.1, where each
+Both limits are the owner's: the connection limit is TASK-256's option (c) (2026-10-17), and the byte rate was
+added to it on 2026-10-28, once it was clear that connections don't bound multiplexed uploads. The byte rate is
+its own pair of rules (`update @bytes4`, `update @bytes6`, and their two sets): delete them and the connection
+limit stands alone. The connection limit on its own bounds uploads only over HTTP/1.1, where each
 upload has its own connection. HTTP/2 and HTTP/3 carry many uploads on one connection. Caddy 2.11.7 sets no
 stream limit of its own, so Go's HTTP/2 default of 250 and quic-go's HTTP/3 default of 100 apply, and it has no
 setting to lower them. So
@@ -480,7 +483,11 @@ per-request overhead of many streams that each send little. A 16 MiB file needs 
 
 Sixteen connections leave room for a browser's six over HTTP/1.1 (Chrome may also open a QUIC flow beside
 them) and for some people behind one address. Carrier-grade, campus or corporate NAT can put many more there.
-Past the limit their new connections hang and retry (1, 3, 7 s) rather than getting an error. Watch the
+Past the limit their new connections hang and retry (1, 3, 7 s) rather than getting an error. The byte rate is
+shared the same way: everyone behind one address (a university's NAT, say) shares 1 MiB/s to the site. A
+search sends a few KiB, but a 16 MiB comparison needs 0.27 MiB/s to beat `read_body`, so about three
+comparison uploads at once from one shared address fit, after the first 16 MiB burst. A fourth slows them
+all, and past that they are cut at `read_body` (60 s). Watch the
 `connections` drop counter in `deploy/connlimit.sh show`, and raise the limit if it climbs during ordinary use.
 Without the byte rate, sixteen HTTP/1.1 uploads held at once peaked at 804 MiB, about 80% of the limit, where
 24 reached its edge (above). `backend/tests/deploy/test_connlimit.py` checks the numbers against these bounds.

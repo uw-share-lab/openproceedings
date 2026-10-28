@@ -632,7 +632,9 @@ enabling comparisons; it passed on Docker Desktop on 2026-10-16
 current test again on 2026-10-24 and 2026-10-25 (`docs/results/2026-10-24-proxy-body-limits.md`).
 
 Caddy as built limits neither connections nor uploads per client, so the host does (TASK-067). The owner
-decided this on 2026-10-17 (TASK-256, option (c)): no custom Caddy build, and `request_buffers` is kept. The limit is
+decided this on 2026-10-17 (TASK-256, option (c)): no custom Caddy build, and `request_buffers` is kept. On
+2026-10-28 the owner added the byte rate to option (c), because a connection limit does not bound multiplexed
+uploads; it is its own pair of rules and can be dropped without touching the connection limit. The limit is
 `deploy/connlimit.nft`, loaded with `deploy/connlimit.sh apply` (`deploy/README.md` §Per-source limits on the host):
 
 | | |
@@ -654,6 +656,9 @@ arrived, until `read_body` cuts the upload. A per-request overhead comes on top 
 - A full set (262,144 sources) fails open, and spoofed packets can fill one.
 - Traffic from the host itself never passes `prerouting`.
 - Behind a load balancer the ruleset must not be loaded.
+- Everyone behind one address shares both limits: behind a NAT (a university, say), about three 16 MiB
+  comparison uploads at once fit in 1 MiB/s at the 0.27 MiB/s each needs to beat `read_body`; more slow them
+  all.
 
 On 2026-10-28 it parsed, and it behaved as specified between containers on Linux 6.5, without the `fib`
 line, which that kernel lacks (`docs/results/2026-10-28-connlimit-container-check.md`). It was not measured in

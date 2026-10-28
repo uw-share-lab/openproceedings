@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-10-28 04:50'
+updated_date: '2026-10-28 04:51'
 labels:
   - ops
   - security
@@ -71,4 +71,6 @@ Checked on 2026-10-28, between Docker Desktop containers (Linux 6.5, nftables 1.
 backend/tests/deploy/test_connlimit.py pins the rules and numbers, and runs nft -c where it can.
 
 Not measured in front of Caddy, so this AC stays unchecked. That waits on a Linux host (TASK-064). Note for that measurement: deploy/smoke-test.sh --compare on the host must still pass, but the host's own traffic never passes prerouting. The limits themselves have to be measured from another machine, as deploy/README.md §Per-source limits on the host describes. That section, not §Comparisons, documents the limits.
+
+2026-10-28 owner decision (an addendum to TASK-256's option (c)): ship the per-source byte rate as well as the connection cap. That is 1 MiB/s to 443 after a 16 MiB burst per IPv4 address or /64, on TCP and UDP, because a connection cap doesn't bound HTTP/2 or HTTP/3 uploads. The byte rate is its own pair of rules and sets (bytes4, bytes6) and can be dropped without touching the connection cap. NAT: everyone behind one address shares both limits. About 3 concurrent 16 MiB compare uploads fit per shared address (each needs 0.27 MiB/s to beat read_body) before the meter slows them. Recorded in spec 08 §Deploy and deploy/README.md §Per-source limits on the host. AC #3 stays unchecked until a Linux host measures it (TASK-064).
 <!-- SECTION:NOTES:END -->
