@@ -2,8 +2,8 @@
 
 OpenAlex fills an abstract only where every official source gave none, so its text can't be checked against an
 official one on the records it fills. This audit measures it where both exist:
-- **The DOI route.** Every record of FAccT 2022/2025/2026 and AIES 2024/2025/2026 with an official abstract and a DOI,
-  plus a seeded sample of AAAI 2010+'s (`sample`), is looked up by DOI as `op ingest openalex` looks them up
+- **The DOI route.** Every record of FAccT 2022/2025/2026 and AIES 2024/2025/2026 with an official abstract and a
+  DOI, plus a seeded sample of AAAI 2010+'s (`sample`), is looked up by DOI as `op ingest openalex` looks them up
   (`openalex.doi_lookups`, batches of `openalex.BATCH`), and OpenAlex's abstract, rebuilt and cleaned by the fill's
   own rules (`openalex.abstract_of`), is compared with the official one (`compare`): per venue-year, how many are
   `exact`, `near_exact`, `truncated`, `similar` or `differs`, and how many have no work (`no_openalex`), a work with
@@ -89,8 +89,8 @@ def _audited(r: PaperRecord) -> bool:
 def sample(
     records: Iterable[PaperRecord], *, aaai_sample: int = AAAI_SAMPLE, seed: int = SEED
 ) -> list[PaperRecord]:
-    """The records the DOI route audits, in id order: every record of FAccT 2022/2025/2026 and AIES 2024/2025 with
-    an official abstract and a DOI, plus `random.Random(seed).sample` of `aaai_sample` such AAAI 2010+ records,
+    """The records the DOI route audits, in id order: every record of FAccT 2022/2025/2026 and AIES 2024/2025/2026
+    with an official abstract and a DOI, plus `random.Random(seed).sample` of `aaai_sample` such AAAI 2010+ records,
     taken in id order before sampling (all of them when there are fewer)."""
     rs = sorted((r for r in records if _audited(r)), key=lambda r: r.id)
     named = [r for r in rs if r.year in AUDITED.get(r.venue, ())]
@@ -579,8 +579,8 @@ def _differs_authors(judged: Sequence[TitleAttach], shapes: Sequence[Shape], com
         f"- **Can't be told:** {unverifiable:,} ({_pct(unverifiable, n)}; no authors on one side).",
     ]
     if wrong:
-        lines += ["", "| Record | OpenAlex work | Our first-author surname | OpenAlex's first-author surname | Near spelling |",
-                  "|---|---|---|---|---|"]  # fmt: skip
+        lines += ["", "| Record | OpenAlex work | Our first-author surname | OpenAlex's first-author surname | "
+                      "Near spelling |", "|---|---|---|---|---|"]  # fmt: skip
         lines += [f"| `{a.record_id}` | `{a.work_id}` | {a.ours_first or '–'} | {a.theirs_first or '–'} | "
                   f"{'yes' if _near_spelling(a) else 'no'} |" for a in wrong]  # fmt: skip
         left = len(wrong) - len(near)
