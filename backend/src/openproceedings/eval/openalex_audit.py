@@ -2,8 +2,8 @@
 
 OpenAlex fills an abstract only where every official source gave none, so its text can't be checked against an
 official one on the records it fills. This audit measures it where both exist:
-- **The DOI route.** Every record of FAccT 2022/2025/2026 and AIES 2024/2025 with an official abstract and a DOI,
-  plus a seeded sample of AAAI 2010+'s (`sample`), is looked up by DOI as `op ingest openalex` looks them up
+- **The DOI route.** Every record of FAccT 2022/2025/2026 and AIES 2024/2025/2026 with an official abstract and a
+  DOI, plus a seeded sample of AAAI 2010+'s (`sample`), is looked up by DOI as `op ingest openalex` looks them up
   (`openalex.doi_lookups`, batches of `openalex.BATCH`), and OpenAlex's abstract, rebuilt and cleaned by the fill's
   own rules (`openalex.abstract_of`), is compared with the official one (`compare`): per venue-year, how many are
   `exact`, `near_exact`, `truncated`, `similar` or `differs`, and how many have no work (`no_openalex`), a work with
@@ -15,7 +15,9 @@ official one on the records it fills. This audit measures it where both exist:
 - **AAAI's archived pages** (`library_check`, TASK-235). AAAI 1980-2008 records whose abstract is `aaai_library`'s
   (AAAI's own aaai.org paper pages, official) never take OpenAlex's, though the title route finds a work for many of
   them. The fill is replayed over the cached listings with those abstracts set aside, and each text it would attach
-  is compared with AAAI's (`compare`): the one measure of OpenAlex's fidelity for those years.
+  is compared with AAAI's (`compare`): the one measure of OpenAlex's fidelity for those years. Each text classed
+  `differs` is then checked against OpenAlex's authors for the work as the title route's are (TASK-250), which
+  splits them into another paper attached by title (`wrong`) and the same paper with a genuinely different text.
 
 Everything is fetched through the one OpenAlex fetcher and cache (`crawl.openalex_fetcher`: api.openalex.org only,
 one request a second, keyless, no contact address), so `--offline` replays the cache and renders the same report
@@ -28,6 +30,7 @@ from __future__ import annotations
 import json
 import random
 import shlex
+import statistics
 import unicodedata
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
@@ -52,7 +55,7 @@ KINDS: tuple[Kind, ...] = get_args(Kind)
 OUTCOMES: tuple[str, ...] = (*KINDS, "no_abstract", "no_openalex", "refused", "duplicate")
 SIMILAR = 0.9  # token SequenceMatcher ratio at or above which a text is `similar`
 NEAR_SPELLING = 0.75  # character ratio at or above which two surnames look like variants of one
-AUDITED: Mapping[str, tuple[int, ...]] = {"FAccT": (2022, 2025, 2026), "AIES": (2024, 2025)}
+AUDITED: Mapping[str, tuple[int, ...]] = {"FAccT": (2022, 2025, 2026), "AIES": (2024, 2025, 2026)}
 AAAI_FROM = 2010  # AAAI's OJS years with official abstracts and DOIs
 AAAI_SAMPLE = 1000
 SEED = 49
@@ -86,8 +89,8 @@ def _audited(r: PaperRecord) -> bool:
 def sample(
     records: Iterable[PaperRecord], *, aaai_sample: int = AAAI_SAMPLE, seed: int = SEED
 ) -> list[PaperRecord]:
-    """The records the DOI route audits, in id order: every record of FAccT 2022/2025/2026 and AIES 2024/2025 with
-    an official abstract and a DOI, plus `random.Random(seed).sample` of `aaai_sample` such AAAI 2010+ records,
+    """The records the DOI route audits, in id order: every record of FAccT 2022/2025/2026 and AIES 2024/2025/2026
+    with an official abstract and a DOI, plus `random.Random(seed).sample` of `aaai_sample` such AAAI 2010+ records,
     taken in id order before sampling (all of them when there are fewer)."""
     rs = sorted((r for r in records if _audited(r)), key=lambda r: r.id)
     named = [r for r in rs if r.year in AUDITED.get(r.venue, ())]
@@ -275,11 +278,31 @@ class LibraryCheck:
     no_abstract: int  # of the others: the title route finds one work, and it has no abstract
     refused: Mapping[str, int]  # why the fill attaches nothing to the rest (`title_unmatched`, …)
     differs: tuple[str, ...]  # the ids classed `differs`, in id order
+    authors: tuple[TitleAttach, ...] = ()  # each `differs` attach judged by OpenAlex's authors, in id order
+    shapes: tuple[Shape, ...] = ()  # each `differs` pair's shape, in id order
 
     @property
     def compared(self) -> int:
         """The records with both texts: every `rows` count."""
         return sum(sum(row.values()) for row in self.rows.values())
+
+
+@dataclass(frozen=True, slots=True)
+class Shape:
+    """How two texts that `differs` relate, by search tokens (`title_key`): OpenAlex's length over the official
+    one's, and whether they open with the same `OPENING` tokens."""
+
+    ratio: float
+    same_opening: bool
+
+
+OPENING = 5  # tokens two texts must share at the start to count as opening alike
+LONGER = 1.5  # length ratio at or above which OpenAlex's text counts as much longer
+
+
+def shape(official: str, openalex: str) -> Shape:
+    a, b = title_key(official).split(), title_key(openalex).split()
+    return Shape(len(b) / len(a) if a else 0.0, len(a) >= OPENING and a[:OPENING] == b[:OPENING])
 
 
 def _from_library(r: PaperRecord) -> bool:
@@ -297,7 +320,9 @@ def library_check(
     stand, and with those abstracts and their claims set aside, so that each is a candidate. Each text the second
     run attaches to one of them is compared with AAAI's (`compare`); the refusals the second run adds are theirs
     (one record's outcome never depends on another's abstract), `no_abstract` (one work, with no abstract) counted
-    apart. None when the table has no listing rows."""
+    apart. Each attach whose text `differs` is judged against OpenAlex's authors for its work as `title_check`'s are
+    (`_judge`, one request per 50 works): `wrong` is another paper attached by title, `agree` the same paper with
+    a genuinely different text. None when the table has no listing rows."""
     table = table or openalex_table.TABLE
     if not table.listings:
         return None
@@ -316,7 +341,8 @@ def library_check(
     filled, after = openalex.fill(stripped, extract, table)
     refused = after.refused - before.refused
     rows: dict[VenueYear, Counter[str]] = {}
-    differs: list[str] = []
+    differs: list[PaperRecord] = []
+    shapes: list[Shape] = []
     for r in filled:
         official = targets.get(r.id)
         if official is None or official.abstract is None or r.abstract is None:
@@ -324,10 +350,17 @@ def library_check(
         kind = compare(official.abstract, r.abstract)
         rows.setdefault((r.venue, r.year), Counter())[kind] += 1
         if kind == "differs":
-            differs.append(r.id)
+            differs.append(r)
+            shapes.append(shape(official.abstract, r.abstract))
+    works = {w.id: w for lk in lookups for w in lk.works}
+    chosen = {r.id: works[_work_id(r)] for r in differs}
+    theirs = _authors([w.id for w in chosen.values()], fetcher) if chosen else {}
     no_abstract = refused.pop("no_abstract", 0)
     return LibraryCheck(library=len(targets), rows={k: dict(v) for k, v in sorted(rows.items())},
-                        no_abstract=no_abstract, refused=dict(sorted(refused.items())), differs=tuple(differs))  # fmt: skip
+                        no_abstract=no_abstract, refused=dict(sorted(refused.items())),
+                        differs=tuple(r.id for r in differs),
+                        authors=tuple(_judge(r, chosen[r.id], theirs.get(chosen[r.id].id)) for r in differs),
+                        shapes=tuple(shapes))  # fmt: skip
 
 
 # --- the DOI route ------------------------------------------------------------------------------------------
@@ -514,6 +547,55 @@ def _library_section(check: LibraryCheck) -> list[str]:
         f"({_pct(differs, n)}): together {exact + near:,} ({_pct(exact + near, n)}) would match every search "
         "exactly as AAAI's text does.",
     ]
+    if check.authors:
+        lines += ["", *_differs_authors(check.authors, check.shapes, n)]
+    return lines
+
+
+def _differs_authors(judged: Sequence[TitleAttach], shapes: Sequence[Shape], compared: int) -> list[str]:
+    """The `differs` texts split by OpenAlex's authors for the work (TASK-250): what looks like another paper
+    attached by title (`wrong`), the same paper with a genuinely different text (`agree`), or can't be told
+    (`unverifiable`); and the shape of the genuinely different ones (`Shape`)."""
+    wrong = [a for a in judged if a.verdict == "wrong"]
+    same = [s for a, s in zip(judged, shapes, strict=True) if a.verdict == "agree"]
+    agree = len(same)
+    opening = sum(s.same_opening for s in same)
+    longer = sum(s.ratio >= LONGER for s in same)
+    both = sum(s.same_opening and s.ratio >= LONGER for s in same)
+    unverifiable = sum(a.verdict == "unverifiable" for a in judged)
+    near = [a for a in wrong if _near_spelling(a)]
+    n = len(judged)
+    lines = [
+        "### The `differs` texts: another paper, or another text?",
+        "",
+        f"Each of the {n:,} `differs` attaches was checked against OpenAlex's authors for the work, as the title "
+        f"route's attaches are above (one request per 50 works, `select={AUTHORS_SELECT}`):",
+        "",
+        f"- **Genuinely different texts:** {agree:,} ({_pct(agree, n)}). The author lists share a surname, so the "
+        f"work is the same paper and the two texts differ. Of these, {opening:,} open with the same {OPENING} search "
+        f"tokens as AAAI's, and OpenAlex's text is at least {LONGER}× as long as AAAI's in {longer:,} (median "
+        f"{_median([s.ratio for s in same]):.1f}×); {both:,} do both, the shape of a text that runs on past the "
+        "abstract.",
+        f"- **Look like wrong-paper attaches:** {len(wrong):,} ({_pct(len(wrong), n)}). OpenAlex lists authors and "
+        "none of their surnames is any of ours, so the title route may have attached another paper with the same "
+        "title key.",
+        f"- **Can't be told:** {unverifiable:,} ({_pct(unverifiable, n)}; no authors on one side).",
+    ]
+    if wrong:
+        lines += ["", "| Record | OpenAlex work | Our first-author surname | OpenAlex's first-author surname | "
+                      "Near spelling |", "|---|---|---|---|---|"]  # fmt: skip
+        lines += [f"| `{a.record_id}` | `{a.work_id}` | {a.ours_first or '–'} | {a.theirs_first or '–'} | "
+                  f"{'yes' if _near_spelling(a) else 'no'} |" for a in wrong]  # fmt: skip
+        left = len(wrong) - len(near)
+        lines += [
+            "",
+            f"{len(near):,} of the {len(wrong):,} have a first-author surname close to ours (a character ratio of at "
+            f"least {NEAR_SPELLING}), by the look of them spelling or OCR variants of the same surname; if they are "
+            f"the same authors, {left:,} are wrong-paper attaches. A text that agrees (`exact` to `similar`) is taken "
+            f"to be the same paper (not author-checked), so of the {compared:,} attaches compared, {len(wrong):,} "
+            f"({_pct(len(wrong), compared)}) look like another paper, or {left:,} ({_pct(left, compared)}) if the "
+            "near spellings are the same authors.",
+        ]
     return lines
 
 
@@ -576,6 +658,10 @@ def _title_section(check: TitleCheck, meta: Meta) -> list[str]:
     if meta.ruling:
         lines += ["", f"**Ruling:** {meta.ruling}"]
     return lines
+
+
+def _median(xs: Sequence[float]) -> float:
+    return statistics.median(xs) if xs else 0.0
 
 
 def _near_spelling(a: TitleAttach) -> bool:
@@ -664,6 +750,12 @@ def render(result: AuditResult, meta: Meta) -> str:
     return "\n".join(lines) + "\n"
 
 
+_CHECKED = (
+    "A `differs` can also be another paper attached by title; the author check above tells which, by surnames, "
+    "not checked by a person."
+)
+
+
 def _caveats(result: AuditResult) -> list[str]:
     """What the audit does not measure (gate C round 1): OpenAlex's fidelity where no official abstract exists to
     compare (AAAI 1980–2008), and the title route's residual wrong-attach risk, which is a judgement."""
@@ -681,9 +773,8 @@ def _caveats(result: AuditResult) -> list[str]:
         )
         lines.append(
             "- In that comparison AAAI's text is itself read from archived HTML, and OpenAlex's is often text-mined, "
-            "so a `similar` or `differs` can be an OCR, hyphenation or extraction difference on either side. The "
-            "texts are title-route attaches with no author check, so a `differs` can also be another paper (the "
-            "title route's wrong-attach estimate is below)."
+            "so a `similar` or `differs` can be an OCR, hyphenation or extraction difference on either side."
+            + (" " + _CHECKED if result.library.differs else "")
         )
     check = result.title
     if check is None:

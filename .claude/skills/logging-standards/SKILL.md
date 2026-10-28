@@ -125,7 +125,7 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   `aaai_library_attention` WARNING (the `_ATTENTION` refusals and `title_near`) at ingest or fill. **The OpenAlex
   audit** (`op eval openalex`): `openalex_audit_started` (`snapshot`, `sampled`, `offline`) and
   `openalex_audit_written` (`snapshot`, `sampled`, `differs`, `title_attached`, `title_wrong`, `library_compared`,
-  `requests`, `cached`, `replaced`, `ms`), INFO. None carries a title, an abstract, a key or a body. Never a line per item.
+  `library_differs`, `library_wrong` (the `differs` texts' author check, TASK-250), `requests`, `cached`, `replaced`, `ms`), INFO. None carries a title, an abstract, a key or a body. Never a line per item.
 - **Record-level anomalies are DEBUG** (`openreview_unknown_track`, `openreview_v1_unmapped`,
   `abstract_surrogate_refused` (the source and the record id or page row, never the text; TASK-229; each report
   counts them as `abstract_surrogate` or `site_surrogate`), `openreview_v1_conflict`, `openreview_v1_twin_outcome`, `openreview_v1_duplicate`, `openreview_duplicate_submission`, `openreview_note_skipped`, `openreview_presentation_unmapped`, `openreview_title_control_characters` (forum and count, never the title), `neurips_record_invalid`,
