@@ -114,7 +114,7 @@ one IPv6 /48, held the slot 100% of the time.
   connection, searches included (24 at once reached the edge of 1 GiB, peaks 890 to 998 MiB, and 32 did not
   fit: budget about 20; `docs/results/2026-10-16-compare-proxy.md`).
   **As built (TASK-067, 2026-10-28):** the host bounds each source's share in front of Caddy with
-  `deploy/connlimit.nft` (TASK-256, option (c)). It allows 16 connections and 1 MiB/s after a 16 MiB burst per
+  `deploy/connlimit.nft` (TASK-256, option (c), with the byte rate the owner added on 2026-10-28). It allows 16 connections and 1 MiB/s after a 16 MiB burst per
   IPv4 address or IPv6 /64, on TCP and UDP 443. Many sources together are still bounded by the memory limit
   alone. It is not yet measured in front of Caddy (spec 08 §Deploy).
 - The comparison's classes and matching are the report's (spec 07 §B): a change to either changes both. The

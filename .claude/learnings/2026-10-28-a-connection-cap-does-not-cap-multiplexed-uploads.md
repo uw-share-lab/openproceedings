@@ -37,7 +37,8 @@ Build the owner's option (c) from TASK-256: a per-source connection limit (nftab
   and bind to it.
 
 ## Decisions (and what would change them)
-- 16 connections and 1 MiB/s after a 16 MiB burst, per IPv4 address or IPv6 /64. A Caddy option for stream
+- 16 connections (TASK-256's option (c)) and 1 MiB/s after a 16 MiB burst (the owner added it to option (c) on
+  2026-10-28), per IPv4 address or IPv6 /64. A Caddy option for stream
   limits would let the byte rate be relaxed. A different `read_body` or memory limit changes the bound, and
   the test reads both from `compare.yml`.
 

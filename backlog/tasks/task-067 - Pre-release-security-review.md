@@ -75,4 +75,6 @@ Not measured in front of Caddy, so this AC stays unchecked. That waits on a Linu
 2026-10-28 owner decision (an addendum to TASK-256's option (c)): ship the per-source byte rate as well as the connection cap. That is 1 MiB/s to 443 after a 16 MiB burst per IPv4 address or /64, on TCP and UDP, because a connection cap doesn't bound HTTP/2 or HTTP/3 uploads. The byte rate is its own pair of rules and sets (bytes4, bytes6) and can be dropped without touching the connection cap. NAT: everyone behind one address shares both limits. About 3 concurrent 16 MiB compare uploads fit per shared address (each needs 0.27 MiB/s to beat read_body) before the meter slows them. Recorded in spec 08 §Deploy and deploy/README.md §Per-source limits on the host. AC #3 stays unchecked until a Linux host measures it (TASK-064).
 
 2026-10-28: AC #3 reworded (team lead, who wrote it in the fold-in). The smoke test's traffic is the host's own and never passes prerouting, so the limits are measured from another machine, with deploy/smoke-test.sh --compare still passing on the host. The AC also names the byte rate and the README section the limits now live in. It stays unchecked.
+
+Correction to the first 2026-10-28 note: §Per-source limits on the host is a subsection of deploy/README.md §Comparisons, not a separate section.
 <!-- SECTION:NOTES:END -->

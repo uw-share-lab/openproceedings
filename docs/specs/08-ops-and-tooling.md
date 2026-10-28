@@ -637,7 +637,7 @@ decided this on 2026-10-17 (TASK-256, option (c)): no custom Caddy build, and `r
 uploads; it is its own pair of rules and can be dropped without touching the connection limit. The limit is
 `deploy/connlimit.nft`, loaded with `deploy/connlimit.sh apply` (`deploy/README.md` §Per-source limits on the host):
 
-| | |
+| What | Value |
 |---|---|
 | Source | an IPv4 address, or an IPv6 /64 |
 | Traffic | TCP and UDP (QUIC: HTTP/3 is on, TASK-257) to the host's port 443 (`define https_port`), addressed to the host itself (`fib daddr type local`) |
