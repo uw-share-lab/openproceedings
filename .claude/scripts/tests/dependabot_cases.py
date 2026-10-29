@@ -326,6 +326,67 @@ def _(c: Case) -> None:
     c.expect("uv_lock.py", ["--base", base, "--head", head], PROBLEM, r"^PROBLEM uv\.lock: `options` changed")
 
 
+def revision_case(c: Case, before: str | None, after: str | None) -> list[str]:
+    """A lock with no package change whose `revision` line reads `before` at base and `after` at head (None: no line)."""
+
+    def lock(rev: str | None) -> str:
+        return uv_lock(uv_pkg("a", "1.0")).replace(
+            "revision = 3\n", "" if rev is None else f"revision = {rev}\n"
+        )
+
+    base = c.commit({"uv.lock": lock(before)})
+    head = c.commit({"uv.lock": lock(after)})
+    return ["--base", base, "--head", head]
+
+
+@row("uv: the lock revision 3 -> 5 uv 0.13 writes passes")
+def _(c: Case) -> None:
+    c.expect(
+        "uv_lock.py",
+        revision_case(c, "3", "5"),
+        OK,
+        r"^ok +uv\.lock: `revision` 3 -> 5, the move uv 0\.13 writes",
+    )
+
+
+@row("uv: a lock revision downgrade 5 -> 3")
+def _(c: Case) -> None:
+    c.expect("uv_lock.py", revision_case(c, "5", "3"), PROBLEM, r"^PROBLEM uv\.lock: `revision` changed")
+
+
+@row("uv: a lock revision move REVISION_MOVES doesn't list (3 -> 4)")
+def _(c: Case) -> None:
+    c.expect("uv_lock.py", revision_case(c, "3", "4"), PROBLEM, r"^PROBLEM uv\.lock: `revision` changed")
+
+
+@row("uv: a lock revision move past the listed one (5 -> 6)")
+def _(c: Case) -> None:
+    c.expect("uv_lock.py", revision_case(c, "5", "6"), PROBLEM, r"^PROBLEM uv\.lock: `revision` changed")
+
+
+@row("uv: a lock revision removed")
+def _(c: Case) -> None:
+    c.expect("uv_lock.py", revision_case(c, "3", None), PROBLEM, r"^PROBLEM uv\.lock: `revision` changed")
+
+
+@row("uv: a lock revision as a float (3.0 -> 5) isn't the listed int move")
+def _(c: Case) -> None:
+    c.expect("uv_lock.py", revision_case(c, "3.0", "5"), PROBLEM, r"^PROBLEM uv\.lock: `revision` changed")
+
+
+@row("uv: the listed revision move hides no other header change")
+def _(c: Case) -> None:
+    base = c.commit({"uv.lock": uv_lock(uv_pkg("a", "1.0"))})
+    head = c.commit(
+        {
+            "uv.lock": uv_lock(uv_pkg("a", "1.0")).replace(
+                "revision = 3", 'revision = 5\n[options]\nexclude-newer = "2030-01-01T00:00:00Z"\n'
+            )
+        }
+    )
+    c.expect("uv_lock.py", ["--base", base, "--head", head], PROBLEM, r"^PROBLEM uv\.lock: `options` changed")
+
+
 PYPROJECT = '[project]\nname = "root"\ndependencies = ["ruff>={v}"]\n[dependency-groups]\ndev = ["mypy>=2.3"]\n{extra}'
 
 

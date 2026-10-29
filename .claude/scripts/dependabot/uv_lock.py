@@ -12,9 +12,9 @@ names is on files.pythonhosted.org with PyPI's sha256, that the release is not y
 workflow, environment) of every file of the new version with the previous version's (every file of it that
 has one; they must agree). The previous version is the old one with the same major, else the newest old one.
 
-The shape of the change is checked too: everything in `uv.lock` but the package list stays the same; a
-registry package whose version didn't move stays byte-for-byte the same; a workspace member changes only its
-dependency fields; and each `pyproject.toml` changes only dependency specifiers (`[project] dependencies`,
+The shape of the change is checked too: everything in `uv.lock` but the package list stays the same, but for a
+`revision` move `REVISION_MOVES` lists (the 3 -> 5 uv 0.13 writes); a registry package whose version didn't move
+stays byte-for-byte the same; a workspace member changes only its dependency fields; and each `pyproject.toml` changes only dependency specifiers (`[project] dependencies`,
 `optional-dependencies`, `[dependency-groups]`) of packages whose locked version moved, so nothing else (a
 build requirement, an index, a tool setting) can ride along.
 
@@ -51,6 +51,10 @@ PYPI = "https://pypi.org"
 FILES_HOST = "https://files.pythonhosted.org/"
 REGISTRY = "https://pypi.org/simple"
 HAND_ONLY = {"tantivy"}  # spec 08 §Release: upgraded by hand with SCHEMA_VERSION, never by Dependabot
+# The lock `revision` moves uv may make. uv 0.13 (the pin since 2026-10-16) writes revision 5 whenever it rewrites a
+# revision-3 lock, so the first PR that changes the lock under it moves the header (#206, 2026-10-29). Only these
+# (old, new) pairs pass, as ints; any other move, a downgrade, or a removed or added `revision` stays a PROBLEM.
+REVISION_MOVES = {(3, 5)}
 PYPROJECTS = ("pyproject.toml", "backend/pyproject.toml")
 MEMBER_FIELDS = {"dependencies", "optional-dependencies", "dev-dependencies", "metadata"}
 REQ_NAME = re.compile(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)")
@@ -228,8 +232,18 @@ def main() -> None:
             " (the Python minor is hand-only, spec 08 §Monorepo layout)"
         )
     for key in sorted((set(old_lock) | set(new_lock)) - {"package", "requires-python"}):
-        if old_lock.get(key) != new_lock.get(key):
-            rep.problem(f"uv.lock: `{key}` changed")
+        before, after = old_lock.get(key), new_lock.get(key)
+        if before == after:
+            continue
+        if (
+            key == "revision"
+            and type(before) is int
+            and type(after) is int
+            and (before, after) in REVISION_MOVES
+        ):
+            rep.ok(f"uv.lock: `revision` {before} -> {after}, the move uv 0.13 writes (REVISION_MOVES)")
+            continue
+        rep.problem(f"uv.lock: `{key}` changed")
     old, new = by_name(old_lock), by_name(new_lock)
     for name in sorted(set(old) - set(new)):
         rep.problem(f"{name}: removed from the lock")
