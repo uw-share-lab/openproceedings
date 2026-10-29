@@ -688,6 +688,10 @@ check dev block 'git branch --set-upstream-to=origin/feature/x && git pull'     
 check dev block 'git branch -u origin/feature/x && git reset --hard @{u}'
 check dev block 'git branch -u origin/feature/x && git merge --ff-only'
 check dev allow 'git pull'                                                           # no upstream write: a sync
+check dev block 'git branch -u origin/feature/x dev && git pull'                     # dev named
+check dev allow 'git branch -u origin/feature/x feature/x && git pull'               # another branch's upstream
+check dev allow 'git checkout -b feat3 origin/feature/x && git checkout dev && git pull'   # a new branch's upstream
+check dev allow 'git -C /tmp branch -u origin/feature/x && git pull'                 # another directory
 check feature/x block 'git config branch.feature/x.merge refs/heads/dev && git push origin'
 git -C "$REPO" config --unset push.default
 

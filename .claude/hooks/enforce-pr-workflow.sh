@@ -47,7 +47,8 @@
 # under config this gate can't read (--config-env, -c include.path, GIT_CONFIG_*, GIT_COMMON_DIR, HOME), a git
 # command after a `git config` that writes an alias, include or push key in the same command, a push after a
 # checkout/switch/worktree add that creates a branch with an upstream (`-t`, a remote-tracking start point), or
-# a `branch -u`/`--set-upstream-to`/`-t`, or a pull/merge/reset/rebase on main/dev after one (TASK-285:
+# a `branch -u`/`--set-upstream-to`/`-t`, or a pull/merge/reset/rebase of main/dev after a `branch -u` set its
+# upstream (TASK-285:
 # `git branch -u origin/x && git pull` on a feature branch is allowed), and
 # an ambiguous abbreviated option. A word that expands to nothing is dropped (`E=; git push origin $E` names no
 # refspec), and a command with `~` or `$` is read a second time with HOME/TMPDIR/USER empty (`git push origin
@@ -283,10 +284,13 @@ def classify(argv, directory, state, tracked):
 
     if xargs_hides_args(argv, effective_dir):
         return "xargs", branch  # it appends refspecs/paths from stdin that this gate cannot see
-    if on_protected and sub in ("pull", "merge", "reset", "rebase") and getattr(argv, "upstream_written", False):
+    if on_protected and sub in ("pull", "merge", "reset", "rebase") and any(
+        repo_key(wd, wgd) == key and (target or get_branch(wd, wgd)) in (branch, UNKNOWN)
+        for wd, wgd, target in getattr(argv, "upstream_writes", ())
+    ):
         # main/dev is synced to its upstream (a pull, `merge --ff-only`, `reset --hard @{u}`), which an earlier
-        # `branch -u`/checkout in this command set after this gate read it (TASK-285 review)
-        return "unreadable:an earlier branch -u/checkout/switch in this command sets the upstream it syncs to", branch
+        # `branch -u` in this command set for it, after this gate read it (TASK-285 review)
+        return "unreadable:an earlier branch -u in this command sets the upstream this syncs main/dev to", branch
     if sub == "push":
         return push_verdict(args, effective_dir, git_config(argv), gitdir, git_config_opaque(argv), branch,
                             lambda: push_config(argv, directory)), branch
@@ -508,7 +512,7 @@ def resolved(argv, directory, env_empty=False):
     words = [r for w in argv[1:] if (r := one(w)) != "" or w == ""]
     out = Argv([argv[0], *words], argv.via_xargs, {n: one(v) for n, v in argv.assigns.items()})
     out.shell_vars, out.olddir, out.dir_unknown = argv.shell_vars, argv.olddir, argv.dir_unknown
-    out.upstream_written = getattr(argv, "upstream_written", False)
+    out.upstream_writes = getattr(argv, "upstream_writes", [])
     return out
 
 
@@ -524,7 +528,7 @@ def git_calls(argv, directory):
             inner = Argv(["git", *([prog[4:]] if prog != "git" else []), *argv[k + 1 :]], argv.via_xargs,
                          argv.assigns)
             inner.shell_vars, inner.olddir, inner.dir_unknown = argv.shell_vars, argv.olddir, argv.dir_unknown
-            inner.upstream_written = getattr(argv, "upstream_written", False)
+            inner.upstream_writes = getattr(argv, "upstream_writes", [])
             return expand_git_alias(inner, directory)
     return []
 
@@ -674,7 +678,8 @@ case "$verdict" in
     echo "Refusing: this git command can't be read reliably: ${verdict#unreadable:}." >&2
     echo "Write an abbreviated option out in full, run a git subcommand by its own name rather than an alias set" >&2
     echo "where this gate can't read it (--config-env, -c include.path, GIT_CONFIG_*, GIT_COMMON_DIR, HOME), and" >&2
-    echo "run \`git config\`, or a command that sets an upstream, in its own call before a push." >&2
+    echo "run \`git config\`, or a command that sets an upstream, in its own call before a push (or a pull," >&2
+    echo "merge or reset of main/dev)." >&2
     exit 2
     ;;
   protected-ref)

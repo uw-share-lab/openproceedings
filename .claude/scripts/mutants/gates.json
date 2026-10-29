@@ -2310,20 +2310,32 @@
  {
   "label": "enforce: a sync on main/dev after an upstream write allowed",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "    if on_protected and sub in (\"pull\", \"merge\", \"reset\", \"rebase\") and getattr(argv, \"upstream_written\", False):",
-  "new": "    if False:"
+  "old": "    if on_protected and sub in (\"pull\", \"merge\", \"reset\", \"rebase\") and any(",
+  "new": "    if False and any("
  },
  {
-  "label": "cmdparse: upstream_written not passed to the gates",
+  "label": "cmdparse: upstream_writes not passed to the gates",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    argv.upstream_written = state.get(\"upstream_written\", False)\n",
+  "old": "    argv.upstream_writes = list(state.get(\"upstream_writes\", []))\n",
   "new": ""
  },
  {
-  "label": "enforce: resolved() drops upstream_written",
+  "label": "enforce: resolved() drops upstream_writes",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "    out.upstream_written = getattr(argv, \"upstream_written\", False)\n",
+  "old": "    out.upstream_writes = getattr(argv, \"upstream_writes\", [])\n",
   "new": ""
+ },
+ {
+  "label": "enforce: an upstream write for another branch refuses a sync",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "(target or get_branch(wd, wgd)) in (branch, UNKNOWN)",
+  "new": "True"
+ },
+ {
+  "label": "cmdparse: branch -u names no branch",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    return positionals[0] if positionals else None\n",
+  "new": "    return None\n"
  },
  {
   "label": "enforce: the unreadable verdict's case arm doesn't match",
