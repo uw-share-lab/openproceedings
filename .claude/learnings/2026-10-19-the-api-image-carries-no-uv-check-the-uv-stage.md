@@ -28,3 +28,8 @@ by-hand uv PR, compare the pin with uv's latest release (`gh api repos/astral-sh
 and look up a closed Dependabot PR's final title before calling its version handled. 0.13.4 was then done by hand
 (TASK-277) the same way as #175: one digest from ghcr.io, its astral-sh attestation, all 11 setup-uv steps, and the
 uv stage built and run with `--version`.
+
+## Addendum — 2026-10-29
+**Dependabot's cooldown picks the patch past the hold, not the newest.** #199 named 0.13.5 (7.8 days old) while 0.13.6
+was out but under three days old, so its title gives the version to bump to by hand. Its branch moved the tag alone,
+so the bump was remade in `chore/uv-0.13.5` with all 11 setup-uv steps, and #199 must be closed by hand.
