@@ -2126,7 +2126,7 @@ def creates_with_upstream(sub: str, args: list[str], directory: str) -> bool:
 
 def branch_upstream_target(args: list[str]) -> str | None:
     """The existing branch whose upstream `git branch -u/--set-upstream-to <upstream> [<branch>]` sets: the named
-    one, or None for the checked-out branch (`HEAD` too); '' for any other `git branch` (`-t <new>` starts a new branch, which
+    one, or None for the checked-out branch (`HEAD` and `@` too); '' for any other `git branch` (`-t <new>` starts a new branch, which
     is no protected branch moved to another upstream: TASK-285 review)."""
     if not any(
         a.startswith("--set-upstream") or (a[:1] == "-" and a[1:2] != "-" and "u" in a[1:]) for a in args
@@ -2142,7 +2142,7 @@ def branch_upstream_target(args: list[str]) -> str | None:
             skip = True  # its value is the upstream, not the branch
         elif not a.startswith("-"):
             positionals.append(a)
-    return positionals[0] if positionals and positionals[0] != "HEAD" else None
+    return positionals[0] if positionals and positionals[0] not in ("HEAD", "@") else None
 
 
 def _context(argv: Argv, state: dict) -> Argv:

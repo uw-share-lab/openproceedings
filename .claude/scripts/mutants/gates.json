@@ -2316,7 +2316,7 @@
  {
   "label": "cmdparse: branch -u names no branch",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    return positionals[0] if positionals and positionals[0] != \"HEAD\" else None\n",
+  "old": "    return positionals[0] if positionals and positionals[0] not in (\"HEAD\", \"@\") else None\n",
   "new": "    return None\n"
  },
  {
@@ -2332,10 +2332,16 @@
   "new": "        upstream_set"
  },
  {
+  "label": "cmdparse: branch -u @ read as a branch named @",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": " and positionals[0] not in (\"HEAD\", \"@\") else None",
+  "new": " and positionals[0] != \"HEAD\" else None"
+ },
+ {
   "label": "cmdparse: branch -u HEAD read as a branch named HEAD",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": " and positionals[0] != \"HEAD\" else None",
-  "new": " else None"
+  "old": " and positionals[0] not in (\"HEAD\", \"@\") else None",
+  "new": " and positionals[0] != \"@\" else None"
  },
  {
   "label": "cmdparse: an attached -u value ending in u read as a bare -u",
