@@ -164,6 +164,8 @@ check feature/wip block 'git push origin +main:main'
 check feature/wip block 'git push origin feature/wip:main --force'
 check feature/wip block 'git push --mirror origin'         # mirror can delete main
 check feature/wip block 'git push --all origin'            # --all writes remote main
+check feature/wip block 'git push --branches origin'       # git's newer name for --all (TASK-285)
+check feature/wip block 'git push --bra origin'            # ... abbreviated
 
 echo "dev is protected too (integration branch in the feature->dev->main flow):"
 check dev block 'git commit -m "x"'
@@ -555,6 +557,18 @@ check feature/x block 'git push origin'
 git -C "$REPO" config remote.origin.mirror false
 check feature/x allow 'git push origin'                              # mirror=false: not a mirror
 git -C "$REPO" config --unset remote.origin.mirror
+# push = HEAD pushes the current branch to its own name (TASK-285); every value of the key counts
+git -C "$REPO" config remote.origin.push HEAD
+check feature/x allow 'git push'
+check feature/x allow 'git push origin'
+check dev block 'git push'                                           # ... and dev to dev
+git -C "$REPO" config --add remote.origin.push refs/heads/feat:refs/heads/dev
+check feature/x block 'git push origin'                              # HEAD, then a refspec into dev
+git -C "$REPO" config --unset-all remote.origin.push
+git -C "$REPO" config remote.origin.push refs/heads/feat:refs/heads/dev
+git -C "$REPO" config --add remote.origin.push +HEAD
+check feature/x block 'git push origin'                              # a refspec into dev, then +HEAD
+git -C "$REPO" config --unset-all remote.origin.push
 # remote names are case-sensitive to git: a later remote.origin can't hide remote.Origin's mirror (TASK-282)
 git -C "$REPO" config remote.Origin.mirror true
 git -C "$REPO" config remote.origin.mirror false
@@ -572,8 +586,11 @@ git -C "$REPO" config push.default upstream
 git -C "$REPO" config branch.feature/x.remote origin
 git -C "$REPO" config branch.feature/x.merge refs/heads/dev
 check feature/x block 'git push'                                     # upstream: pushes feature/x to dev
+check feature/x block 'git push -o ci.skip origin'                   # -o's value is no refspec (TASK-285)
+check feature/x block 'git push --push-option ci.skip origin'
 git -C "$REPO" config branch.feature/x.merge refs/heads/feature/x
 check feature/x allow 'git push'                                     # its upstream is itself
+check feature/x allow 'git push -o ci.skip origin'
 git -C "$REPO" config push.default current
 check feature/x allow 'git push origin'
 git -C "$REPO" config --unset push.default
@@ -665,6 +682,23 @@ check feature/x allow 'echo x >> notes.txt; git push origin feat'
 git -C "$REPO" config push.default upstream
 check feature/x block 'git branch -u origin/dev && git push origin'
 check feature/x block 'git branch --set-upstream-to=origin/dev && git push origin'
+check feature/x allow 'git branch --set-upstream-to=origin/feature/x && git pull'   # a feature branch: not refused (TASK-285)
+check feature/x allow 'git branch -u origin/feature/x && git status'
+check dev block 'git branch --set-upstream-to=origin/feature/x && git pull'          # dev synced to another upstream
+check dev block 'git branch -u origin/feature/x && git reset --hard @{u}'
+check dev block 'git branch -u origin/feature/x && git merge --ff-only'
+check dev allow 'git pull'                                                           # no upstream write: a sync
+check dev block 'git branch -u origin/feature/x dev && git pull'                     # dev named
+check dev allow 'git branch -u origin/feature/x feature/x && git pull'               # another branch's upstream
+check dev allow 'git checkout -b feat3 origin/feature/x && git checkout dev && git pull'   # a new branch's upstream
+check dev allow 'git -C /tmp branch -u origin/feature/x && git pull'                 # another directory
+check feature/x block 'git checkout dev && git branch -u origin/feature/x && git pull'   # dev's, set after the checkout
+check dev allow 'git checkout feature/x && git branch -u origin/feature/x && git checkout dev && git pull'
+check dev block 'git branch -u origin/feature/x HEAD && git pull'                    # HEAD is dev
+check dev block 'git branch -u origin/feature/x @ && git pull'                       # @ is HEAD
+check feature/x block 'git switch dev && git branch -u origin/feature/x HEAD && git merge --ff-only'
+check dev allow 'git branch -uorigin/menu feature/x && git pull'                    # -u's attached value
+check feature/x allow 'git config push.followTags true && git push origin feature/x'   # owner, 2026-10-28
 check feature/x block 'git config branch.feature/x.merge refs/heads/dev && git push origin'
 git -C "$REPO" config --unset push.default
 

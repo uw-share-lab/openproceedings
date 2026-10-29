@@ -1067,7 +1067,7 @@ check $R block "GIT_CONFIG_PARAMETERS alias"          "$(payload_bash "GIT_CONFI
 check $R block "GIT_CONFIG_* push target, no refspec" "$(payload_bash 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0=other2:other2 git push origin')"
 check $R allow "GIT_CONFIG_* with a named refspec"    "$(payload_bash 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=color.ui GIT_CONFIG_VALUE_0=never git push origin mut')"
 check $R block "-c remote.origin.mirror=true, no refspec" "$(payload_bash 'git -c remote.origin.mirror=true push origin')"
-check $R block "-c push.followTags=true, no refspec"  "$(payload_bash 'git -c push.followTags=true push origin')"
+check $R allow "-c push.followTags=true, no refspec: tags follow reviewed commits (owner, 2026-10-28)" "$(payload_bash 'git -c push.followTags=true push origin')"
 check $P block "-c include.path alias: add -f -A"     "$(payload_bash "git -c include.path='$TMP/inc.cfg' fa")"
 check $R block "glob refspec refs/heads/*"            "$(payload_bash "git push origin 'refs/heads/*:refs/heads/*'")"
 # export / declare -x reach every later command
@@ -1169,24 +1169,40 @@ g config --unset remote.origin.push
 g config remote.origin.mirror true
 check $R block "remote.origin.mirror set by an earlier call" "$(payload_bash 'git push origin')"
 g config --unset remote.origin.mirror
+# remote.<name>.push = HEAD pushes the current branch to its own name, as `git push origin HEAD` does; git pushes
+# every value of a key set twice, so a HEAD can't hide another refspec (TASK-285)
+g config remote.origin.push HEAD
+check $R allow "remote.origin.push=HEAD (HEAD approved)" "$(payload_bash 'git push origin')"
+g config --add remote.origin.push refs/heads/other2:refs/heads/other2
+check $R block "remote.origin.push=HEAD, then another refspec" "$(payload_bash 'git push origin')"
+g config --unset-all remote.origin.push
+g config remote.origin.push refs/heads/other2:refs/heads/other2
+g config --add remote.origin.push +HEAD
+check $R block "a refspec, then remote.origin.push=+HEAD" "$(payload_bash 'git push origin')"
+g config --unset-all remote.origin.push
+# setting an upstream steers only a later push: git's own advice when a pull has no upstream (TASK-285)
+check $R allow "git branch --set-upstream-to=… && git pull" "$(payload_bash 'git branch --set-upstream-to=origin/mut && git pull')"
+check $P allow "git branch --set-upstream-to=… && git pull" "$(payload_bash 'git branch --set-upstream-to=origin/mut && git pull')"
 g config push.default matching
 check $R block "push.default=matching in the repo"    "$(payload_bash 'git push origin')"
 g config --unset push.default
 g config push.followTags true
-check $R block "push.followTags in the repo"          "$(payload_bash 'git push origin')"
-# git_bool fails toward true: false only for what git 2.42 reads as false (TASK-282). git reads 1k, 0x1 and +1
-# as true, so a gate that read only digits as a number let these push every tag, or mirror every ref, unreviewed.
-for v in 1 1k 1K 1m 1g 0x1 0X1 +1 -1 010 ² --1 0x 1t; do
-  g config push.followTags "$v"
-  check $R block "push.followTags=$v (git: true, or a value git refuses)" "$(payload_bash 'git push origin')"
-done
-g config push.followTags "$(printf '9%.0s' $(seq 5000))"
-check $R block "push.followTags of 5,000 nines"       "$(payload_bash 'git push origin')"
-for v in 0 00 0k 0K -0 +0 -0k 0x0 0X0 -0x0 false No OFF; do
-  g config push.followTags "$v"
-  check $R allow "push.followTags=$v (git: false)"   "$(payload_bash 'git push origin')"
-done
+check $R allow "push.followTags in the repo: its tags follow the pushed commits (owner, 2026-10-28)" "$(payload_bash 'git push origin')"
+check $R allow "push.followTags with --no-follow-tags" "$(payload_bash 'git push --no-follow-tags origin')"
 g config --unset push.followTags
+# git_bool fails toward true: false only for what git 2.42 reads as false (TASK-282). git reads 1k, 0x1 and +1
+# as true, so a gate that read only digits as a number let these mirror every ref unreviewed.
+for v in 1 1k 1K 1m 1g 0x1 0X1 +1 -1 010 ² --1 0x 1t; do
+  g config remote.origin.mirror "$v"
+  check $R block "remote.origin.mirror=$v (git: a mirror, or a value git refuses)" "$(payload_bash 'git push origin')"
+done
+g config remote.origin.mirror "$(printf '9%.0s' $(seq 5000))"
+check $R block "remote.origin.mirror of 5,000 nines"       "$(payload_bash 'git push origin')"
+for v in 0 00 0k 0K -0 +0 -0k 0x0 0X0 -0x0 false No OFF; do
+  g config remote.origin.mirror "$v"
+  check $R allow "remote.origin.mirror=$v (git: not a mirror)"   "$(payload_bash 'git push origin')"
+done
+g config --unset remote.origin.mirror
 for v in 1k 0x1 +1; do
   g config remote.origin.mirror "$v"
   check $R block "remote.origin.mirror=$v (git: a mirror)" "$(payload_bash 'git push origin')"
@@ -1195,20 +1211,20 @@ g config remote.origin.mirror 0x0
 check $R allow "remote.origin.mirror=0x0 (git: not a mirror)" "$(payload_bash 'git push origin')"
 g config --unset remote.origin.mirror
 for v in 0g 0M; do
-  g config push.followTags "$v"
-  check $R allow "push.followTags=$v (git: false)"   "$(payload_bash 'git push origin')"
+  g config remote.origin.mirror "$v"
+  check $R allow "remote.origin.mirror=$v (git: not a mirror)"   "$(payload_bash 'git push origin')"
 done
 # '0' + KELVIN SIGN (U+212A, lower() makes it 'k'); \x1c is whitespace to Python, not to git
 for v in 0t 0kk +-0 '0 ' "$(printf '0\342\204\252')" $'\x1c'0 ' false' $'\tno' 'off '; do
-  g config push.followTags "$v"
-  check $R block "push.followTags=$v (git refuses it)" "$(payload_bash 'git push origin')"
+  g config remote.origin.mirror "$v"
+  check $R block "remote.origin.mirror=$v (git refuses it)" "$(payload_bash 'git push origin')"
 done
-g config push.followTags "$(printf '\t0')"
-check $R allow "push.followTags=<tab>0 (git skips leading whitespace: false)" "$(payload_bash 'git push origin')"
-g config --unset push.followTags
+g config remote.origin.mirror "$(printf '\t0')"
+check $R allow "remote.origin.mirror=<tab>0 (git skips leading whitespace: false)" "$(payload_bash 'git push origin')"
+g config --unset remote.origin.mirror
 # a key with no value is true to git; --get-regexp prints it with value ''
 printf '[push]\n\tfollowTags\n' >> "$REPO/.git/config"
-check $R block "push.followTags with no value (git: true)" "$(payload_bash 'git push origin')"
+check $R allow "push.followTags with no value (owner, 2026-10-28: not refused)" "$(payload_bash 'git push origin')"
 g config --unset push.followTags
 printf '[remote "origin"]\n\tmirror\n' >> "$REPO/.git/config"
 check $R block "remote.origin.mirror with no value (git: a mirror)" "$(payload_bash 'git push origin')"
@@ -1222,7 +1238,7 @@ g config --unset remote.pushdefault
 g config --unset remote.origin.mirror
 g config push.followTags true
 g config remote.pushdefault "$(printf 'x\npush.followtags 0')"
-check $R block "push.followTags a forged line can't undo" "$(payload_bash 'git push origin')"
+check $R allow "push.followTags and a forged line (owner, 2026-10-28: not refused)" "$(payload_bash 'git push origin')"
 g config --unset remote.pushdefault
 g config --unset push.followTags
 g config "remote.x y.mirror" true

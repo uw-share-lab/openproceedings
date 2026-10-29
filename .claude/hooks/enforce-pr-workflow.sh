@@ -41,11 +41,15 @@
 # written out in full (`--al` is --all), `git-<sub>` programs are `git <sub>`, and `export`ed variables reach
 # later commands (every assignment while `set -a` is on); braces and `$'…'` are decoded as bash does. A
 # refspec-less push whose `git -c` settings choose the destination (remote.<name>.push or .mirror,
-# push.default, remote.pushDefault) is refused, and so is one whose repo config does (any remote.<name>.push,
-# a true .mirror, push.default=matching, or push.default=upstream to a protected upstream), one or an alias
+# push.default, remote.pushDefault) is refused, and so is one whose repo config does (any remote.<name>.push
+# but HEAD, a true .mirror, push.default=matching, or push.default=upstream to a protected upstream; a push
+# option's value, `-o ci.skip`, is no refspec: TASK-285), one or an alias
 # under config this gate can't read (--config-env, -c include.path, GIT_CONFIG_*, GIT_COMMON_DIR, HOME), a git
 # command after a `git config` that writes an alias, include or push key in the same command, a push after a
-# checkout/switch/worktree add that creates a branch with an upstream (`-t`, a remote-tracking start point), and
+# checkout/switch/worktree add that creates a branch with an upstream (`-t`, a remote-tracking start point), or
+# a `branch -u`/`--set-upstream-to`/`-t`, or a pull/merge/reset/rebase of main/dev after a `branch -u` set its
+# upstream (TASK-285:
+# `git branch -u origin/x && git pull` on a feature branch is allowed), and
 # an ambiguous abbreviated option. A word that expands to nothing is dropped (`E=; git push origin $E` names no
 # refspec), and a command with `~` or `$` is read a second time with HOME/TMPDIR/USER empty (`git push origin
 # $TMPDIR`; `cd ~ && git commit` stays put: TASK-156). A git command inside a command substitution (`x="$(git
@@ -112,8 +116,9 @@ import json, os, re, shlex, subprocess, sys
 # assignments before `bash -c`, `bash -c`/`eval`, git aliases, and command names by basename (`/usr/bin/git`), case-folded but for builtins (`GIT`: cmdparse.fold).
 sys.path.insert(0, sys.argv[1])
 from cmdparse import (Argv, FailClosed, ParseError, base as _base, fold as _fold, expand_git_alias, expand_word, git as _git,
-                      git_anchored, git_config, git_config_opaque, git_dir, git_subcommand, payload, push_config,
-                      push_config_risk, walk, xargs_hides_args)
+                      branch_upstream_target, git_anchored, git_config, git_config_opaque, git_dir, git_subcommand,
+                      payload, push_config,
+                      push_config_risk, push_positionals, walk, xargs_hides_args)
 
 HOOK_CWD = sys.argv[2] or os.getcwd()
 
@@ -198,14 +203,15 @@ def push_verdict(args, directory, config, gitdir=None, opaque=False, branch="", 
     `gitdir`), the `git -c` settings in `config`, and `repo_config()`, the repo's push config (cmdparse
     `push_config`, read only for a refspec-less push); `opaque`: git also reads config this gate can't."""
     flags = [a for a in args if a.startswith("-")]
-    positionals = [a for a in args if not a.startswith("-")]
+    positionals = push_positionals(args)  # `-o ci.skip origin`: an option's value is no remote (TASK-285)
     refspecs = positionals[1:]  # positionals[0] is the remote
     if any(UNRESOLVED in p for p in positionals):
         return "opaque"  # `git push origin HEAD:$B`, `git push origin $UNSET`: what and where can't be told
 
-    # --mirror/--all can create or delete a protected branch without ever naming it; so can the matching
-    # refspec `:` / `+:` (every branch that exists on both sides: TASK-067 review gate round 2).
-    if any(f in ("--mirror", "--all") for f in flags) or any(r.lstrip("+") == ":" for r in refspecs):
+    # --mirror/--all (and --branches, git's newer name for --all: TASK-285) can create or delete a protected branch
+    # without ever naming it; so can the matching refspec `:` / `+:` (every branch that exists on both sides:
+    # TASK-067 review gate round 2).
+    if any(f in ("--mirror", "--all", "--branches") for f in flags) or any(r.lstrip("+") == ":" for r in refspecs):
         return "protected-ref"
     # With no refspec, `-c remote.<name>.push` / `.mirror` / `push.default` / `remote.pushDefault` decide what
     # is pushed where (`git -c remote.origin.push=HEAD:refs/heads/dev push origin`), and so may config this
@@ -279,6 +285,16 @@ def classify(argv, directory, state, tracked):
 
     if xargs_hides_args(argv, effective_dir):
         return "xargs", branch  # it appends refspecs/paths from stdin that this gate cannot see
+    upstream_set = state.setdefault("upstream_set", set()) if state is not None else set()
+    if sub == "branch" and (target := branch_upstream_target(args)) != "":
+        # the branch whose upstream this `branch -u` sets: the one named, else the one checked out at this point
+        upstream_set.add((key, target or branch))
+    if on_protected and sub in ("pull", "merge", "reset", "rebase") and (
+        (key, branch) in upstream_set or (key, UNKNOWN) in upstream_set
+    ):
+        # main/dev is synced to its upstream (a pull, `merge --ff-only`, `reset --hard @{u}`), which an earlier
+        # `branch -u` in this command set for it, after this gate read it (TASK-285 review)
+        return "unreadable:an earlier branch -u in this command sets the upstream this syncs main/dev to", branch
     if sub == "push":
         return push_verdict(args, effective_dir, git_config(argv), gitdir, git_config_opaque(argv), branch,
                             lambda: push_config(argv, directory)), branch
@@ -527,8 +543,9 @@ def analyze(cmd, cwd):
             v = analyze_pass(cmd, cwd, env_empty)
             if v != "allow":
                 return v
-    except FailClosed:
-        return "unreadable"  # an ambiguous option, an alias set where this gate can't read it, a config write
+    except FailClosed as exc:
+        # an ambiguous option, an alias set where this gate can't read it, a config or upstream write: say which
+        return "unreadable:" + " ".join(str(exc).split())
     except ParseError:
         return "parse-fail"
     except Exception:
@@ -659,12 +676,12 @@ case "$verdict" in
     echo "to sync a local protected branch use 'git pull' or 'git merge --ff-only <ref>'." >&2
     exit 2
     ;;
-  unreadable)
-    echo "Refusing: this git command can't be read reliably: an abbreviated option that is ambiguous (write it" >&2
-    echo "out in full), a subcommand that may be an alias set where this gate can't read it (--config-env," >&2
-    echo "-c include.path, GIT_CONFIG_*, GIT_COMMON_DIR, HOME), or one after a \`git config\` that sets an alias," >&2
-    echo "include or push target in the same command. Run the git subcommand itself, by its own name, and" >&2
-    echo "run \`git config\` in its own call." >&2
+  unreadable:*)
+    echo "Refusing: this git command can't be read reliably: ${verdict#unreadable:}." >&2
+    echo "Write an abbreviated option out in full, run a git subcommand by its own name rather than an alias set" >&2
+    echo "where this gate can't read it (--config-env, -c include.path, GIT_CONFIG_*, GIT_COMMON_DIR, HOME), and" >&2
+    echo "run \`git config\`, or a command that sets an upstream, in its own call before a push (or a pull," >&2
+    echo "merge or reset of main/dev)." >&2
     exit 2
     ;;
   protected-ref)

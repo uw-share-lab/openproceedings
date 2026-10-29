@@ -47,11 +47,15 @@ matter to a gate:
   * `export`/`declare -x` assignments, and every assignment under `set -a`, reach every later command's
     `Argv.assigns` (`note_exports`);
   * a git command after a `git config` that writes an alias, an include, a push target or an upstream, a `git
-    remote add --mirror` / `remote set-branches` / `branch -u`, or a redirect, tee, sed -i, cp/mv/ln into a git
-    config file, in the same command line raises FailClosed (`config_steers_git`, `writes_git_config`): this
-    parser read the config before it was written; so does a `git push` after a checkout/switch/worktree add
-    that creates a branch with an upstream (`-t`, a remote-tracking start point: `creates_with_upstream`);
-  * `push_config` reads the repo config a refspec-less push uses;
+    remote add --mirror` / `remote set-branches`, or a redirect, tee, sed -i, cp/mv/ln into a git config file,
+    in the same command line raises FailClosed (`config_steers_git`, `writes_git_config`): this parser read the
+    config before it was written; so does a `git push` after a checkout/switch/worktree add that creates a
+    branch with an upstream (`-t`, a remote-tracking start point) or a `branch -u`/`-t` (`creates_with_upstream`;
+    a pull, merge, reset or rebase of a protected branch after a `branch -u` set its upstream is
+    enforce-pr-workflow's (`branch_upstream_target`);
+    `git branch -u origin/x && git pull` elsewhere is read through, TASK-285);
+  * `push_config` reads the repo config a refspec-less push uses, and `push_positionals` a push's remote and
+    refspecs (an option's value, `-o ci.skip`, is neither);
   * the command substitutions the words would hide (a `$(…)` inside double quotes, backquotes outside single
     quotes, those in an unquoted heredoc body) are walked before the command they're in, each as a subshell, and
     the word reads as written (`x="$(git push origin HEAD:dev)"`: TASK-156); an unquoted `$(…)` is split into
@@ -1990,7 +1994,7 @@ def _change_dir(head: str, words: list[str], state: dict, assigns: dict[str, str
 # gate: `git config alias.p push && git p origin HEAD:dev`; round 3: `git config branch.<b>.merge …`), or where
 # `git format-patch` writes (TASK-156 review)
 CONFIG_STEERS_GIT = re.compile(
-    r"alias\..+|include(if\..+)?\.path|remote\..+\.(push|mirror)|push\.(default|followtags)|remote\.pushdefault"
+    r"alias\..+|include(if\..+)?\.path|remote\..+\.(push|mirror)|push\.default|remote\.pushdefault"
     r"|branch\..+\.(merge|remote|pushremote)|format\.outputdirectory",
     re.IGNORECASE,
 )
@@ -2018,19 +2022,13 @@ def config_steers_git(argv: list[str], directory: str) -> bool:
     """Does this `git config …` write a `CONFIG_STEERS_GIT` key (`git config [--add|--replace-all] alias.p
     push`, `git config set …`), or open the file in an editor or rename a section (`--edit`,
     `--rename-section`)? Or does another git command write such config (review gate round 3): `git remote add
-    --mirror…` (a mirror remote), `git remote set-branches`, `git branch -u/--set-upstream-to/-t/--track` (an
-    upstream). (A `checkout`/`switch`/`worktree add` that writes an upstream is `creates_with_upstream`.)"""
+    --mirror…` (a mirror remote), `git remote set-branches`. (A `branch`/`checkout`/`switch`/`worktree add` that
+    writes an upstream is `creates_with_upstream`: only a later push reads it, TASK-285.)"""
     g = git_subcommand(argv, directory)
     if g is not None and g[0] == "remote" and g[1][:1] == ["add"]:
         return any(a.startswith("--mirror") for a in g[1])
     if g is not None and g[0] == "remote" and g[1][:1] == ["set-branches"]:
         return True
-    if g is not None and g[0] == "branch":
-        return any(
-            a.startswith(("--set-upstream", "--track"))
-            or (a.startswith("-") and not a.startswith("--") and ("u" in a[1:] or "t" in a[1:]))
-            for a in g[1]
-        )
     if g is None or g[0] != "config":
         return False
     positionals, opts, skip = [], [], False
@@ -2071,10 +2069,21 @@ BRANCH_CREATE_VALUE_OPTS = {
 
 
 def creates_with_upstream(sub: str, args: list[str], directory: str) -> bool:
-    """Does this `git checkout`/`switch`/`worktree add` write a new branch's upstream (`branch.<b>.merge`), which
-    push.default=upstream pushes to? `-t`/`--track` (alone or in a short cluster: `-qt`), or a new branch (`-b`,
-    `-B`, `-c`, `-C`) from a remote-tracking start point (branch.autoSetupMerge's default), unless `--no-track`
-    (TASK-067 final review gate: `git checkout -b x -t origin/dev && git push`)."""
+    """Does this `git checkout`/`switch`/`worktree add`/`branch` write a branch's upstream (`branch.<b>.merge`),
+    which push.default=upstream pushes to? `-t`/`--track` (alone or in a short cluster: `-qt`), or a new branch
+    (`-b`, `-B`, `-c`, `-C`) from a remote-tracking start point (branch.autoSetupMerge's default), unless
+    `--no-track` (TASK-067 final review gate: `git checkout -b x -t origin/dev && git push`); for `branch`,
+    `-u`/`--set-upstream-to`/`-t`/`--track` (review gate round 3). A later push in the same command is refused
+    for it, and enforce-pr-workflow refuses a pull, merge, reset or rebase of the branch a `branch -u` set the
+    upstream of, when it is main/dev (`branch_upstream_target`);
+    `git branch --set-upstream-to=origin/x && git pull` on a feature branch, git's own advice, is not refused
+    (TASK-285)."""
+    if sub == "branch":
+        return any(
+            a.startswith(("--set-upstream", "--track"))
+            or (a.startswith("-") and not a.startswith("--") and ("u" in a[1:] or "t" in a[1:]))
+            for a in args
+        )
     if sub == "worktree":
         if args[:1] != ["add"]:
             return False
@@ -2113,6 +2122,27 @@ def creates_with_upstream(sub: str, args: list[str], directory: str) -> bool:
         or git(directory, "rev-parse", "--verify", "--quiet", f"refs/remotes/{p}") != ""
         for p in start
     )
+
+
+def branch_upstream_target(args: list[str]) -> str | None:
+    """The existing branch whose upstream `git branch -u/--set-upstream-to <upstream> [<branch>]` sets: the named
+    one, or None for the checked-out branch (`HEAD` and `@` too); '' for any other `git branch` (`-t <new>` starts a new branch, which
+    is no protected branch moved to another upstream: TASK-285 review)."""
+    if not any(
+        a.startswith("--set-upstream") or (a[:1] == "-" and a[1:2] != "-" and "u" in a[1:]) for a in args
+    ):
+        return ""
+    positionals, skip = [], False
+    for a in args:
+        if skip:
+            skip = False
+        elif a in ("-u", "--set-upstream-to") or (
+            a[:1] == "-" and a[1:2] != "-" and a.endswith("u") and "u" not in a[1:-1]
+        ):
+            skip = True  # its value is the upstream, not the branch
+        elif not a.startswith("-"):
+            positionals.append(a)
+    return positionals[0] if positionals and positionals[0] not in ("HEAD", "@") else None
 
 
 def _context(argv: Argv, state: dict) -> Argv:
@@ -2321,9 +2351,9 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
                 if g is not None and g[0] == "push" and state.get("upstream_written"):
                     # push.default=upstream pushes to the upstream an earlier command wrote (TASK-067 final review)
                     raise FailClosed(
-                        "an earlier checkout/switch/worktree add in this command sets an upstream"
+                        "an earlier branch -u/checkout/switch/worktree add in this command sets an upstream"
                     )
-                if g is not None and g[0] in ("checkout", "switch", "worktree"):
+                if g is not None and g[0] in ("checkout", "switch", "worktree", "branch"):
                     state["upstream_written"] = state.get("upstream_written") or creates_with_upstream(*g)
                 yield _context(expanded, state), d, redirects
             continue
@@ -2586,6 +2616,24 @@ def opt_value(args: list[str], *names: str) -> str | None:
     return vals[0] if vals else None
 
 
+# `git push` options whose value is the next word (so it is no remote or refspec)
+PUSH_VALUE_OPTS = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
+
+
+def push_positionals(args: list[str]) -> list[str]:
+    """The remote and refspecs of `git push <args>`: its words that aren't options or an option's value (`git push
+    -o ci.skip origin` names no refspec; both gates read it so, TASK-285)."""
+    pos, skip = [], False
+    for a in args:
+        if skip:
+            skip = False
+        elif a in PUSH_VALUE_OPTS:
+            skip = True
+        elif not a.startswith("-"):
+            pos.append(a)
+    return pos
+
+
 def git(directory: str, *args: str) -> str:
     """Run git in `directory`; return stripped stdout, or '' on any failure."""
     try:
@@ -2596,7 +2644,7 @@ def git(directory: str, *args: str) -> str:
 
 
 # The config a refspec-less `git push` reads to choose what it sends and where
-PUSH_CONFIG = r"^(remote\..*\.(push|mirror)|push\.(default|followtags)|remote\.pushdefault)$"
+PUSH_CONFIG = r"^(remote\..*\.(push|mirror)|push\.default|remote\.pushdefault)$"
 
 
 def push_config(argv: list[str], directory: str) -> dict[str, str]:
@@ -2607,13 +2655,17 @@ def push_config(argv: list[str], directory: str) -> dict[str, str]:
     (TASK-067 review gate: `git config remote.origin.push x:refs/heads/dev`, then `git push origin`). Config
     this can't read (GIT_COMMON_DIR, GIT_CONFIG_*, …) is `git_config_opaque`, which the gates refuse first.
     Read with `-z` (records end in NUL, the key ends at the first newline): a value may hold a newline and a remote
-    name a space, so splitting lines on the first space let a value forge a key, or hid a remote's key (TASK-282)."""
+    name a space, so splitting lines on the first space let a value forge a key, or hid a remote's key (TASK-282).
+    A `remote.<name>.push` set more than once (git pushes every refspec) is its values joined by newlines, so a
+    later `HEAD` can't hide an earlier refspec (TASK-285); any other key keeps its last value, as git reads it."""
     _, eff, _, gitdir, _ = _git_options(argv, directory)
     out = git(eff, *(["--git-dir", gitdir] if gitdir else []), "config", "-z", "--get-regexp", PUSH_CONFIG)
     found = {}
     for record in out.split("\0"):
         if record:
             key, _, value = record.partition("\n")
+            if key in found and key.endswith(".push"):
+                value = f"{found[key]}\n{value}"
             found[key] = value
     return found
 
@@ -2627,7 +2679,7 @@ GIT_FALSE = re.compile(r"false|no|off|[ \t\n\v\f\r]*[+-]?(?:0x0+|0+)[kmg]?")
 def git_bool(value: str) -> bool:
     """git's reading of a boolean config value, failing toward true: false only for what git reads as false.
     `1k`, `0x1` and `+1` are true to git, so reading only digits as a number under-read them and let a
-    `remote.<name>.mirror` or `push.followTags` push through unreviewed (TASK-282). '' is true: `push_config`
+    `remote.<name>.mirror` push through unreviewed (TASK-282). '' is true: `push_config`
     gives '' for a key with no value (true to git) and for one set to '' (false to git), and reading both as true
     only ever refuses. Nothing is stripped, and a non-ASCII value is true: Python's `strip()` and `lower()` would
     turn ' false', '0 ' and '0' + KELVIN SIGN, which git refuses, into false."""
@@ -2638,11 +2690,14 @@ def git_bool(value: str) -> bool:
 
 def push_config_risk(config: dict[str, str]) -> str | None:
     """The key of `push_config` that makes a refspec-less push send more than the current branch to its own
-    name: `remote.<name>.push` (any refspec), `remote.<name>.mirror` true, or `push.default=matching`."""
+    name: `remote.<name>.push` (any refspec but `HEAD`, a common way to push the current branch to its own name,
+    which the gates then read as they read `git push <remote> HEAD`: TASK-285), `remote.<name>.mirror` true, or
+    `push.default=matching`."""
     for key, value in config.items():
-        if re.fullmatch(r"remote\..+\.push", key) or (
-            re.fullmatch(r"remote\..+\.mirror", key) and git_bool(value)
-        ):
+        if (
+            re.fullmatch(r"remote\..+\.push", key)
+            and not all(re.fullmatch(r"\+?HEAD", v) for v in value.split("\n"))
+        ) or (re.fullmatch(r"remote\..+\.mirror", key) and git_bool(value)):
             return key
         if key == "push.default" and value.strip().lower() == "matching":
             return key

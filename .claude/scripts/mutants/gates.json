@@ -229,7 +229,7 @@
  },
  {
   "label": "-o value not skipped",
-  "file": ".claude/hooks/require-review.sh",
+  "file": ".claude/hooks/lib/cmdparse.py",
   "old": "PUSH_VALUE_OPTS = {\"-o\", ",
   "new": "PUSH_VALUE_OPTS = {"
  },
@@ -1732,8 +1732,8 @@
  {
   "label": "PR gate: ambiguous option / unreadable alias not refused",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "    except FailClosed:\n        return \"unreadable\"",
-  "new": "    except FailClosed:\n        return \"parse-fail\""
+  "old": "    except FailClosed as exc:\n        # an ambiguous",
+  "new": "    except FailClosed as exc:\n        return \"parse-fail\"\n        # an ambiguous"
  },
  {
   "label": "PR gate: git branch not gated",
@@ -1890,12 +1890,6 @@
   "file": ".claude/hooks/require-review.sh",
   "old": "remote\\..+\\.push|remote\\..+\\.mirror|push\\.default",
   "new": "remote\\..+\\.push|push\\.default"
- },
- {
-  "label": "require-review: -c push.followTags not a push target",
-  "file": ".claude/hooks/require-review.sh",
-  "old": "|push\\.followtags\")",
-  "new": "\")"
  },
  {
   "label": "require-review: refspec-less push under unreadable config allowed",
@@ -2148,8 +2142,8 @@
  {
   "label": "cmdparse: repo remote.<name>.push not a risk",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        if re.fullmatch(r\"remote\\..+\\.push\", key) or (",
-  "new": "        if ("
+  "old": "            re.fullmatch(r\"remote\\..+\\.push\", key)\n            and not all(",
+  "new": "            False\n            and not all("
  },
  {
   "label": "cmdparse: repo mirror=false read as a mirror",
@@ -2280,14 +2274,92 @@
  {
   "label": "require-review: repo push config not read",
   "file": ".claude/hooks/require-review.sh",
-  "old": "                    or push_config_risk(repo_cfg) or git_bool(",
-  "new": "                    or git_bool("
+  "old": "                        or push_config_risk(push_config(argv, d))):",
+  "new": "                        or False):"
  },
  {
-  "label": "require-review: repo push.followTags not read",
-  "file": ".claude/hooks/require-review.sh",
-  "old": " or git_bool(repo_cfg.get(\"push.followtags\", \"false\"))):",
-  "new": "):"
+  "label": "cmdparse: a remote.<name>.push HEAD hides another value",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "and not all(re.fullmatch(r\"\\+?HEAD\", v) for v",
+  "new": "and not any(re.fullmatch(r\"\\+?HEAD\", v) for v"
+ },
+ {
+  "label": "cmdparse: push_config keeps only the last remote.<name>.push",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if key in found and key.endswith(\".push\"):\n",
+  "new": "            if False:\n"
+ },
+ {
+  "label": "cmdparse: git branch -u not checked for an upstream",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(\"checkout\", \"switch\", \"worktree\", \"branch\")",
+  "new": "(\"checkout\", \"switch\", \"worktree\")"
+ },
+ {
+  "label": "enforce: push --branches not refused",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "(\"--mirror\", \"--all\", \"--branches\")",
+  "new": "(\"--mirror\", \"--all\")"
+ },
+ {
+  "label": "enforce: a push option's value read as the remote",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    positionals = push_positionals(args)  #",
+  "new": "    positionals = [a for a in args if not a.startswith(\"-\")]  #"
+ },
+ {
+  "label": "enforce: a sync on main/dev after an upstream write allowed",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if on_protected and sub in (\"pull\", \"merge\", \"reset\", \"rebase\") and (",
+  "new": "    if False and ("
+ },
+ {
+  "label": "cmdparse: branch -u names no branch",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    return positionals[0] if positionals and positionals[0] not in (\"HEAD\", \"@\") else None\n",
+  "new": "    return None\n"
+ },
+ {
+  "label": "enforce: branch -u targets the hook-time branch, not the one checked out then",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        upstream_set.add((key, target or branch))",
+  "new": "        upstream_set.add((key, target or get_branch(effective_dir, gitdir)))"
+ },
+ {
+  "label": "enforce: an upstream write for another branch refuses a sync",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        (key, branch) in upstream_set or (key, UNKNOWN) in upstream_set",
+  "new": "        upstream_set"
+ },
+ {
+  "label": "cmdparse: branch -u @ read as a branch named @",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": " and positionals[0] not in (\"HEAD\", \"@\") else None",
+  "new": " and positionals[0] != \"HEAD\" else None"
+ },
+ {
+  "label": "cmdparse: branch -u HEAD read as a branch named HEAD",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": " and positionals[0] not in (\"HEAD\", \"@\") else None",
+  "new": " and positionals[0] != \"@\" else None"
+ },
+ {
+  "label": "cmdparse: an attached -u value ending in u read as a bare -u",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": " and a.endswith(\"u\") and \"u\" not in a[1:-1]",
+  "new": " and a.endswith(\"u\")"
+ },
+ {
+  "label": "cmdparse: push.followTags read as a push key again",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "push\\.default|remote\\.pushdefault\"\n    r\"|branch",
+  "new": "push\\.(default|followtags)|remote\\.pushdefault\"\n    r\"|branch"
+ },
+ {
+  "label": "enforce: the unreadable verdict's case arm doesn't match",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "  unreadable:*)",
+  "new": "  unreadable)"
  },
  {
   "label": "require-review: matching refspec ':' allowed",
@@ -2710,10 +2782,10 @@
   "new": "g[1][:1] == [\"set-branches\"]:\n        return False"
  },
  {
-  "label": "cmdparse: git branch -u not a config write",
+  "label": "cmdparse: git branch -u not an upstream write",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    if g is not None and g[0] == \"branch\":\n        return any(",
-  "new": "    if g is not None and g[0] == \"branch\":\n        return False and any("
+  "old": "    if sub == \"branch\":\n        return any(",
+  "new": "    if sub == \"branch\":\n        return False and any("
  },
  {
   "label": "cmdparse: branch.<b>.merge not a key that steers git",
