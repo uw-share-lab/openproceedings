@@ -695,6 +695,7 @@ check dev allow 'git -C /tmp branch -u origin/feature/x && git pull'            
 check feature/x block 'git checkout dev && git branch -u origin/feature/x && git pull'   # dev's, set after the checkout
 check dev allow 'git checkout feature/x && git branch -u origin/feature/x && git checkout dev && git pull'
 check dev block 'git branch -u origin/feature/x HEAD && git pull'                    # HEAD is dev
+check dev allow 'git branch -uorigin/menu feature/x && git pull'                    # -u's attached value
 check feature/x allow 'git config push.followTags true && git push origin feature/x'   # owner, 2026-10-28
 check feature/x block 'git config branch.feature/x.merge refs/heads/dev && git push origin'
 git -C "$REPO" config --unset push.default

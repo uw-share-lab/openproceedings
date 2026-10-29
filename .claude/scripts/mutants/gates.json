@@ -2338,6 +2338,12 @@
   "new": " else None"
  },
  {
+  "label": "cmdparse: an attached -u value ending in u read as a bare -u",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": " and a.endswith(\"u\") and \"u\" not in a[1:-1]",
+  "new": " and a.endswith(\"u\")"
+ },
+ {
   "label": "cmdparse: push.followTags read as a push key again",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "push\\.default|remote\\.pushdefault\"\n    r\"|branch",
