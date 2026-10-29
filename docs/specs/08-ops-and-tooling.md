@@ -238,7 +238,9 @@ v0.4.1 (Dependabot's PR #162 moved the tag alone, so it was remade by hand with 
 0.13.1 → 0.13.4 by hand on 2026-10-21, under a day after its release, by the owner's explicit waiver of the 7-day age
 for this pin, since 0.13.4 is a security release (GHSA-hq85-5cpj-mr62: uv's bundled root certificates; the digest and its
 astral-sh attestation verified; TASK-277; #162 had been moved to 0.13.4 before it
-closed, so no Dependabot PR was open for it). **The api image's uv and CI's move together** (owner decision 2026-10-17,
+closed, so no Dependabot PR was open for it); 0.13.4 → 0.13.5 by hand on 2026-10-29, at 7.8 days, for Dependabot's
+PR #199, which moved the tag alone and was closed (the digest and its astral-sh attestation verified; 0.13.6, two days
+old, waits). **The api image's uv and CI's move together** (owner decision 2026-10-17,
 TASK-252): every `astral-sh/setup-uv` step under `.github/` names that release (`with: { version: "X.Y.Z" }`), so CI
 runs the reviewed uv under the same 7-day hold instead of setup-uv's newest (on 2026-10-16 CI ran uv 0.13.1, two
 days old, while the image pinned 0.13.0), and `check_uv_pin.py` (in `make tooling`, so in `claude-tooling`) fails
