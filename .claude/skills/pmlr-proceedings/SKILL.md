@@ -1,6 +1,6 @@
 ---
 name: pmlr-proceedings
-description: The PMLR (proceedings.mlr.press) source for ICML and FAccT 2018 (v81) — the volume table (ingest/pmlr_volumes.toml, loaded and checked by ingest/volumes.py, which derives `ICML_PMLR_VOLUMES` and the venue-tagged `PMLR_NATIVE_VOLUMES`), `not_papers` and the non-ICML count stop, the known ICML volumes 2013–2025, competition and workshop volumes, page structure and parsing gotchas, the miner (ingest/sources/pmlr.py, `op ingest pmlr`), and why an unfamiliar volume is never coerced into ICML. Use when writing or reviewing the PMLR miner, editing the volume table, or adding an ICML year.
+description: The PMLR (proceedings.mlr.press) source for ICML and FAccT 2018 (v81) — the volume table (ingest/pmlr_volumes.toml, loaded and checked by ingest/volumes.py, which derives `ICML_PMLR_VOLUMES` and the venue-tagged `PMLR_NATIVE_VOLUMES`), `not_papers` and the non-ICML count stop, the known ICML volumes 2013–2026, competition and workshop volumes, page structure and parsing gotchas, the miner (ingest/sources/pmlr.py, `op ingest pmlr`), and why an unfamiliar volume is never coerced into ICML. Use when writing or reviewing the PMLR miner, editing the volume table, or adding an ICML year.
 ---
 
 # PMLR proceedings (spec 01 §Sources)
@@ -41,7 +41,7 @@ title; the paper count is the number of `<div class="paper">` entries (evidence:
 | v202 | ICML | 2023 | `main` | confirm | 1,828 (= OpenReview accepted) |
 | v235 | ICML | 2024 | `unknown` | confirm | 2,610 (= OpenReview, position papers included and unmarked) |
 | v267 | ICML | 2025 | `unknown` | confirm | 3,330 (= OpenReview 3,257 main + 73 position) |
-| – | ICML | 2026 | – | – | not on PMLR on 2026-09-27: add the row when its index page appears |
+| v306 | ICML | 2026 | `unknown` | confirm | 6,552 (= the fact sheet's main + position total; by OpenReview venueid 6,340 main + 212 position; verified 2026-10-28, TASK-191; not v308, the AAAI NeuroAI workshop) |
 | v123 | NeurIPS | 2019 | `competition` | out_of_scope | 23 (Competition and Demonstration Track) |
 | v133 | NeurIPS | 2020 | `competition` | out_of_scope | 20 |
 | v176 | NeurIPS | 2021 | `competition` | out_of_scope | 36 (sections "Competitions", "Demonstrations") |
@@ -60,10 +60,10 @@ v226, v239, v262; the table gives them no year, since the research run didn't re
 `out_of_scope` rows in the table. v28 and v32 split their papers into "Cycle 1/2/3 Papers" sections, which are not
 tracks.
 
-**Position papers:** no ICML volume marks them (v235 and v267 have no section headings), so the track
+**Position papers:** no ICML volume marks them (v235, v267 and v306 have no section headings), so the track
 comes from OpenReview (`ICML.cc/2025/Position_Paper_Track`), and PMLR only confirms acceptance. ICML 2024's
 position papers aren't marked on OpenReview either (they carry `ICML.cc/2024/Conference`).
-Paper entries in the recorded v202, v235 and v267 indexes link the OpenReview forum
+Paper entries in the recorded v202, v235, v267 and v306 indexes link the OpenReview forum
 (`openreview.net/forum?id=…`): dedup's forum link joins PMLR and OpenReview on that id for 2023+, before
 and whatever the title (TASK-105, `dedup-rules`). The recorded v28 paper page has no forum link and pins
 the older per-paper shape. Exactly one distinct forum id is required: repeated copies of the same id
@@ -72,7 +72,7 @@ with either paper.
 
 ## Page structure
 - Volume index: `https://proceedings.mlr.press/v<N>/`. Its heading reads `Volume N: <proceedings title>`.
-  Some volumes use `<h1>`, others `<h2>` (every ICML volume v28–v267 uses `<h2>`); take the first of
+  Some volumes use `<h1>`, others `<h2>` (every ICML volume v28–v306 uses `<h2>`); take the first of
   either and strip the `Volume N: ` prefix. The PMLR index (`https://proceedings.mlr.press/`) lists every
   volume as `<li><a href="vN"><b>Volume N</b></a> <title></li>` (326 on 2026-09-27).
 - Per-paper pages: `https://proceedings.mlr.press/v<N>/<key>.html` with a PDF beside it; the abstract is
@@ -105,7 +105,7 @@ with either paper.
 `backend/src/openproceedings/ingest/sources/pmlr.py`, run by `op ingest pmlr [--venue ICML|FAccT] --year <Y>` (the year's
 ingested ICML (or, with `--venue FAccT`, FAccT 2018's) volume from the table; `--dry-run`, `--offline`, `--refresh`, `--delay`), cache under
 `<data-dir>/cache/pmlr/`. Per entry (`<div class="paper">`): title (`<p class="title">`), authors, the
-`abs` page URL (the native key), the PDF (not `-supp.pdf`) and a v202/v235/v267-style OpenReview forum link
+`abs` page URL (the native key), the PDF (not `-supp.pdf`) and a v202/v235/v267/v306-style OpenReview forum link
 (`urls.forum`). Per paper page: `citation_title` (the abstract is taken only when it is the listed title,
 tolerating a leading `$…$`), `citation_author`, `div#abstract`, `citation_pdf_url`. Claims (source `pmlr`):
 venue, year and track with the table row as evidence (`volume table v28 (primary, verified 2026-09-27)`),

@@ -1,6 +1,6 @@
 """A small corpus for the OpenAlex fidelity audit (`op eval openalex`), built from claims through `dedup.resolve` as
 the snapshot's records are. Synthetic text (decision-004). The audited venue-years (FAccT 2022/2025/2026, AIES
-2024-2025, AAAI 2010+) hold official abstracts and DOIs; the rest are records the sample must leave out: another
+2024-2026, AAAI 2010+) hold official abstracts and DOIs; the rest are records the sample must leave out: another
 FAccT year, a record with no DOI, a record with no abstract, and AAAI 1980-2008 dblp records with no DOI (the title
 route's)."""
 
@@ -56,7 +56,7 @@ def dblp(year: int, key: str, title: str, authors: tuple[str, ...]) -> PaperReco
 
 def records() -> list[PaperRecord]:
     out = [acm("FAccT", y, 3500 + i) for y in (2022, 2025, 2026) for i in range(2)]
-    out += [ojs("AIES", y, 100 * y + i) for y in (2024, 2025) for i in range(2)]
+    out += [ojs("AIES", y, 100 * y + i) for y in (2024, 2025, 2026) for i in range(2)]
     out += [ojs("AAAI", 2010 + i % 15, 1000 + i) for i in range(12)]
     out += [
         acm("FAccT", 2023, 3600),  # not an audited year

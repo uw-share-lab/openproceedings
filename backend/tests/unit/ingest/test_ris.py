@@ -361,6 +361,7 @@ def test_icml_volumes_with_position_papers_give_unknown_track(
         202: (2023, "main"),
         235: (2024, "unknown"),
         267: (2025, "unknown"),
+        306: (2026, "unknown"),  # TASK-191
     }
     with caplog.at_level(logging.WARNING, logger="openproceedings.ingest.ris"):
         by_id, report = run(tmp_path, pmlr_urls("https://proceedings.mlr.press/v235/smith24a.html"))

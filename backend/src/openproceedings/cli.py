@@ -1301,6 +1301,8 @@ def _eval_openalex(ns: argparse.Namespace) -> int:
         "title_attached": title.attached if title else 0,
         "title_wrong": sum(a.verdict == "wrong" for a in title.sampled) if title else 0,
         "library_compared": result.library.compared if result.library else 0,
+        "library_differs": len(result.library.differs) if result.library else 0,
+        "library_wrong": sum(a.verdict == "wrong" for a in result.library.authors) if result.library else 0,
         "requests": fetcher.stats.network, "cached": fetcher.stats.cached, "replaced": replaced,
         "ms": elapsed_ms(started),
     })  # fmt: skip

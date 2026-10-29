@@ -256,10 +256,10 @@ OFFICIAL_ACCEPTED: OfficialTable = {
         date(2026, 9, 27),
     ),
     ("ICML", 2026, "main"): OfficialCount(
-        6341,
-        "papers on the ICML 2026 virtual-site paper list that link an OpenReview forum (6,554 of its 6,628 posters; the 74 TMLR/JMLR journal-track posters excluded) and are not among the 213 on the site's position-papers listing; both lists counted entry by entry",
-        "https://icml.cc/static/virtual/data/icml-2026-orals-posters.json and https://icml.cc/virtual/2026/events/2026-position-papers",
-        date(2026, 10, 5),
+        6340,
+        "papers in PMLR volume 306 (6,552, every published paper of main and position together, equal to the fact sheet's accepted total) that are not on the conference's position-papers listing (213 listed, 212 of them in v306); both counted entry by entry",
+        "https://proceedings.mlr.press/v306/ and https://icml.cc/virtual/2026/events/2026-position-papers",
+        date(2026, 10, 28),
     ),
     ("NeurIPS", 1987, "main"): OfficialCount(
         90,

@@ -65,6 +65,8 @@ FORMS = [
     # TASK-178, from the 2026 crawl cache: an opt-in public rejection and an undecided workshop submission
     ("icml-2026/notes-rejected.json", "ICML", 2026, "main", "rejected"),
     ("icml-2026/notes-workshop-submission.json", "ICML", 2026, "workshop", "unknown"),
+    # TASK-191: a venue one level under a group that is no venue (`Workshop/Re-Align/Research`)
+    ("iclr-2026/notes-workshop-sub-venue.json", "ICLR", 2026, "workshop", "accepted"),
 ]
 # classify.py's mapping of these is TASK-094's (position / competition); the crawler must just follow it
 DELEGATED = [
@@ -86,6 +88,8 @@ LIVE_COVERAGE_FIXTURES = {
     "neurips-2026/notes-accepted.json": None,
     "icml-2026/groups-parent.json": "ICML.cc/2026",
     "icml-2026/notes-accepted.json": None,
+    "iclr-2026/groups-parent-re-align.json": "ICLR.cc/2026/Workshop/Re-Align",  # TASK-191
+    "iclr-2026/notes-workshop-sub-venue.json": None,
 }
 
 
@@ -593,6 +597,71 @@ def test_a_crawl_finds_every_venue_group_and_lists_every_status_venueid(tmp_path
     assert report.to_manifest()["crawl_window"]["from"] <= report.to_manifest()["crawl_window"]["to"]
 
 
+def test_venues_one_level_under_a_group_that_is_no_venue_are_crawled(tmp_path: Path) -> None:
+    """TASK-191: ICLR 2026's `Workshop/Re-Align` is a placeholder group (domain `OpenReview.net`, no content)
+    whose children `/Research` and `/Challenge` are the venues; the crawl once skipped it and lost their 72
+    papers. Its children are listed once; a child that is no venue is reported, and nothing deeper is listed."""
+    server = world()
+    holder = "ICLR.cc/2024/Workshop/Re-Align"
+    research, challenge, committee = f"{holder}/Research", f"{holder}/Challenge", f"{holder}/Organizers"
+    server.children["ICLR.cc/2024/Workshop"].append(holder)
+    server.children[holder] = [research, challenge, committee]
+    server.children[research] = [f"{research}/Reviewers_All_Completed"]
+    server.groups[holder] = {"id": holder, "domain": "OpenReview.net", "readers": ["everyone"], "content": {}}
+    server.groups.update({g: group_doc(g) for g in (research, challenge)})
+    server.groups[committee] = group_doc(committee, domain=research)
+    ws = recorded_note("iclr-2025/notes-workshop-rejected.json")
+    server.notes[research] = [clone(ws, "ResearchNote", 1, research)]
+    server.notes[f"{challenge}/Rejected_Submission"] = [
+        clone(ws, "ChallengeNote", 2, f"{challenge}/Rejected_Submission")
+    ]
+    result = orv.crawl(client(tmp_path, server), "ICLR", 2024)
+    report = result.report
+    assert {research, challenge} <= set(report.groups) and holder not in report.groups
+    assert report.skipped_groups == {"ICLR.cc/2024/Workshop_Proposals": "proposal",
+                                     "ICLR.cc/2024/Program_Chairs": "not_a_v2_venue",
+                                     holder: "container", committee: "not_a_v2_venue"}  # fmt: skip
+    by_id = {r.id: r for r in result.records}
+    assert (by_id["op:iclr:2024:ResearchNote"].track, by_id["op:iclr:2024:ResearchNote"].status) == (
+        "workshop", "accepted",
+    )  # fmt: skip
+    assert by_id["op:iclr:2024:ChallengeNote"].status == "rejected"
+    listed = {parse_qs(urlsplit(u).query).get("parent", [""])[0] for u in server.gets() if "/groups?" in u}
+    assert holder in listed and research not in listed  # one level down, never deeper
+
+
+def test_the_recorded_re_align_placeholder_and_its_children_crawl_as_workshop_venues(tmp_path: Path) -> None:
+    """The live shapes (TASK-191, 2026-10-28): the placeholder group as recorded, its recorded `?parent=` listing
+    and a recorded Research note."""
+    holder = "ICLR.cc/2026/Workshop/Re-Align"
+    [placeholder] = recorded("iclr-2026/group-re-align.json")["response"]["json"]["groups"]
+    children = recorded("iclr-2026/groups-parent-re-align.json")["response"]["json"]["groups"]
+    note = recorded_note("iclr-2026/notes-workshop-sub-venue.json")
+    server = FakeOpenReview(
+        children={"ICLR.cc/2026": ["ICLR.cc/2026/Workshop"], "ICLR.cc/2026/Workshop": [holder],
+                  holder: [g["id"] for g in children]},
+        groups={holder: placeholder} | {g["id"]: g for g in children},
+        notes={f"{holder}/Research": [note]},
+    )  # fmt: skip
+    result = orv.crawl(client(tmp_path, server), "ICLR", 2026)
+    assert result.report.groups == [f"{holder}/Challenge", f"{holder}/Research"]
+    assert result.report.skipped_groups == {holder: "container"}
+    [record] = result.records
+    assert (record.id, record.track, record.status) == (f"op:iclr:2026:{note['id']}", "workshop", "accepted")
+
+
+def test_a_group_that_is_no_venue_and_holds_none_stays_not_a_v2_venue(tmp_path: Path) -> None:
+    server = world()
+    server.children["ICLR.cc/2024/Program_Chairs"] = ["ICLR.cc/2024/Program_Chairs/Members"]
+    server.groups["ICLR.cc/2024/Program_Chairs/Members"] = group_doc(
+        "ICLR.cc/2024/Program_Chairs/Members", domain=CONF
+    )
+    report = orv.crawl(client(tmp_path, server), "ICLR", 2024).report
+    assert report.skipped_groups["ICLR.cc/2024/Program_Chairs"] == "not_a_v2_venue"
+    assert report.skipped_groups["ICLR.cc/2024/Program_Chairs/Members"] == "not_a_v2_venue"
+    assert report.groups == [CONF, "ICLR.cc/2024/TinyPapers", "ICLR.cc/2024/Workshop/ICBINB"]
+
+
 def test_per_note_anomalies_are_debug_and_the_crawl_has_one_attention_warning(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -922,6 +991,26 @@ def test_a_dry_run_lists_what_it_would_fetch_and_writes_nothing(tmp_path: Path) 
         "&limit=1000&offset=0&sort=number%3Aasc",
     ]
     assert report.track_status["main"] == {"accepted": 3, "withdrawn": 1, "desk_rejected": 1}
+
+
+def test_a_dry_run_keeps_the_cached_children_of_a_group_that_is_no_venue(tmp_path: Path) -> None:
+    """TASK-191 review: one uncached child is a `would_fetch`, and the venues among the other children still count."""
+    server = world()
+    holder = "ICLR.cc/2024/Workshop/Re-Align"
+    cached, uncached = f"{holder}/Challenge", f"{holder}/Research"
+    server.children["ICLR.cc/2024/Workshop"].append(holder)
+    server.children[holder] = [cached, uncached]
+    server.groups[holder] = {"id": holder, "domain": "OpenReview.net", "readers": ["everyone"], "content": {}}
+    server.groups.update({g: group_doc(g) for g in (cached, uncached)})
+    orv.crawl(client(tmp_path, server), "ICLR", 2024)
+    gone = f"https://api2.openreview.net/groups?id={uncached}"
+    for p in orv.http_dir(tmp_path).rglob("*.json"):
+        if json.loads(p.read_text())["key"] == gone:
+            p.unlink()
+    report = orv.crawl(client(tmp_path, FakeOpenReview(), credentials=None, offline=True), "ICLR", 2024,
+                       dry_run=True).report  # fmt: skip
+    assert cached in report.groups and uncached not in report.groups
+    assert report.skipped_groups[holder] == "container" and gone in report.to_manifest()["would_fetch"]
 
 
 def test_a_dry_run_needs_an_offline_client(tmp_path: Path) -> None:

@@ -1,0 +1,85 @@
+{
+ "_recorded": {
+  "date": "2026-10-28",
+  "run": "TASK-191 authenticated live crawl cache (public projection), fetched 2026-10-28 UTC",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing page trimmed from 67 to 1 notes (order kept; `count` is the page's)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICLR.cc/2026/Workshop/Re-Align/Research&limit=1000&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "285",
+   "ratelimit-reset": "2978"
+  },
+  "json": {
+   "count": 67,
+   "notes": [
+    {
+     "content": {
+      "Domain": {
+       "value": "Synthetic domain text 1."
+      },
+      "Presenter": {
+       "value": "~Synthetic_Person2"
+      },
+      "Track": {
+       "value": "Synthetic track text 3."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 4."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 5."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person6",
+        "~Synthetic_Person7"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 8",
+        "Synthetic Author 9"
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_10"
+      },
+      "pdf": {
+       "value": "/pdf/4d273355b070a4738566a534b851efd29b248166.pdf"
+      },
+      "title": {
+       "value": "Synthetic title text 11."
+      },
+      "venue": {
+       "value": "ICLR 2026 Re-Align Workshop"
+      },
+      "venueid": {
+       "value": "ICLR.cc/2026/Workshop/Re-Align/Research"
+      }
+     },
+     "forum": "TuuyJZrDm5",
+     "id": "TuuyJZrDm5",
+     "invitations": [
+      "ICLR.cc/2026/Workshop/Re-Align/Research/-/Submission",
+      "ICLR.cc/2026/Workshop/Re-Align/Research/-/Post_Submission",
+      "ICLR.cc/2026/Workshop/Re-Align/Research/-/Edit",
+      "ICLR.cc/2026/Workshop/Re-Align/Research/Submission123/-/Camera-Ready_Revision"
+     ],
+     "number": 123,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

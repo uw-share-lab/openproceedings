@@ -5,8 +5,8 @@ Status: **draft for review** · 2026-09-25 · SHARE Lab, University of Waterloo
 ## Why this exists
 
 Systematic reviews of ML research need a search they can *report*: a query string, a date, and a hit
-count that anyone can re-run. Google Scholar can't give that for these venues (NeurIPS, ICLR and ICML, with AAAI, AIES and IASEAI added by
-decision-049 and FAccT planned):
+count that anyone can re-run. Google Scholar can't give that for these venues (NeurIPS, ICLR and ICML,
+with AAAI, AIES, FAccT and IASEAI added by decision-049):
 
 | Problem with Scholar | What openproceedings does instead |
 |---|---|
