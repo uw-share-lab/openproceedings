@@ -1,10 +1,10 @@
 ---
 id: TASK-285
 title: Review how cmdparse reads git config and options (accident scope)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-26 20:37'
-updated_date: '2026-10-28 20:31'
+updated_date: '2026-10-29 13:24'
 labels:
   - tooling
   - hooks
@@ -42,4 +42,12 @@ Fixed (each with case-table rows and mutants in gates.json):
 Declined (rejected: deliberate evasion, out of the hooks' scope): -c branch.<b>.merge=... with push.default=upstream; a remote.<r>.push mapping feat to dev then 'git push origin feat'; -d bundled in a short cluster (-fd); --recurse-submodules check as a separate word; --attr-source as a global option; a commit message that is an ambiguous long-option prefix; HOME=/GIT_CONFIG_GLOBAL= before a refspec-less push (already refused).
 
 Verification: make mutate-changed (--jobs 4) on 4a23eb6f: 864 mutants, 0 problems. After the followTags change only the case tables, make tooling (incl. mutate --check) and make lint were rerun, per the owner; the nightly mutation shards cover every mutant.
+
+Code review (2026-10-28): after a branch -u, enforce allowed a pull / merge --ff-only / reset --hard @{u} on main/dev that syncs it to the new upstream; now refused there via Argv.upstream_written (feature branches unaffected). Nits fixed: FailClosed text, PUSH_CONFIG no longer reads push.followtags, the --push-option row, a mutant on enforce's unreadable case arm. Case tables, make tooling and make lint green after these; no mutate re-run (owner: the nightly shards cover every mutant).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Reviewed how cmdparse and the gates read git config and push options, held to the accident scope. Fixed: push --branches refused like --all; push option values no longer read as the remote; branch -u steers only a later push or a protected-branch sync, so 'git branch -u … && git pull' on a feature branch is allowed; remote.<r>.push=HEAD read as 'git push <remote> HEAD' (every value of a repeated key counts); push.followTags no longer refused (owner decision 2026-10-28, overriding TASK-067/TASK-282 on this point; git_bool rows moved to remote.origin.mirror); refusal messages name the rule. Evasion-only forms declined in writing. make mutate-changed: 864 mutants, 0 problems on 4a23eb6f.
+<!-- SECTION:FINAL_SUMMARY:END -->
