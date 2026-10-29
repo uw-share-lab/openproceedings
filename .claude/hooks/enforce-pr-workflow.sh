@@ -116,7 +116,8 @@ import json, os, re, shlex, subprocess, sys
 # assignments before `bash -c`, `bash -c`/`eval`, git aliases, and command names by basename (`/usr/bin/git`), case-folded but for builtins (`GIT`: cmdparse.fold).
 sys.path.insert(0, sys.argv[1])
 from cmdparse import (Argv, FailClosed, ParseError, base as _base, fold as _fold, expand_git_alias, expand_word, git as _git,
-                      git_anchored, git_config, git_config_opaque, git_dir, git_subcommand, payload, push_config,
+                      branch_upstream_target, git_anchored, git_config, git_config_opaque, git_dir, git_subcommand,
+                      payload, push_config,
                       push_config_risk, push_positionals, walk, xargs_hides_args)
 
 HOOK_CWD = sys.argv[2] or os.getcwd()
@@ -284,9 +285,12 @@ def classify(argv, directory, state, tracked):
 
     if xargs_hides_args(argv, effective_dir):
         return "xargs", branch  # it appends refspecs/paths from stdin that this gate cannot see
-    if on_protected and sub in ("pull", "merge", "reset", "rebase") and any(
-        repo_key(wd, wgd) == key and (target or get_branch(wd, wgd)) in (branch, UNKNOWN)
-        for wd, wgd, target in getattr(argv, "upstream_writes", ())
+    upstream_set = state.setdefault("upstream_set", set()) if state is not None else set()
+    if sub == "branch" and (target := branch_upstream_target(args)) != "":
+        # the branch whose upstream this `branch -u` sets: the one named, else the one checked out at this point
+        upstream_set.add((key, target or branch))
+    if on_protected and sub in ("pull", "merge", "reset", "rebase") and (
+        (key, branch) in upstream_set or (key, UNKNOWN) in upstream_set
     ):
         # main/dev is synced to its upstream (a pull, `merge --ff-only`, `reset --hard @{u}`), which an earlier
         # `branch -u` in this command set for it, after this gate read it (TASK-285 review)
@@ -512,7 +516,6 @@ def resolved(argv, directory, env_empty=False):
     words = [r for w in argv[1:] if (r := one(w)) != "" or w == ""]
     out = Argv([argv[0], *words], argv.via_xargs, {n: one(v) for n, v in argv.assigns.items()})
     out.shell_vars, out.olddir, out.dir_unknown = argv.shell_vars, argv.olddir, argv.dir_unknown
-    out.upstream_writes = getattr(argv, "upstream_writes", [])
     return out
 
 
@@ -528,7 +531,6 @@ def git_calls(argv, directory):
             inner = Argv(["git", *([prog[4:]] if prog != "git" else []), *argv[k + 1 :]], argv.via_xargs,
                          argv.assigns)
             inner.shell_vars, inner.olddir, inner.dir_unknown = argv.shell_vars, argv.olddir, argv.dir_unknown
-            inner.upstream_writes = getattr(argv, "upstream_writes", [])
             return expand_git_alias(inner, directory)
     return []
 

@@ -52,7 +52,7 @@ matter to a gate:
     config before it was written; so does a `git push` after a checkout/switch/worktree add that creates a
     branch with an upstream (`-t`, a remote-tracking start point) or a `branch -u`/`-t` (`creates_with_upstream`;
     a pull, merge, reset or rebase of a protected branch after a `branch -u` set its upstream is
-    enforce-pr-workflow's (`Argv.upstream_writes`);
+    enforce-pr-workflow's (`branch_upstream_target`);
     `git branch -u origin/x && git pull` elsewhere is read through, TASK-285);
   * `push_config` reads the repo config a refspec-less push uses, and `push_positionals` a push's remote and
     refspecs (an option's value, `-o ci.skip`, is neither);
@@ -2075,7 +2075,7 @@ def creates_with_upstream(sub: str, args: list[str], directory: str) -> bool:
     `--no-track` (TASK-067 final review gate: `git checkout -b x -t origin/dev && git push`); for `branch`,
     `-u`/`--set-upstream-to`/`-t`/`--track` (review gate round 3). A later push in the same command is refused
     for it, and enforce-pr-workflow refuses a pull, merge, reset or rebase of the branch a `branch -u` set the
-    upstream of, when it is main/dev (`branch_upstream_target`, `Argv.upstream_writes`);
+    upstream of, when it is main/dev (`branch_upstream_target`);
     `git branch --set-upstream-to=origin/x && git pull` on a feature branch, git's own advice, is not refused
     (TASK-285)."""
     if sub == "branch":
@@ -2126,7 +2126,7 @@ def creates_with_upstream(sub: str, args: list[str], directory: str) -> bool:
 
 def branch_upstream_target(args: list[str]) -> str | None:
     """The existing branch whose upstream `git branch -u/--set-upstream-to <upstream> [<branch>]` sets: the named
-    one, or None for the checked-out branch; '' for any other `git branch` (`-t <new>` starts a new branch, which
+    one, or None for the checked-out branch (`HEAD` too); '' for any other `git branch` (`-t <new>` starts a new branch, which
     is no protected branch moved to another upstream: TASK-285 review)."""
     if not any(
         a.startswith("--set-upstream") or (a[:1] == "-" and a[1:2] != "-" and "u" in a[1:]) for a in args
@@ -2136,24 +2136,24 @@ def branch_upstream_target(args: list[str]) -> str | None:
     for a in args:
         if skip:
             skip = False
-        elif a in ("-u", "--set-upstream-to") or (a[:1] == "-" and a[1:2] != "-" and a.endswith("u")):
+        elif a in ("-u", "--set-upstream-to") or (
+            a[:1] == "-" and a[1:2] != "-" and a.endswith("u") and "u" not in a[1:-1]
+        ):
             skip = True  # its value is the upstream, not the branch
         elif not a.startswith("-"):
             positionals.append(a)
-    return positionals[0] if positionals else None
+    return positionals[0] if positionals and positionals[0] != "HEAD" else None
 
 
 def _context(argv: Argv, state: dict) -> Argv:
     """`argv` with what the walk knows when it runs (`Argv.shell_vars`, `.olddir`, `.dir_unknown`,
-    `.env_empty`, and `.upstream_writes`: (directory, git dir, branch or None for the checked-out one) of each
-    earlier `git branch -u` in it, TASK-285)."""
+    `.env_empty`)."""
     argv.shell_vars = dict(state.get("vars", {}))
     argv.olddir = None if state.get("olddir_unknown") else state.get("olddir")
     argv.dir_unknown = state.get("dir_unknown", False)
     argv.env_empty = state.get("env_empty", False)
     argv.in_subst = state.get("subst", 0) > 0
     argv.cd_stayed = state.get("cd_stayed", False)
-    argv.upstream_writes = list(state.get("upstream_writes", []))
     return argv
 
 
@@ -2355,8 +2355,6 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
                     )
                 if g is not None and g[0] in ("checkout", "switch", "worktree", "branch"):
                     state["upstream_written"] = state.get("upstream_written") or creates_with_upstream(*g)
-                if g is not None and g[0] == "branch" and (t := branch_upstream_target(g[1])) != "":
-                    state.setdefault("upstream_writes", []).append((g[2], git_dir(expanded, d), t))
                 yield _context(expanded, state), d, redirects
             continue
         # `env cd /tmp` moves only a child (round 3)
