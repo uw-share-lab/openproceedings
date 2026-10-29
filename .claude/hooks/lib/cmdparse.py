@@ -51,7 +51,8 @@ matter to a gate:
     in the same command line raises FailClosed (`config_steers_git`, `writes_git_config`): this parser read the
     config before it was written; so does a `git push` after a checkout/switch/worktree add that creates a
     branch with an upstream (`-t`, a remote-tracking start point) or a `branch -u`/`-t` (`creates_with_upstream`;
-    only a push reads an upstream, so `git branch -u origin/x && git pull` is read through, TASK-285);
+    a pull, merge or reset that syncs a protected branch to its upstream after one is enforce-pr-workflow's;
+    `git branch -u origin/x && git pull` elsewhere is read through, TASK-285);
   * `push_config` reads the repo config a refspec-less push uses, and `push_positionals` a push's remote and
     refspecs (an option's value, `-o ci.skip`, is neither);
   * the command substitutions the words would hide (a `$(…)` inside double quotes, backquotes outside single
@@ -2071,8 +2072,10 @@ def creates_with_upstream(sub: str, args: list[str], directory: str) -> bool:
     which push.default=upstream pushes to? `-t`/`--track` (alone or in a short cluster: `-qt`), or a new branch
     (`-b`, `-B`, `-c`, `-C`) from a remote-tracking start point (branch.autoSetupMerge's default), unless
     `--no-track` (TASK-067 final review gate: `git checkout -b x -t origin/dev && git push`); for `branch`,
-    `-u`/`--set-upstream-to`/`-t`/`--track` (review gate round 3). Only a later push in the same command is
-    refused for it: `git branch --set-upstream-to=origin/x && git pull`, git's own advice, is not (TASK-285)."""
+    `-u`/`--set-upstream-to`/`-t`/`--track` (review gate round 3). A later push in the same command is refused
+    for it, and enforce-pr-workflow refuses a pull, merge or reset on a protected branch after one (it syncs to
+    the upstream, `Argv.upstream_written`); `git branch --set-upstream-to=origin/x && git pull` on a feature
+    branch, git's own advice, is not refused (TASK-285)."""
     if sub == "branch":
         return any(
             a.startswith(("--set-upstream", "--track"))
@@ -2121,13 +2124,14 @@ def creates_with_upstream(sub: str, args: list[str], directory: str) -> bool:
 
 def _context(argv: Argv, state: dict) -> Argv:
     """`argv` with what the walk knows when it runs (`Argv.shell_vars`, `.olddir`, `.dir_unknown`,
-    `.env_empty`)."""
+    `.env_empty`, and `.upstream_written`: an earlier command in it set an upstream, TASK-285)."""
     argv.shell_vars = dict(state.get("vars", {}))
     argv.olddir = None if state.get("olddir_unknown") else state.get("olddir")
     argv.dir_unknown = state.get("dir_unknown", False)
     argv.env_empty = state.get("env_empty", False)
     argv.in_subst = state.get("subst", 0) > 0
     argv.cd_stayed = state.get("cd_stayed", False)
+    argv.upstream_written = state.get("upstream_written", False)
     return argv
 
 
@@ -2325,7 +2329,7 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
                 if g is not None and g[0] == "push" and state.get("upstream_written"):
                     # push.default=upstream pushes to the upstream an earlier command wrote (TASK-067 final review)
                     raise FailClosed(
-                        "an earlier checkout/switch/worktree add in this command sets an upstream"
+                        "an earlier branch -u/checkout/switch/worktree add in this command sets an upstream"
                     )
                 if g is not None and g[0] in ("checkout", "switch", "worktree", "branch"):
                     state["upstream_written"] = state.get("upstream_written") or creates_with_upstream(*g)
@@ -2618,7 +2622,7 @@ def git(directory: str, *args: str) -> str:
 
 
 # The config a refspec-less `git push` reads to choose what it sends and where
-PUSH_CONFIG = r"^(remote\..*\.(push|mirror)|push\.(default|followtags)|remote\.pushdefault)$"
+PUSH_CONFIG = r"^(remote\..*\.(push|mirror)|push\.default|remote\.pushdefault)$"
 
 
 def push_config(argv: list[str], directory: str) -> dict[str, str]:

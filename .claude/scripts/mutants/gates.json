@@ -2308,6 +2308,30 @@
   "new": "    positionals = [a for a in args if not a.startswith(\"-\")]  #"
  },
  {
+  "label": "enforce: a sync on main/dev after an upstream write allowed",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if on_protected and sub in (\"pull\", \"merge\", \"reset\", \"rebase\") and getattr(argv, \"upstream_written\", False):",
+  "new": "    if False:"
+ },
+ {
+  "label": "cmdparse: upstream_written not passed to the gates",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    argv.upstream_written = state.get(\"upstream_written\", False)\n",
+  "new": ""
+ },
+ {
+  "label": "enforce: resolved() drops upstream_written",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    out.upstream_written = getattr(argv, \"upstream_written\", False)\n",
+  "new": ""
+ },
+ {
+  "label": "enforce: the unreadable verdict's case arm doesn't match",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "  unreadable:*)",
+  "new": "  unreadable)"
+ },
+ {
   "label": "require-review: matching refspec ':' allowed",
   "file": ".claude/hooks/require-review.sh",
   "old": "            if any(r.lstrip(\"+\") == \":\" for r in refspecs):\n                # the matching",

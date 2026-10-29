@@ -47,7 +47,8 @@
 # under config this gate can't read (--config-env, -c include.path, GIT_CONFIG_*, GIT_COMMON_DIR, HOME), a git
 # command after a `git config` that writes an alias, include or push key in the same command, a push after a
 # checkout/switch/worktree add that creates a branch with an upstream (`-t`, a remote-tracking start point), or
-# a `branch -u`/`--set-upstream-to`/`-t` (TASK-285: only a push reads it; `… && git pull` is allowed), and
+# a `branch -u`/`--set-upstream-to`/`-t`, or a pull/merge/reset/rebase on main/dev after one (TASK-285:
+# `git branch -u origin/x && git pull` on a feature branch is allowed), and
 # an ambiguous abbreviated option. A word that expands to nothing is dropped (`E=; git push origin $E` names no
 # refspec), and a command with `~` or `$` is read a second time with HOME/TMPDIR/USER empty (`git push origin
 # $TMPDIR`; `cd ~ && git commit` stays put: TASK-156). A git command inside a command substitution (`x="$(git
@@ -282,6 +283,10 @@ def classify(argv, directory, state, tracked):
 
     if xargs_hides_args(argv, effective_dir):
         return "xargs", branch  # it appends refspecs/paths from stdin that this gate cannot see
+    if on_protected and sub in ("pull", "merge", "reset", "rebase") and getattr(argv, "upstream_written", False):
+        # main/dev is synced to its upstream (a pull, `merge --ff-only`, `reset --hard @{u}`), which an earlier
+        # `branch -u`/checkout in this command set after this gate read it (TASK-285 review)
+        return "unreadable:an earlier branch -u/checkout/switch in this command sets the upstream it syncs to", branch
     if sub == "push":
         return push_verdict(args, effective_dir, git_config(argv), gitdir, git_config_opaque(argv), branch,
                             lambda: push_config(argv, directory)), branch
@@ -503,6 +508,7 @@ def resolved(argv, directory, env_empty=False):
     words = [r for w in argv[1:] if (r := one(w)) != "" or w == ""]
     out = Argv([argv[0], *words], argv.via_xargs, {n: one(v) for n, v in argv.assigns.items()})
     out.shell_vars, out.olddir, out.dir_unknown = argv.shell_vars, argv.olddir, argv.dir_unknown
+    out.upstream_written = getattr(argv, "upstream_written", False)
     return out
 
 
@@ -518,6 +524,7 @@ def git_calls(argv, directory):
             inner = Argv(["git", *([prog[4:]] if prog != "git" else []), *argv[k + 1 :]], argv.via_xargs,
                          argv.assigns)
             inner.shell_vars, inner.olddir, inner.dir_unknown = argv.shell_vars, argv.olddir, argv.dir_unknown
+            inner.upstream_written = getattr(argv, "upstream_written", False)
             return expand_git_alias(inner, directory)
     return []
 

@@ -587,7 +587,7 @@ git -C "$REPO" config branch.feature/x.remote origin
 git -C "$REPO" config branch.feature/x.merge refs/heads/dev
 check feature/x block 'git push'                                     # upstream: pushes feature/x to dev
 check feature/x block 'git push -o ci.skip origin'                   # -o's value is no refspec (TASK-285)
-check feature/x block 'git push --push-option=ci.skip --repo origin'
+check feature/x block 'git push --push-option ci.skip origin'
 git -C "$REPO" config branch.feature/x.merge refs/heads/feature/x
 check feature/x allow 'git push'                                     # its upstream is itself
 check feature/x allow 'git push -o ci.skip origin'
@@ -682,8 +682,12 @@ check feature/x allow 'echo x >> notes.txt; git push origin feat'
 git -C "$REPO" config push.default upstream
 check feature/x block 'git branch -u origin/dev && git push origin'
 check feature/x block 'git branch --set-upstream-to=origin/dev && git push origin'
-check feature/x allow 'git branch --set-upstream-to=origin/feature/x && git pull'   # only a push reads it (TASK-285)
+check feature/x allow 'git branch --set-upstream-to=origin/feature/x && git pull'   # a feature branch: not refused (TASK-285)
 check feature/x allow 'git branch -u origin/feature/x && git status'
+check dev block 'git branch --set-upstream-to=origin/feature/x && git pull'          # dev synced to another upstream
+check dev block 'git branch -u origin/feature/x && git reset --hard @{u}'
+check dev block 'git branch -u origin/feature/x && git merge --ff-only'
+check dev allow 'git pull'                                                           # no upstream write: a sync
 check feature/x block 'git config branch.feature/x.merge refs/heads/dev && git push origin'
 git -C "$REPO" config --unset push.default
 
