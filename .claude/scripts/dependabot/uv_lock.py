@@ -14,9 +14,9 @@ has one; they must agree). The previous version is the old one with the same maj
 
 The shape of the change is checked too: everything in `uv.lock` but the package list stays the same, but for a
 `revision` move `REVISION_MOVES` lists (the 3 -> 5 uv 0.13 writes); a registry package whose version didn't move
-stays byte-for-byte the same; a workspace member changes only its dependency fields; and each `pyproject.toml` changes only dependency specifiers (`[project] dependencies`,
-`optional-dependencies`, `[dependency-groups]`) of packages whose locked version moved, so nothing else (a
-build requirement, an index, a tool setting) can ride along.
+stays byte-for-byte the same; a workspace member changes only its dependency fields; and each `pyproject.toml`
+changes only dependency specifiers (`[project] dependencies`, `optional-dependencies`, `[dependency-groups]`) of
+packages whose locked version moved, so nothing else (a build requirement, an index, a tool setting) can ride along.
 
 A PROBLEM, the PR stays open: any of the above failing, an added or removed package, a semver-major bump, a
 new publisher, a file without the provenance the previous version had (PyPI accepts files added to a release

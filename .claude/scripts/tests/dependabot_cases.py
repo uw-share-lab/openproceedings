@@ -319,7 +319,8 @@ def _(c: Case) -> None:
     head = c.commit(
         {
             "uv.lock": uv_lock(uv_pkg("a", "1.0")).replace(
-                "revision = 3", 'revision = 3\n[options]\nexclude-newer = "2030-01-01T00:00:00Z"\n'
+                'requires-python = ">=3.12"\n',
+                'requires-python = ">=3.12"\n[options]\nexclude-newer = "2030-01-01T00:00:00Z"\n',
             )
         }
     )
@@ -369,6 +370,11 @@ def _(c: Case) -> None:
     c.expect("uv_lock.py", revision_case(c, "3", None), PROBLEM, r"^PROBLEM uv\.lock: `revision` changed")
 
 
+@row("uv: a lock revision added")
+def _(c: Case) -> None:
+    c.expect("uv_lock.py", revision_case(c, None, "5"), PROBLEM, r"^PROBLEM uv\.lock: `revision` changed")
+
+
 @row("uv: a lock revision as a float (3.0 -> 5) isn't the listed int move")
 def _(c: Case) -> None:
     c.expect("uv_lock.py", revision_case(c, "3.0", "5"), PROBLEM, r"^PROBLEM uv\.lock: `revision` changed")
@@ -379,8 +385,11 @@ def _(c: Case) -> None:
     base = c.commit({"uv.lock": uv_lock(uv_pkg("a", "1.0"))})
     head = c.commit(
         {
-            "uv.lock": uv_lock(uv_pkg("a", "1.0")).replace(
-                "revision = 3", 'revision = 5\n[options]\nexclude-newer = "2030-01-01T00:00:00Z"\n'
+            "uv.lock": uv_lock(uv_pkg("a", "1.0"))
+            .replace("revision = 3", "revision = 5")
+            .replace(
+                'requires-python = ">=3.12"\n',
+                'requires-python = ">=3.12"\n[options]\nexclude-newer = "2030-01-01T00:00:00Z"\n',
             )
         }
     )
