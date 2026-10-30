@@ -536,8 +536,8 @@
   {
     "label": "dependabot: uv: lock settings not compared",
     "file": ".claude/scripts/dependabot/uv_lock.py",
-    "old": "        if old_lock.get(key) != new_lock.get(key):\n            rep.problem(f\"uv.lock",
-    "new": "        if False:\n            rep.problem(f\"uv.lock"
+    "old": "        rep.problem(f\"uv.lock: `{key}` changed\")\n",
+    "new": "        pass\n"
   },
   {
     "label": "dependabot: uv: pyproject outside dependencies not compared",
@@ -802,6 +802,30 @@
     "file": ".claude/scripts/dependabot/uv_lock.py",
     "old": "age_days(max(uploads))",
     "new": "age_days(min(uploads))"
+  },
+  {
+    "label": "dependabot: uv: any revision move passes",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "            and (before, after) in REVISION_MOVES\n",
+    "new": ""
+  },
+  {
+    "label": "dependabot: uv: revision int check dropped",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "            and type(before) is int\n            and type(after) is int\n",
+    "new": ""
+  },
+  {
+    "label": "dependabot: uv: revision allowlist empty",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "REVISION_MOVES = {(3, 5)}",
+    "new": "REVISION_MOVES: set[tuple[int, int]] = set()"
+  },
+  {
+    "label": "dependabot: uv: an allowed revision move also reported",
+    "file": ".claude/scripts/dependabot/uv_lock.py",
+    "old": "writes (REVISION_MOVES)\")\n            continue\n",
+    "new": "writes (REVISION_MOVES)\")\n"
   },
   {
     "label": "dependabot: actions: pin span swallows the rest of the line",

@@ -299,7 +299,11 @@ its head branch a plain `dependabot/<ecosystem>/…` name, every changed file on
 git, and GitHub's file and commit lists equal to git's), every commit Dependabot's with a signature GitHub verified,
 and no "Cooldown could not be applied" notice in its body. The checkers then run the checks above, and the shape of
 the change: `uv_lock.py`, `npm_lock.py`, `docker_digest.py` and `actions_pins.py` allow no change in a file beyond
-its dependency versions and pins (no script, build requirement, `RUN` line or `permissions:` rides along).
+its dependency versions and pins (no script, build requirement, `RUN` line or `permissions:` rides along). The one
+header move `uv_lock.py` allows is `uv.lock`'s `revision` 3 → 5 (`REVISION_MOVES`, ints only): uv 0.13, the pin
+since 2026-10-16, writes revision 5 whenever it rewrites a revision-3 lock, so the first lock change made under it
+moves the header (#206: uv 0.13.4 and 0.13.5 wrote that PR's lock byte for byte from dev's; the owner, 2026-10-29).
+Any other `revision` move, a downgrade, or a removed or added one stays a PROBLEM.
 `restore_libc.py` repairs dropped `libc` fields; `prs.py` also checks the environment (`preflight`), lists the PRs,
 reads CI's results for a PR head (`ci`), queues them (locally; `queue` refuses in a cloud session) and watches the
 queue. Locally the routine then runs the tests
