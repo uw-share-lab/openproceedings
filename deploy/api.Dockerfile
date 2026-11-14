@@ -11,9 +11,9 @@
 # (TASK-208): the two move together, and backend/tests/unit/test_python_pin.py fails while they differ.
 # The uv stage's minors come by hand while uv is 0.x (.github/dependabot.yml ignores them; spec 08 §CI "Dependabot").
 
-FROM ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff AS uv
+FROM ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 AS uv
 
-FROM python:3.12.15-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258 AS build
+FROM python:3.12.16-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df AS build
 COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_PROJECT_ENVIRONMENT=/app/.venv
 WORKDIR /repo
@@ -25,7 +25,7 @@ RUN uv sync --locked --no-dev --no-install-workspace
 COPY backend/src backend/src
 RUN uv sync --locked --no-dev --no-editable
 
-FROM python:3.12.15-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
+FROM python:3.12.16-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
 # op-api's uid and gid: 10001 unless the host already uses it for another account (compose passes
 # OP_API_UID/OP_API_GID; deploy/README.md §Permissions)
 ARG OP_API_UID=10001
