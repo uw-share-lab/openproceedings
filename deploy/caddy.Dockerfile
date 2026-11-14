@@ -7,7 +7,7 @@
 # cap_net_bind_service=ep, and with every capability dropped (compose.yml) the kernel refuses to exec a binary
 # whose file capability it can't grant (EPERM), so it is removed (`setcap -r`; the image ships setcap).
 
-FROM caddy:2.11.7-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
+FROM caddy:2.11.8-alpine@sha256:f6228111e5fafa1a5238258d0858e103f10599b8d1659a146e7726681a002bb9
 RUN addgroup -S -g 10002 caddy \
     && adduser -S -D -H -u 10002 -G caddy -s /sbin/nologin caddy \
     && chown caddy:caddy /data /config \
